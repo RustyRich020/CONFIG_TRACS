@@ -10,6 +10,7 @@ This prototype now includes the first practical build phases for TRACS:
 4. Persistence + Saved Versions
 5. Backend Persistence Boundary + Live Adapter Contracts
 6. File-backed API Skeleton
+7. Live CSV Adapter Metadata + Preview
 
 ## What It Proves
 
@@ -31,11 +32,12 @@ This prototype now includes the first practical build phases for TRACS:
 - Persists deployment snapshots and adapter dry-run records through either browser-local storage or the TRACS API.
 - Provides live adapter contracts for Snowflake, SharePoint Excel, CSV/manual upload, and external reference connectors.
 - Runs a dependency-light Node API with file-backed records for backend integration testing.
+- Discovers CSV source metadata and returns bounded preview rows through API-backed or local adapter mode.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
 
-This phase intentionally does not authenticate against live external systems yet. Connector tests and adapter dry runs validate manifest structure, required metadata, target coverage, and adapter contract readiness. Live Snowflake, SharePoint, and external API authentication require credential-backed adapters in the next implementation slice.
+This phase intentionally does not authenticate against live external systems yet. The CSV/manual upload adapter now performs real metadata discovery and bounded row preview from the included sample file. Live Snowflake, SharePoint, and external API authentication require credential-backed adapters in the next implementation slice.
 
 ## Run Locally
 
@@ -83,6 +85,7 @@ npm run build
 - `src/App.tsx`: admin shell UI and interactions.
 - `server/tracs-api.mjs`: file-backed API service for deployment snapshots, backend records, and adapter dry runs.
 - `server/adapterContracts.mjs`: backend adapter dry-run contract implementation.
+- `server/csvAdapter.mjs`: CSV/manual upload adapter for metadata discovery and bounded source preview rows.
 - `public/config/industries/industries.yaml`: industry profile definitions.
 - `public/config/solutions/solution_domains.yaml`: solution domain definitions.
 - `public/config/mappings/domain_object_families.yaml`: canonical object family definitions.
@@ -95,6 +98,7 @@ Build credential-backed live connector adapters:
 
 1. Snowflake authentication and metadata discovery.
 2. SharePoint Excel authentication and workbook/sheet discovery.
-3. API-backed connector and mapping run persistence.
-4. Database-backed record storage behind the existing API routes.
-5. Source preview rows for Snowflake and SharePoint adapters.
+3. Persist CSV metadata/preview runs as connector records.
+4. API-backed connector and mapping run persistence.
+5. Database-backed record storage behind the existing API routes.
+6. Source preview rows for Snowflake and SharePoint adapters.

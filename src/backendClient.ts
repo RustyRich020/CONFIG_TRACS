@@ -5,6 +5,8 @@ import type {
   BackendHealth,
   BackendRecord,
   BackendRecordKind,
+  ConnectorPreviewResult,
+  ConnectorSourceMetadata,
   DeploymentState,
   StatusLevel,
 } from './types'
@@ -33,6 +35,54 @@ function summarizeStatus(records: BackendRecord[]): StatusLevel {
 function nextVersion(records: BackendRecord[], kind: BackendRecordKind, label: string) {
   const matching = records.filter((record) => record.kind === kind && record.label === label)
   return matching.length > 0 ? Math.max(...matching.map((record) => record.version)) + 1 : 1
+}
+
+function parseCsvLine(line: string) {
+  const values: string[] = []
+  let current = ''
+  let inQuotes = false
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index]
+    const next = line[index + 1]
+
+    if (char === '"' && next === '"') {
+      current += '"'
+      index += 1
+    } else if (char === '"') {
+      inQuotes = !inQuotes
+    } else if (char === ',' && !inQuotes) {
+      values.push(current)
+      current = ''
+    } else {
+      current += char
+    }
+  }
+
+  values.push(current)
+  return values.map((value) => value.trim())
+}
+
+function inferType(values: string[]) {
+  const populated = values.filter((value) => value.length > 0)
+  if (populated.length === 0) return 'empty'
+  if (populated.every((value) => !Number.isNaN(Number(value)))) return 'number'
+  if (populated.every((value) => /^\d{4}-\d{2}-\d{2}$/.test(value))) return 'date'
+  return 'text'
+}
+
+async function loadCsvFixture() {
+  const text = await fetch('/samples/quality_events_sample.csv').then((response) => response.text())
+  const lines = text
+    .replace(/^\uFEFF/, '')
+    .split(/\r?\n/)
+    .filter((line) => line.trim().length > 0)
+  const columns = parseCsvLine(lines[0] ?? '')
+  const rows = lines.slice(1).map((line) => {
+    const values = parseCsvLine(line)
+    return Object.fromEntries(columns.map((column, index) => [column, values[index] ?? '']))
+  })
+  return { columns, rows }
 }
 
 export class LocalBackendClient {
@@ -154,6 +204,80 @@ export class LocalBackendClient {
       },
     }
   }
+
+  async discoverConnectorMetadata(
+    connectorId: string,
+    connector: AppConfig['connectors']['connectors'][string],
+  ): Promise<ConnectorSourceMetadata> {
+    if (connector.type !== 'csv') {
+      return {
+        connectorId,
+        adapterType: connector.type,
+        discoveredAt: new Date().toISOString(),
+        sourceObjects: connector.objects?.map((object) => object.source) ?? [connector.display_name],
+        targetObjects:
+          connector.objects?.map((object) => object.target) ??
+          [connector.target].filter((target): target is string => Boolean(target)),
+        rowCount: 0,
+        columns: [],
+        evidence: 'Live metadata discovery requires an API-backed adapter for this connector type.',
+      }
+    }
+
+    const { columns, rows } = await loadCsvFixture()
+    return {
+      connectorId,
+      adapterType: 'csv',
+      discoveredAt: new Date().toISOString(),
+      sourcePath: '/samples/quality_events_sample.csv',
+      sourceObjects: [connector.display_name],
+      targetObjects: [connector.target ?? 'not mapped'],
+      rowCount: rows.length,
+      columns: columns.map((name) => {
+        const values = rows.map((row) => row[name] ?? '')
+        return {
+          name,
+          inferredType: inferType(values),
+          nonEmptyCount: values.filter((value) => value.length > 0).length,
+          sampleValues: Array.from(new Set(values.filter(Boolean))).slice(0, 3),
+        }
+      }),
+      evidence: `${columns.length} column(s) and ${rows.length} row(s) discovered from local CSV fixture.`,
+    }
+  }
+
+  async previewConnectorRows(
+    connectorId: string,
+    connector: AppConfig['connectors']['connectors'][string],
+    limit = 5,
+  ): Promise<ConnectorPreviewResult> {
+    if (connector.type !== 'csv') {
+      return {
+        connectorId,
+        adapterType: connector.type,
+        previewedAt: new Date().toISOString(),
+        columns: [],
+        rowCount: 0,
+        returnedRows: 0,
+        rows: [],
+        evidence: 'Live row preview requires an API-backed adapter for this connector type.',
+      }
+    }
+
+    const { columns, rows } = await loadCsvFixture()
+    const boundedLimit = Math.min(Math.max(limit, 1), 100)
+    return {
+      connectorId,
+      adapterType: 'csv',
+      previewedAt: new Date().toISOString(),
+      sourcePath: '/samples/quality_events_sample.csv',
+      columns,
+      rowCount: rows.length,
+      returnedRows: Math.min(rows.length, boundedLimit),
+      rows: rows.slice(0, boundedLimit),
+      evidence: `${Math.min(rows.length, boundedLimit)} preview row(s) returned from local CSV fixture.`,
+    }
+  }
 }
 
 class ApiBackendClient {
@@ -255,6 +379,41 @@ class ApiBackendClient {
       })
     } catch {
       return this.localFallback.runAdapterDryRun(connectorId, connector)
+    }
+  }
+
+  async discoverConnectorMetadata(
+    connectorId: string,
+    connector: AppConfig['connectors']['connectors'][string],
+  ): Promise<ConnectorSourceMetadata> {
+    try {
+      return await this.request<ConnectorSourceMetadata>(
+        `/api/connectors/${encodeURIComponent(connectorId)}/metadata`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ connector }),
+        },
+      )
+    } catch {
+      return this.localFallback.discoverConnectorMetadata(connectorId, connector)
+    }
+  }
+
+  async previewConnectorRows(
+    connectorId: string,
+    connector: AppConfig['connectors']['connectors'][string],
+    limit = 5,
+  ): Promise<ConnectorPreviewResult> {
+    try {
+      return await this.request<ConnectorPreviewResult>(
+        `/api/connectors/${encodeURIComponent(connectorId)}/preview`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ connector, limit }),
+        },
+      )
+    } catch {
+      return this.localFallback.previewConnectorRows(connectorId, connector, limit)
     }
   }
 }

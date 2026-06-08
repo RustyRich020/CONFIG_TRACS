@@ -229,3 +229,27 @@ export type AdapterDryRunResult = {
     warnings: string[]
   }
 }
+
+export type ConnectorSourceMetadata = {
+  connectorId: string
+  adapterType: string
+  discoveredAt: string
+  sourcePath?: string
+  sourceObjects: string[]
+  targetObjects: string[]
+  rowCount: number
+  columns: CsvColumnProfile[]
+  evidence: string
+}
+
+export type ConnectorPreviewResult = {
+  connectorId: string
+  adapterType: string
+  previewedAt: string
+  sourcePath?: string
+  columns: string[]
+  rowCount: number
+  returnedRows: number
+  rows: Record<string, string>[]
+  evidence: string
+}

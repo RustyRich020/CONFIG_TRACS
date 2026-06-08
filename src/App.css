@@ -491,6 +491,13 @@
   margin-bottom: 14px;
 }
 
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .detail-heading h3 {
   margin: 0;
   color: #172727;
@@ -679,6 +686,77 @@
 
 .source-object-row svg {
   color: #98a6a5;
+}
+
+.source-discovery {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #edf2f1;
+}
+
+.source-discovery-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.source-discovery p {
+  margin: 10px 0 0;
+  color: #687878;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.source-column-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.preview-table {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #edf2f1;
+}
+
+.preview-table h4 {
+  margin: 0 0 8px;
+  color: #1e3030;
+  font-size: 13px;
+}
+
+.preview-scroll {
+  overflow-x: auto;
+  border: 1px solid #e0e8e7;
+  border-radius: 8px;
+}
+
+.preview-scroll table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  background: #ffffff;
+}
+
+.preview-scroll th,
+.preview-scroll td {
+  padding: 9px 10px;
+  border-bottom: 1px solid #edf2f1;
+  color: #617171;
+  font-size: 11px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.preview-scroll th {
+  color: #1e3030;
+  background: #f8fbfa;
+  font-weight: 800;
+}
+
+.preview-scroll tr:last-child td {
+  border-bottom: 0;
 }
 
 .tested-count {
@@ -1259,6 +1337,16 @@
 
   .metadata-grid {
     grid-template-columns: 1fr;
+  }
+
+  .detail-heading,
+  .detail-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .detail-actions .secondary-action {
+    justify-content: center;
   }
 
   .status-strip {

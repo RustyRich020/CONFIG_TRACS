@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { adapterContracts, runAdapterDryRun } from './adapterContracts.mjs'
+import { discoverCsvMetadata, previewCsvRows } from './csvAdapter.mjs'
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const dataFile = resolve(rootDir, 'data', 'backend-records.json')
@@ -117,6 +118,38 @@ async function handleRequest(req, res) {
 
     if (req.method === 'GET' && url.pathname === '/api/adapter-contracts') {
       jsonResponse(res, 200, adapterContracts)
+      return
+    }
+
+    const metadataMatch = url.pathname.match(/^\/api\/connectors\/([^/]+)\/metadata$/)
+    if (req.method === 'POST' && metadataMatch) {
+      const connectorId = decodeURIComponent(metadataMatch[1])
+      const body = await parseBody(req)
+      if (body.connector?.type !== 'csv') {
+        jsonResponse(res, 422, {
+          error: 'Live metadata discovery is implemented for csv connectors in this phase.',
+        })
+        return
+      }
+      jsonResponse(res, 200, await discoverCsvMetadata(connectorId, body.connector))
+      return
+    }
+
+    const previewMatch = url.pathname.match(/^\/api\/connectors\/([^/]+)\/preview$/)
+    if (req.method === 'POST' && previewMatch) {
+      const connectorId = decodeURIComponent(previewMatch[1])
+      const body = await parseBody(req)
+      if (body.connector?.type !== 'csv') {
+        jsonResponse(res, 422, {
+          error: 'Live row preview is implemented for csv connectors in this phase.',
+        })
+        return
+      }
+      jsonResponse(
+        res,
+        200,
+        await previewCsvRows(connectorId, body.connector, body.limit ?? url.searchParams.get('limit')),
+      )
       return
     }
 

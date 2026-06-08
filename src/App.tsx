@@ -52,6 +52,8 @@ import type {
   AuditEvent,
   BackendHealth,
   BackendRecord,
+  ConnectorPreviewResult,
+  ConnectorSourceMetadata,
   ConnectorTestResult,
   CsvSchemaInference,
   DeploymentState,
@@ -187,6 +189,8 @@ function App() {
   const [backendHealth, setBackendHealth] = useState<BackendHealth | null>(null)
   const [backendRecords, setBackendRecords] = useState<BackendRecord[]>([])
   const [adapterDryRuns, setAdapterDryRuns] = useState<Record<string, AdapterDryRunResult>>({})
+  const [sourceMetadata, setSourceMetadata] = useState<Record<string, ConnectorSourceMetadata>>({})
+  const [sourcePreviews, setSourcePreviews] = useState<Record<string, ConnectorPreviewResult>>({})
 
   useEffect(() => {
     loadAppConfig()
@@ -350,6 +354,23 @@ function App() {
     record('adapter', 'dry_run', `${connector.display_name} adapter contract dry run completed.`)
   }
 
+  async function discoverConnectorSource(connectorId: string) {
+    if (!config) return
+    const connector = config.connectors.connectors[connectorId]
+    const [metadata, preview] = await Promise.all([
+      backendClient.discoverConnectorMetadata(connectorId, connector),
+      backendClient.previewConnectorRows(connectorId, connector, 5),
+    ])
+    setSourceMetadata((current) => ({ ...current, [connectorId]: metadata }))
+    setSourcePreviews((current) => ({ ...current, [connectorId]: preview }))
+    setSelectedConnectorId(connectorId)
+    record(
+      'connector',
+      'discover_source',
+      `${connector.display_name} source discovery returned ${metadata.columns.length} column(s) and ${preview.returnedRows} preview row(s).`,
+    )
+  }
+
   function runConnectorTest(connectorId: string) {
     if (!config) return
     const connector = config.connectors.connectors[connectorId]
@@ -465,6 +486,12 @@ function App() {
   const selectedConnectorResult = selectedConnectorId
     ? connectorResults[selectedConnectorId]
     : undefined
+  const selectedSourceMetadata = selectedConnectorId
+    ? sourceMetadata[selectedConnectorId]
+    : undefined
+  const selectedSourcePreview = selectedConnectorId
+    ? sourcePreviews[selectedConnectorId]
+    : undefined
 
   return (
     <div className="app-shell">
@@ -568,10 +595,13 @@ function App() {
             connectorResults={connectorResults}
             onRunAll={runAllConnectorTests}
             onRunOne={runConnectorTest}
+            onDiscoverSource={discoverConnectorSource}
             onSelect={setSelectedConnectorId}
             selectedConnector={selectedConnector}
             selectedConnectorId={selectedConnectorId}
             selectedConnectorResult={selectedConnectorResult}
+            selectedSourceMetadata={selectedSourceMetadata}
+            selectedSourcePreview={selectedSourcePreview}
           />
         ) : activeView === 'Templates' ? (
           <TemplatesView />
@@ -1151,21 +1181,27 @@ function OverviewShell({
 function ConnectorHub({
   connectorEntries,
   connectorResults,
+  onDiscoverSource,
   onRunAll,
   onRunOne,
   onSelect,
   selectedConnector,
   selectedConnectorId,
   selectedConnectorResult,
+  selectedSourceMetadata,
+  selectedSourcePreview,
 }: {
   connectorEntries: [string, AppConfig['connectors']['connectors'][string]][]
   connectorResults: Record<string, ConnectorTestResult>
+  onDiscoverSource: (connectorId: string) => void
   onRunAll: () => void
   onRunOne: (connectorId: string) => void
   onSelect: (connectorId: string) => void
   selectedConnector?: AppConfig['connectors']['connectors'][string]
   selectedConnectorId: string | null
   selectedConnectorResult?: ConnectorTestResult
+  selectedSourceMetadata?: ConnectorSourceMetadata
+  selectedSourcePreview?: ConnectorPreviewResult
 }) {
   const testedCount = Object.keys(connectorResults).length
   const passCount = Object.values(connectorResults).filter((result) => result.status === 'pass').length
@@ -1236,14 +1272,24 @@ function ConnectorHub({
                   <h3>{selectedConnector.display_name}</h3>
                   <p>{selectedConnectorId}</p>
                 </div>
-                <button
-                  className="secondary-action"
-                  onClick={() => onRunOne(selectedConnectorId)}
-                  type="button"
-                >
-                  <ClipboardCheck size={15} />
-                  Run Test
-                </button>
+                <div className="detail-actions">
+                  <button
+                    className="secondary-action"
+                    onClick={() => onDiscoverSource(selectedConnectorId)}
+                    type="button"
+                  >
+                    <Search size={15} />
+                    Discover Source
+                  </button>
+                  <button
+                    className="secondary-action"
+                    onClick={() => onRunOne(selectedConnectorId)}
+                    type="button"
+                  >
+                    <ClipboardCheck size={15} />
+                    Run Test
+                  </button>
+                </div>
               </div>
               <div className="metadata-grid">
                 <Metadata label="Type" value={selectedConnector.type} />
@@ -1284,6 +1330,49 @@ function ConnectorHub({
                   </div>
                 ))}
               </div>
+              {selectedSourceMetadata ? (
+                <div className="source-discovery">
+                  <div className="source-discovery-summary">
+                    <Metadata label="Rows" value={String(selectedSourceMetadata.rowCount)} />
+                    <Metadata label="Columns" value={String(selectedSourceMetadata.columns.length)} />
+                  </div>
+                  <p>{selectedSourceMetadata.evidence}</p>
+                  <div className="source-column-list">
+                    {selectedSourceMetadata.columns.slice(0, 8).map((column) => (
+                      <span className="chip active" key={column.name}>
+                        {column.name} / {column.inferredType}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="empty-state compact">Discover source metadata to preview live adapter output.</div>
+              )}
+              {selectedSourcePreview && selectedSourcePreview.rows.length > 0 ? (
+                <div className="preview-table">
+                  <h4>Preview Rows</h4>
+                  <div className="preview-scroll">
+                    <table>
+                      <thead>
+                        <tr>
+                          {selectedSourcePreview.columns.slice(0, 5).map((column) => (
+                            <th key={column}>{column}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedSourcePreview.rows.map((row, index) => (
+                          <tr key={`${selectedSourcePreview.connectorId}-${index}`}>
+                            {selectedSourcePreview.columns.slice(0, 5).map((column) => (
+                              <td key={column}>{row[column] ?? ''}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="empty-state">Select a connector to inspect metadata.</div>

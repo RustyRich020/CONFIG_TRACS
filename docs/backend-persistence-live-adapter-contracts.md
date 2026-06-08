@@ -27,11 +27,15 @@ GET  /api/health
 GET  /api/records
 POST /api/records
 GET  /api/adapter-contracts
+POST /api/connectors/{connectorId}/metadata
+POST /api/connectors/{connectorId}/preview
 POST /api/deployment-snapshots
 POST /api/adapter-dry-runs
 ```
 
 The frontend uses the API when `VITE_TRACS_API_URL` is set. Without that value, or if the API is unreachable, it uses browser-local fallback persistence.
+
+The CSV/manual upload connector is the first implemented live adapter. It reads the configured sample CSV, infers source columns, reports row counts, and returns bounded preview rows. Snowflake, SharePoint Excel, and external reference connectors still return contract/dry-run evidence until credential-backed adapters are added.
 
 ### Planned Saved Versions
 
@@ -181,6 +185,34 @@ Required checks:
 - file has at least one data row
 - delimiter can be parsed
 - required mapped source fields exist
+
+Implemented outputs:
+
+```ts
+type ConnectorSourceMetadata = {
+  connectorId: string
+  adapterType: string
+  discoveredAt: string
+  sourcePath?: string
+  sourceObjects: string[]
+  targetObjects: string[]
+  rowCount: number
+  columns: CsvColumnProfile[]
+  evidence: string
+}
+
+type ConnectorPreviewResult = {
+  connectorId: string
+  adapterType: string
+  previewedAt: string
+  sourcePath?: string
+  columns: string[]
+  rowCount: number
+  returnedRows: number
+  rows: Record<string, string>[]
+  evidence: string
+}
+```
 
 ## Backend Storage
 
