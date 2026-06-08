@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 .vite
+data/backend-records.json
 *.local
 
 # Editor directories and files

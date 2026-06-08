@@ -6,7 +6,7 @@ Move TRACS from browser-local saved versions into a backend-backed workflow, whi
 
 ## Scope
 
-This phase should add:
+This phase now adds:
 
 - persisted saved versions
 - persisted connector test runs
@@ -14,12 +14,26 @@ This phase should add:
 - persisted integration contract exports
 - backend API contract for live connector adapters
 - adapter result payloads that match the current frontend record shapes
+- a file-backed API skeleton that can be replaced by a database adapter
 
 This phase should not add secrets to the frontend or commit credentials into GitHub.
 
 ## Persistence API
 
-### Saved Versions
+### Implemented API Skeleton
+
+```http
+GET  /api/health
+GET  /api/records
+POST /api/records
+GET  /api/adapter-contracts
+POST /api/deployment-snapshots
+POST /api/adapter-dry-runs
+```
+
+The frontend uses the API when `VITE_TRACS_API_URL` is set. Without that value, or if the API is unreachable, it uses browser-local fallback persistence.
+
+### Planned Saved Versions
 
 ```http
 GET    /api/saved-versions
@@ -38,6 +52,8 @@ type SavedVersion = {
     | 'mapping_validation'
     | 'mapping_version'
     | 'integration_contract'
+    | 'backend_snapshot'
+    | 'adapter_dry_run'
   label: string
   status: 'pass' | 'warning' | 'blocking'
   createdAt: string
@@ -168,7 +184,9 @@ Required checks:
 
 ## Backend Storage
 
-Recommended initial tables:
+Current development storage is `data/backend-records.json`.
+
+Recommended database tables:
 
 ```sql
 SAVED_VERSION (

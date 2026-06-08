@@ -2,12 +2,14 @@
 
 TRACS Foundation Shell Prototype
 
-This prototype now includes the first two practical build phases for TRACS:
+This prototype now includes the first practical build phases for TRACS:
 
 1. Foundation Shell + Profile/Domain Config Loader
 2. Connector Hub
 3. CSV Adapter Starter + Mapping Studio
 4. Persistence + Saved Versions
+5. Backend Persistence Boundary + Live Adapter Contracts
+6. File-backed API Skeleton
 
 ## What It Proves
 
@@ -26,11 +28,14 @@ This prototype now includes the first two practical build phases for TRACS:
 - Validates the `quality_event` mapping manifest against inferred source columns.
 - Captures mapping readiness evidence for primary key, required fields, optional fields, and sample rows.
 - Saves connector tests, mapping validations, mapping manifest snapshots, and exported contracts into browser-local version history.
+- Persists deployment snapshots and adapter dry-run records through either browser-local storage or the TRACS API.
+- Provides live adapter contracts for Snowflake, SharePoint Excel, CSV/manual upload, and external reference connectors.
+- Runs a dependency-light Node API with file-backed records for backend integration testing.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
 
-This phase intentionally does not authenticate against live external systems yet. Connector tests validate manifest structure, required metadata, target coverage, and adapter readiness. Live Snowflake/SharePoint/API authentication requires backend adapters and credentials in the next implementation slice.
+This phase intentionally does not authenticate against live external systems yet. Connector tests and adapter dry runs validate manifest structure, required metadata, target coverage, and adapter contract readiness. Live Snowflake, SharePoint, and external API authentication require credential-backed adapters in the next implementation slice.
 
 ## Run Locally
 
@@ -45,6 +50,23 @@ Open:
 http://127.0.0.1:5173
 ```
 
+## Run With API Persistence
+
+Terminal 1:
+
+```bash
+npm run api
+```
+
+Terminal 2:
+
+```bash
+$env:VITE_TRACS_API_URL='http://127.0.0.1:8787'
+npm run dev -- --host 127.0.0.1 --port 5173
+```
+
+API records are written to `data/backend-records.json`, which is intentionally ignored by Git.
+
 ## Build
 
 ```bash
@@ -56,7 +78,11 @@ npm run build
 - `src/configLoader.ts`: YAML config loading and structural validation.
 - `src/foundation.ts`: readiness checks, connector manifest tests, CSV schema inference, mapping validation, object-family derivation, audit events, contract export.
 - `src/persistence.ts`: browser-local saved version registry.
+- `src/backendClient.ts`: backend adapter that uses the TRACS API when configured and browser-local fallback otherwise.
+- `src/backendContracts.ts`: frontend live adapter contract registry.
 - `src/App.tsx`: admin shell UI and interactions.
+- `server/tracs-api.mjs`: file-backed API service for deployment snapshots, backend records, and adapter dry runs.
+- `server/adapterContracts.mjs`: backend adapter dry-run contract implementation.
 - `public/config/industries/industries.yaml`: industry profile definitions.
 - `public/config/solutions/solution_domains.yaml`: solution domain definitions.
 - `public/config/mappings/domain_object_families.yaml`: canonical object family definitions.
@@ -65,10 +91,10 @@ npm run build
 
 ## Next Phase
 
-Build live connector adapters and backend persistence:
+Build credential-backed live connector adapters:
 
 1. Snowflake authentication and metadata discovery.
 2. SharePoint Excel authentication and workbook/sheet discovery.
-3. Persist connector and mapping readiness evidence through a backend service.
-4. Promote browser-local saved versions to multi-user backend records.
-5. Add source preview rows for Snowflake and SharePoint adapters.
+3. API-backed connector and mapping run persistence.
+4. Database-backed record storage behind the existing API routes.
+5. Source preview rows for Snowflake and SharePoint adapters.

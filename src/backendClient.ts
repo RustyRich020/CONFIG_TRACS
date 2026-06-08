@@ -156,4 +156,111 @@ export class LocalBackendClient {
   }
 }
 
-export const backendClient = new LocalBackendClient()
+class ApiBackendClient {
+  private baseUrl: string
+  private localFallback = new LocalBackendClient()
+
+  constructor(baseUrl: string) {
+    this.baseUrl = baseUrl
+  }
+
+  private async request<TPayload>(path: string, options?: RequestInit): Promise<TPayload> {
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers,
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`TRACS API ${path} returned ${response.status}`)
+    }
+
+    return (await response.json()) as TPayload
+  }
+
+  async health(): Promise<BackendHealth> {
+    try {
+      return await this.request<BackendHealth>('/api/health')
+    } catch (error) {
+      const fallback = await this.localFallback.health()
+      return {
+        ...fallback,
+        evidence: `API unavailable at ${this.baseUrl}; using browser-local fallback. ${
+          error instanceof Error ? error.message : 'Unknown API error'
+        }`,
+      }
+    }
+  }
+
+  async listRecords(): Promise<BackendRecord[]> {
+    try {
+      return await this.request<BackendRecord[]>('/api/records')
+    } catch {
+      return this.localFallback.listRecords()
+    }
+  }
+
+  async saveRecord<TPayload>({
+    kind,
+    label,
+    status,
+    summary,
+    payload,
+  }: {
+    kind: BackendRecordKind
+    label: string
+    status: StatusLevel
+    summary: string
+    payload: TPayload
+  }): Promise<BackendRecord<TPayload>> {
+    try {
+      return await this.request<BackendRecord<TPayload>>('/api/records', {
+        method: 'POST',
+        body: JSON.stringify({ kind, label, status, summary, payload }),
+      })
+    } catch {
+      return this.localFallback.saveRecord({ kind, label, status, summary, payload })
+    }
+  }
+
+  async saveDeploymentSnapshot({
+    config,
+    deployment,
+    readinessStatus,
+  }: {
+    config: AppConfig
+    deployment: DeploymentState
+    readinessStatus: StatusLevel
+  }) {
+    try {
+      return await this.request<BackendRecord>('/api/deployment-snapshots', {
+        method: 'POST',
+        body: JSON.stringify({ config, deployment, readinessStatus }),
+      })
+    } catch {
+      return this.localFallback.saveDeploymentSnapshot({ config, deployment, readinessStatus })
+    }
+  }
+
+  async runAdapterDryRun(
+    connectorId: string,
+    connector: AppConfig['connectors']['connectors'][string],
+  ): Promise<AdapterDryRunResult> {
+    try {
+      return await this.request<AdapterDryRunResult>('/api/adapter-dry-runs', {
+        method: 'POST',
+        body: JSON.stringify({ connectorId, connector }),
+      })
+    } catch {
+      return this.localFallback.runAdapterDryRun(connectorId, connector)
+    }
+  }
+}
+
+const apiBaseUrl = import.meta.env.VITE_TRACS_API_URL?.replace(/\/$/, '')
+
+export const backendClient = apiBaseUrl
+  ? new ApiBackendClient(apiBaseUrl)
+  : new LocalBackendClient()
