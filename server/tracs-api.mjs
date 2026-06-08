@@ -85,6 +85,11 @@ async function listMappingRuns(mappingId) {
   )
 }
 
+async function listIntegrationContracts() {
+  const records = await readRecords()
+  return records.filter((record) => record.kind === 'integration_contract')
+}
+
 function createDeploymentPayload({ config, deployment }) {
   return {
     environment: config.environment.environment,
@@ -224,6 +229,29 @@ async function handleRequest(req, res) {
               schema: body.schema,
               result: body.result,
             },
+          }),
+        )
+        return
+      }
+    }
+
+    if (url.pathname === '/api/integration-contracts') {
+      if (req.method === 'GET') {
+        jsonResponse(res, 200, await listIntegrationContracts())
+        return
+      }
+
+      if (req.method === 'POST') {
+        const body = await parseBody(req)
+        jsonResponse(
+          res,
+          201,
+          await saveRecord({
+            kind: 'integration_contract',
+            label: body.label ?? 'Integration Contract',
+            status: body.status ?? 'warning',
+            summary: body.summary ?? 'Integration contract persisted.',
+            payload: body.contract,
           }),
         )
         return

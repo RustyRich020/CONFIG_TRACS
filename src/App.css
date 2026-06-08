@@ -307,6 +307,16 @@
   margin-top: 16px;
 }
 
+.contract-grid {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.85fr) minmax(420px, 1.15fr);
+  gap: 16px;
+}
+
+.contract-history-panel {
+  margin-top: 16px;
+}
+
 .mapping-grid {
   display: grid;
   grid-template-columns: minmax(360px, 1fr) minmax(440px, 1.2fr) minmax(320px, 0.9fr);
@@ -583,6 +593,34 @@
 
 .backend-health-card span {
   color: #687878;
+}
+
+.contract-metadata-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 0 16px 16px;
+}
+
+.latest-contract {
+  padding: 16px;
+}
+
+.latest-contract h3 {
+  margin: 12px 0 6px;
+  color: #172727;
+  font-size: 18px;
+}
+
+.latest-contract p {
+  margin: 0 0 14px;
+  color: #687878;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.contract-version-row {
+  grid-template-columns: minmax(160px, 1fr) 100px 90px 170px minmax(220px, 1.4fr);
 }
 
 .backend-record-list,
@@ -1348,6 +1386,7 @@
   .connector-grid,
   .backend-grid,
   .backend-grid.lower,
+  .contract-grid,
   .mapping-grid,
   .template-grid {
     grid-template-columns: 1fr;
@@ -1456,7 +1495,8 @@
 
   .mapping-row,
   .schema-row,
-  .version-row {
+  .version-row,
+  .contract-version-row {
     grid-template-columns: 1fr;
     gap: 5px;
     padding: 10px 0;

@@ -13,6 +13,7 @@ This prototype now includes the first practical build phases for TRACS:
 7. Live CSV Adapter Metadata + Preview
 8. Connector Run Persistence
 9. Mapping Run Persistence
+10. Integration Contract Persistence
 
 ## What It Proves
 
@@ -39,6 +40,8 @@ This prototype now includes the first practical build phases for TRACS:
 - Shows persisted connector run history in the Connector Hub.
 - Saves Mapping Studio validation evidence as versioned backend records.
 - Shows persisted mapping validation history in Mapping Studio.
+- Saves integration contracts as versioned backend records.
+- Provides a Contract workspace for saving, exporting, and reviewing contract history.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope

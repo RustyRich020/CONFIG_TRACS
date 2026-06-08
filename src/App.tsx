@@ -193,6 +193,7 @@ function App() {
   const [sourcePreviews, setSourcePreviews] = useState<Record<string, ConnectorPreviewResult>>({})
   const [connectorRuns, setConnectorRuns] = useState<Record<string, BackendRecord[]>>({})
   const [mappingRuns, setMappingRuns] = useState<Record<string, BackendRecord[]>>({})
+  const [contractRecords, setContractRecords] = useState<BackendRecord[]>([])
 
   useEffect(() => {
     loadAppConfig()
@@ -247,12 +248,14 @@ function App() {
   }
 
   async function refreshBackend() {
-    const [health, records] = await Promise.all([
+    const [health, records, contracts] = await Promise.all([
       backendClient.health(),
       backendClient.listRecords(),
+      backendClient.listIntegrationContracts(),
     ])
     setBackendHealth(health)
     setBackendRecords(records)
+    setContractRecords(contracts)
   }
 
   function deploymentReadinessStatus(): StatusLevel {
@@ -279,7 +282,17 @@ function App() {
     record('domain', enabled ? 'disable' : 'enable', `${titleize(key)} domain ${enabled ? 'disabled' : 'enabled'}.`)
   }
 
-  function exportContract() {
+  function contractStatus(): StatusLevel {
+    if (readinessSummary.blocking > 0) return 'blocking'
+    if (readinessSummary.warning > 0) return 'warning'
+    return 'pass'
+  }
+
+  function contractSummary() {
+    return `${readinessSummary.pass} pass, ${readinessSummary.warning} warning, ${readinessSummary.blocking} blocking readiness checks.`
+  }
+
+  function createContractPayload() {
     if (!config) return
     const contract = createIntegrationContract(
       config,
@@ -288,7 +301,7 @@ function App() {
       auditEvents,
       connectorResults,
     )
-    const contractWithBackend = {
+    return {
       ...contract,
       backend_persistence: {
         health: backendHealth,
@@ -297,17 +310,40 @@ function App() {
         adapter_dry_runs: Object.values(adapterDryRuns),
       },
     }
-    downloadJson('tracs-integration-contract-connector-hub.json', contractWithBackend)
+  }
+
+  async function persistIntegrationContract({ download }: { download: boolean }) {
+    const contractWithBackend = createContractPayload()
+    if (!contractWithBackend) return
+    const saved = await backendClient.saveIntegrationContract({
+      contract: contractWithBackend,
+      status: contractStatus(),
+      summary: contractSummary(),
+    })
+    const contracts = await backendClient.listIntegrationContracts()
+    setContractRecords(contracts)
+    await refreshBackend()
+    if (download) {
+      downloadJson('tracs-integration-contract-connector-hub.json', contractWithBackend)
+    }
     saveVersion(
       createSavedVersion({
         kind: 'integration_contract',
-        label: 'Integration Contract',
-        status: readinessSummary.blocking > 0 ? 'blocking' : readinessSummary.warning > 0 ? 'warning' : 'pass',
-        summary: `${readinessSummary.pass} pass, ${readinessSummary.warning} warning, ${readinessSummary.blocking} blocking readiness checks.`,
-        payload: contractWithBackend,
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
       }),
     )
-    record('contract', 'export', 'Integration contract exported with Connector Hub evidence.')
+    record(
+      'contract',
+      download ? 'save_export' : 'save',
+      `Integration contract saved as backend record v${saved.version}.`,
+    )
+  }
+
+  function exportContract() {
+    void persistIntegrationContract({ download: true })
   }
 
   async function saveBackendSnapshot() {
@@ -582,6 +618,8 @@ function App() {
                       ? 'Saved Versions'
                       : activeView === 'Backend'
                         ? 'Backend Persistence'
+                        : activeView === 'Contract'
+                          ? 'Integration Contract'
                         : 'Foundation Shell'}
             </h1>
             <p>
@@ -595,6 +633,8 @@ function App() {
                       ? 'Review saved connector, mapping, and contract versions persisted in this browser.'
                       : activeView === 'Backend'
                         ? 'Persist deployment snapshots, verify adapter contracts, and prepare the API boundary for live systems.'
+                        : activeView === 'Contract'
+                          ? 'Save, export, and review versioned integration contracts for the active deployment.'
                         : 'Configure industries, activate domains, validate setup, and export the deployment contract.'}
             </p>
           </div>
@@ -672,6 +712,15 @@ function App() {
             onRunAdapterDryRun={runAdapterDryRun}
             onSaveSnapshot={saveBackendSnapshot}
           />
+        ) : activeView === 'Contract' ? (
+          <ContractWorkspace
+            backendHealth={backendHealth}
+            backendRecords={backendRecords}
+            contractRecords={contractRecords}
+            onDownloadContract={() => persistIntegrationContract({ download: true })}
+            onSaveContract={() => persistIntegrationContract({ download: false })}
+            readinessSummary={readinessSummary}
+          />
         ) : (
           <OverviewShell
             activeFamilies={activeFamilies}
@@ -688,6 +737,130 @@ function App() {
         )}
       </main>
     </div>
+  )
+}
+
+function ContractWorkspace({
+  backendHealth,
+  backendRecords,
+  contractRecords,
+  onDownloadContract,
+  onSaveContract,
+  readinessSummary,
+}: {
+  backendHealth: BackendHealth | null
+  backendRecords: BackendRecord[]
+  contractRecords: BackendRecord[]
+  onDownloadContract: () => void
+  onSaveContract: () => void
+  readinessSummary: Record<StatusLevel, number>
+}) {
+  const latestContract = contractRecords[0]
+  const currentStatus: StatusLevel =
+    readinessSummary.blocking > 0 ? 'blocking' : readinessSummary.warning > 0 ? 'warning' : 'pass'
+
+  return (
+    <>
+      <section className="connector-toolbar panel">
+        <div>
+          <h2>Integration Contract Workspace</h2>
+          <p>
+            Persist the current deployment contract as a backend record and download the same payload for governance review.
+          </p>
+        </div>
+        <div className="toolbar-actions">
+          <button className="secondary-action" onClick={onSaveContract} type="button">
+            <ServerCog size={15} />
+            Save Contract
+          </button>
+          <button className="primary-action" onClick={onDownloadContract} type="button">
+            <Download size={16} />
+            Save & Export
+          </button>
+        </div>
+      </section>
+
+      <section className="contract-grid">
+        <section className="panel contract-status-panel">
+          <PanelHeader
+            icon={FileCog}
+            title="Current Contract Readiness"
+            subtitle="Readiness summary used to status the persisted integration contract."
+          />
+          <div className="readiness-score">
+            <div className="score pass">
+              <strong>{readinessSummary.pass}</strong>
+              <span>Pass</span>
+            </div>
+            <div className="score warning">
+              <strong>{readinessSummary.warning}</strong>
+              <span>Warning</span>
+            </div>
+            <div className="score blocking">
+              <strong>{readinessSummary.blocking}</strong>
+              <span>Blocking</span>
+            </div>
+          </div>
+          <div className="contract-metadata-grid">
+            <Metadata label="Contract status" value={currentStatus} />
+            <Metadata label="Backend mode" value={backendHealth?.mode ?? 'not checked'} />
+            <Metadata label="Backend records" value={String(backendRecords.length)} />
+            <Metadata label="Saved contracts" value={String(contractRecords.length)} />
+          </div>
+        </section>
+
+        <section className="panel contract-latest-panel">
+          <PanelHeader
+            icon={History}
+            title="Latest Saved Contract"
+            subtitle="Most recent persisted contract record."
+          />
+          {latestContract ? (
+            <div className="latest-contract">
+              <StatusChip status={latestContract.status} label={latestContract.status} />
+              <h3>{latestContract.label}</h3>
+              <p>{latestContract.summary}</p>
+              <div className="metadata-grid">
+                <Metadata label="Version" value={`v${latestContract.version}`} />
+                <Metadata label="Saved" value={new Date(latestContract.createdAt).toLocaleString()} />
+              </div>
+            </div>
+          ) : (
+            <div className="empty-state compact">Save a contract to create backend history.</div>
+          )}
+        </section>
+      </section>
+
+      <section className="panel contract-history-panel">
+        <PanelHeader
+          icon={ScrollText}
+          title="Contract History"
+          subtitle="Versioned integration contract records saved through the backend boundary."
+        />
+        {contractRecords.length > 0 ? (
+          <div className="versions-table">
+            <div className="version-row version-head">
+              <span>Label</span>
+              <span>Status</span>
+              <span>Version</span>
+              <span>Saved</span>
+              <span>Summary</span>
+            </div>
+            {contractRecords.map((contract) => (
+              <div className="version-row contract-version-row" key={contract.id}>
+                <strong>{contract.label}</strong>
+                <StatusChip status={contract.status} label={contract.status} />
+                <span>v{contract.version}</span>
+                <span>{new Date(contract.createdAt).toLocaleString()}</span>
+                <span>{contract.summary}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state">No integration contracts have been saved yet.</div>
+        )}
+      </section>
+    </>
   )
 }
 

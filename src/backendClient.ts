@@ -334,6 +334,30 @@ export class LocalBackendClient {
       ),
     )
   }
+
+  async saveIntegrationContract({
+    contract,
+    status,
+    summary,
+  }: {
+    contract: unknown
+    status: StatusLevel
+    summary: string
+  }): Promise<BackendRecord> {
+    return this.saveRecord({
+      kind: 'integration_contract',
+      label: 'Integration Contract',
+      status,
+      summary,
+      payload: contract,
+    })
+  }
+
+  async listIntegrationContracts(): Promise<BackendRecord[]> {
+    return this.listRecords().then((records) =>
+      records.filter((record) => record.kind === 'integration_contract'),
+    )
+  }
 }
 
 class ApiBackendClient {
@@ -516,6 +540,38 @@ class ApiBackendClient {
       )
     } catch {
       return this.localFallback.listMappingRuns(mappingId)
+    }
+  }
+
+  async saveIntegrationContract({
+    contract,
+    status,
+    summary,
+  }: {
+    contract: unknown
+    status: StatusLevel
+    summary: string
+  }): Promise<BackendRecord> {
+    try {
+      return await this.request<BackendRecord>('/api/integration-contracts', {
+        method: 'POST',
+        body: JSON.stringify({
+          label: 'Integration Contract',
+          status,
+          summary,
+          contract,
+        }),
+      })
+    } catch {
+      return this.localFallback.saveIntegrationContract({ contract, status, summary })
+    }
+  }
+
+  async listIntegrationContracts(): Promise<BackendRecord[]> {
+    try {
+      return await this.request<BackendRecord[]>('/api/integration-contracts')
+    } catch {
+      return this.localFallback.listIntegrationContracts()
     }
   }
 }
