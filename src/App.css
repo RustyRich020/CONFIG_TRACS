@@ -211,7 +211,7 @@
 
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -283,10 +283,28 @@
   line-height: 1.45;
 }
 
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
 .connector-grid {
   display: grid;
   grid-template-columns: minmax(310px, 0.9fr) minmax(420px, 1.2fr) minmax(320px, 0.9fr);
   gap: 16px;
+}
+
+.backend-grid {
+  display: grid;
+  grid-template-columns: minmax(340px, 0.8fr) minmax(460px, 1.2fr);
+  gap: 16px;
+}
+
+.backend-grid.lower {
+  grid-template-columns: minmax(480px, 1.1fr) minmax(360px, 0.9fr);
+  margin-top: 16px;
 }
 
 .mapping-grid {
@@ -372,6 +390,11 @@
   background: #e7f5f3;
   font-size: 12px;
   font-weight: 800;
+}
+
+.backend-summary {
+  justify-content: flex-start;
+  padding: 0 16px 12px;
 }
 
 .panel {
@@ -530,6 +553,103 @@
   color: #1e3030;
   font-size: 12px;
   line-height: 1.35;
+}
+
+.backend-health-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 0.7fr) minmax(0, 1.3fr);
+  align-items: center;
+  gap: 12px;
+  margin: 16px;
+  padding: 14px;
+  border: 1px solid #dfe8e7;
+  border-radius: 8px;
+  background: #f8fbfa;
+}
+
+.backend-health-card strong,
+.backend-health-card span {
+  overflow-wrap: anywhere;
+  color: #1e3030;
+  font-size: 12px;
+}
+
+.backend-health-card span {
+  color: #687878;
+}
+
+.backend-record-list,
+.adapter-contract-list {
+  display: flex;
+  flex-direction: column;
+  padding: 0 16px 16px;
+}
+
+.backend-record-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid #edf2f1;
+}
+
+.backend-record-row strong,
+.backend-record-row span {
+  display: block;
+}
+
+.backend-record-row strong {
+  color: #1e3030;
+  font-size: 13px;
+}
+
+.backend-record-row span {
+  margin-top: 4px;
+  color: #718080;
+  font-size: 11px;
+}
+
+.adapter-contract-card {
+  padding: 13px 0;
+  border-top: 1px solid #edf2f1;
+}
+
+.adapter-contract-card:first-child,
+.backend-record-row:first-child {
+  border-top: 0;
+}
+
+.adapter-contract-card strong,
+.adapter-contract-card span {
+  display: block;
+}
+
+.adapter-contract-card strong {
+  color: #1e3030;
+  font-size: 13px;
+}
+
+.adapter-contract-card > div:first-child span,
+.adapter-contract-card p {
+  margin: 4px 0 0;
+  color: #718080;
+  font-size: 11px;
+}
+
+.adapter-contract-card p {
+  line-height: 1.45;
+}
+
+.operation-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.dry-run-list .connector-row {
+  min-height: 72px;
 }
 
 .source-object-list {
@@ -1066,6 +1186,8 @@
   .main-grid,
   .lower-grid,
   .connector-grid,
+  .backend-grid,
+  .backend-grid.lower,
   .mapping-grid,
   .template-grid {
     grid-template-columns: 1fr;
@@ -1125,6 +1247,16 @@
     justify-content: center;
   }
 
+  .toolbar-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .toolbar-actions .primary-action,
+  .toolbar-actions .secondary-action {
+    justify-content: center;
+  }
+
   .metadata-grid {
     grid-template-columns: 1fr;
   }
@@ -1132,6 +1264,10 @@
   .status-strip {
     justify-content: space-between;
     overflow-x: auto;
+  }
+
+  .backend-health-card {
+    grid-template-columns: 1fr;
   }
 
   .metrics-grid {

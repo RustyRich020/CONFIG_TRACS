@@ -14,9 +14,11 @@ import {
   Layers3,
   Package,
   PanelTop,
+  PlugZap,
   Route,
   Search,
   ScrollText,
+  ServerCog,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
@@ -26,6 +28,8 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
+import { adapterContracts } from './backendContracts'
+import { backendClient } from './backendClient'
 import { loadAppConfig } from './configLoader'
 import {
   createAuditEvent,
@@ -43,7 +47,11 @@ import {
 import { createSavedVersion, loadSavedVersions, persistSavedVersions } from './persistence'
 import type {
   AppConfig,
+  AdapterDryRunResult,
+  AdapterContract,
   AuditEvent,
+  BackendHealth,
+  BackendRecord,
   ConnectorTestResult,
   CsvSchemaInference,
   DeploymentState,
@@ -60,6 +68,7 @@ const navItems = [
   { label: 'Templates', icon: PanelTop },
   { label: 'Mapping', icon: GitBranch },
   { label: 'Versions', icon: History },
+  { label: 'Backend', icon: ServerCog },
   { label: 'Readiness', icon: ClipboardCheck },
   { label: 'Audit', icon: ScrollText },
   { label: 'Contract', icon: FileCog },
@@ -175,6 +184,9 @@ function App() {
   const [csvSchema, setCsvSchema] = useState<CsvSchemaInference | null>(null)
   const [mappingResult, setMappingResult] = useState<MappingValidationResult | null>(null)
   const [savedVersions, setSavedVersions] = useState<SavedVersion[]>(() => loadSavedVersions())
+  const [backendHealth, setBackendHealth] = useState<BackendHealth | null>(null)
+  const [backendRecords, setBackendRecords] = useState<BackendRecord[]>([])
+  const [adapterDryRuns, setAdapterDryRuns] = useState<Record<string, AdapterDryRunResult>>({})
 
   useEffect(() => {
     loadAppConfig()
@@ -200,6 +212,7 @@ function App() {
             setCsvSchema(schema)
             setMappingResult(validateMappingAgainstSchema(loaded.mappings.quality_event, schema))
           })
+        refreshBackend()
       })
       .catch((loadError: Error) => setError(loadError.message))
   }, [])
@@ -225,6 +238,21 @@ function App() {
       persistSavedVersions(next)
       return next
     })
+  }
+
+  async function refreshBackend() {
+    const [health, records] = await Promise.all([
+      backendClient.health(),
+      backendClient.listRecords(),
+    ])
+    setBackendHealth(health)
+    setBackendRecords(records)
+  }
+
+  function deploymentReadinessStatus(): StatusLevel {
+    if (readinessSummary.blocking > 0) return 'blocking'
+    if (readinessSummary.warning > 0) return 'warning'
+    return 'pass'
   }
 
   function toggleIndustry(key: string) {
@@ -254,17 +282,72 @@ function App() {
       auditEvents,
       connectorResults,
     )
-    downloadJson('tracs-integration-contract-connector-hub.json', contract)
+    const contractWithBackend = {
+      ...contract,
+      backend_persistence: {
+        health: backendHealth,
+        saved_records: backendRecords.slice(0, 20),
+        adapter_contracts: adapterContracts,
+        adapter_dry_runs: Object.values(adapterDryRuns),
+      },
+    }
+    downloadJson('tracs-integration-contract-connector-hub.json', contractWithBackend)
     saveVersion(
       createSavedVersion({
         kind: 'integration_contract',
         label: 'Integration Contract',
         status: readinessSummary.blocking > 0 ? 'blocking' : readinessSummary.warning > 0 ? 'warning' : 'pass',
         summary: `${readinessSummary.pass} pass, ${readinessSummary.warning} warning, ${readinessSummary.blocking} blocking readiness checks.`,
-        payload: contract,
+        payload: contractWithBackend,
       }),
     )
     record('contract', 'export', 'Integration contract exported with Connector Hub evidence.')
+  }
+
+  async function saveBackendSnapshot() {
+    if (!config) return
+    const saved = await backendClient.saveDeploymentSnapshot({
+      config,
+      deployment,
+      readinessStatus: deploymentReadinessStatus(),
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'backend_snapshot',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record('backend', 'save_snapshot', `${saved.label} saved as backend record v${saved.version}.`)
+  }
+
+  async function runAdapterDryRun(connectorId: string) {
+    if (!config) return
+    const connector = config.connectors.connectors[connectorId]
+    const result = await backendClient.runAdapterDryRun(connectorId, connector)
+    setAdapterDryRuns((current) => ({ ...current, [connectorId]: result }))
+    const saved = await backendClient.saveRecord({
+      kind: 'adapter_contract',
+      label: `${connector.display_name} adapter dry run`,
+      status: result.status,
+      summary: `${result.operations.length} adapter operation(s) checked for ${connector.type}.`,
+      payload: result,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'adapter_dry_run',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    setSelectedConnectorId(connectorId)
+    record('adapter', 'dry_run', `${connector.display_name} adapter contract dry run completed.`)
   }
 
   function runConnectorTest(connectorId: string) {
@@ -427,7 +510,9 @@ function App() {
                     ? 'Mapping Studio'
                     : activeView === 'Versions'
                       ? 'Saved Versions'
-                  : 'Foundation Shell'}
+                      : activeView === 'Backend'
+                        ? 'Backend Persistence'
+                        : 'Foundation Shell'}
             </h1>
             <p>
               {activeView === 'Connectors'
@@ -438,7 +523,9 @@ function App() {
                     ? 'Infer source schema from CSV samples and validate source-to-canonical field mappings.'
                     : activeView === 'Versions'
                       ? 'Review saved connector, mapping, and contract versions persisted in this browser.'
-                : 'Configure industries, activate domains, validate setup, and export the deployment contract.'}
+                      : activeView === 'Backend'
+                        ? 'Persist deployment snapshots, verify adapter contracts, and prepare the API boundary for live systems.'
+                        : 'Configure industries, activate domains, validate setup, and export the deployment contract.'}
             </p>
           </div>
           <div className="topbar-actions">
@@ -472,6 +559,7 @@ function App() {
           <Metric label="Enabled domains" value={deployment.activeDomains.length} icon={Layers3} />
           <Metric label="Object families" value={activeFamilies.length} icon={Boxes} />
           <Metric label="Connector manifests" value={connectorCount} icon={Database} />
+          <Metric label="Backend records" value={backendRecords.length} icon={ServerCog} />
         </section>
 
         {activeView === 'Connectors' ? (
@@ -498,6 +586,17 @@ function App() {
           />
         ) : activeView === 'Versions' ? (
           <SavedVersionsView savedVersions={savedVersions} />
+        ) : activeView === 'Backend' ? (
+          <BackendPersistenceView
+            adapterContracts={adapterContracts}
+            adapterDryRuns={adapterDryRuns}
+            backendHealth={backendHealth}
+            backendRecords={backendRecords}
+            connectorEntries={connectorEntries}
+            onRefresh={refreshBackend}
+            onRunAdapterDryRun={runAdapterDryRun}
+            onSaveSnapshot={saveBackendSnapshot}
+          />
         ) : (
           <OverviewShell
             activeFamilies={activeFamilies}
@@ -514,6 +613,174 @@ function App() {
         )}
       </main>
     </div>
+  )
+}
+
+function BackendPersistenceView({
+  adapterContracts,
+  adapterDryRuns,
+  backendHealth,
+  backendRecords,
+  connectorEntries,
+  onRefresh,
+  onRunAdapterDryRun,
+  onSaveSnapshot,
+}: {
+  adapterContracts: AdapterContract[]
+  adapterDryRuns: Record<string, AdapterDryRunResult>
+  backendHealth: BackendHealth | null
+  backendRecords: BackendRecord[]
+  connectorEntries: [string, AppConfig['connectors']['connectors'][string]][]
+  onRefresh: () => void
+  onRunAdapterDryRun: (connectorId: string) => void
+  onSaveSnapshot: () => void
+}) {
+  const recordCounts = backendRecords.reduce(
+    (summary, record) => {
+      summary[record.kind] = (summary[record.kind] ?? 0) + 1
+      return summary
+    },
+    {} as Record<string, number>,
+  )
+
+  return (
+    <>
+      <section className="connector-toolbar panel">
+        <div>
+          <h2>Backend Persistence Boundary</h2>
+          <p>
+            Browser-local storage now behaves like a backend adapter with versioned records, health checks, and live adapter contract dry runs.
+          </p>
+        </div>
+        <div className="toolbar-actions">
+          <button className="secondary-action" onClick={onRefresh} type="button">
+            <Activity size={15} />
+            Refresh
+          </button>
+          <button className="primary-action" onClick={onSaveSnapshot} type="button">
+            <ServerCog size={16} />
+            Save Snapshot
+          </button>
+        </div>
+      </section>
+
+      <section className="backend-grid">
+        <section className="panel backend-health-panel">
+          <PanelHeader
+            icon={ServerCog}
+            title="Backend Health"
+            subtitle="Current persistence adapter status before replacing local storage with an API."
+          />
+          {backendHealth ? (
+            <>
+              <div className="backend-health-card">
+                <StatusChip status={backendHealth.status} label={backendHealth.status} />
+                <strong>{backendHealth.mode}</strong>
+                <span>{backendHealth.endpoint}</span>
+              </div>
+              <div className="metadata-grid">
+                <Metadata label="Records" value={String(backendHealth.records)} />
+                <Metadata label="Latency" value={`${backendHealth.latencyMs} ms`} />
+                <Metadata label="Checked" value={new Date(backendHealth.checkedAt).toLocaleTimeString()} />
+                <Metadata label="Evidence" value={backendHealth.evidence} />
+              </div>
+            </>
+          ) : (
+            <div className="empty-state compact">Refresh backend health to capture evidence.</div>
+          )}
+        </section>
+
+        <section className="panel backend-record-panel">
+          <PanelHeader
+            icon={History}
+            title="Persisted Records"
+            subtitle={`${backendRecords.length} versioned backend record(s) stored by the local adapter.`}
+          />
+          <div className="version-summary backend-summary">
+            <span>{recordCounts.deployment_profile ?? 0} profiles</span>
+            <span>{recordCounts.adapter_contract ?? 0} adapters</span>
+            <span>{recordCounts.integration_contract ?? 0} contracts</span>
+          </div>
+          {backendRecords.length > 0 ? (
+            <div className="backend-record-list">
+              {backendRecords.slice(0, 8).map((record) => (
+                <div className="backend-record-row" key={record.id}>
+                  <div>
+                    <strong>{record.label}</strong>
+                    <span>
+                      {titleize(record.kind)} / v{record.version} / {new Date(record.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                  <StatusChip status={record.status} label={record.status} />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state compact">Save a deployment snapshot or run an adapter dry run.</div>
+          )}
+        </section>
+      </section>
+
+      <section className="backend-grid lower">
+        <section className="panel adapter-contract-panel">
+          <PanelHeader
+            icon={PlugZap}
+            title="Live Adapter Contracts"
+            subtitle={`${adapterContracts.length} adapter interfaces ready for backend implementation.`}
+          />
+          <div className="adapter-contract-list">
+            {adapterContracts.map((contract) => (
+              <article className="adapter-contract-card" key={contract.id}>
+                <div>
+                  <strong>{contract.displayName}</strong>
+                  <span>{contract.connectorType}</span>
+                </div>
+                <div className="operation-list">
+                  {contract.operations.map((operation) => (
+                    <span className="chip active" key={operation}>
+                      {titleize(operation)}
+                    </span>
+                  ))}
+                </div>
+                <p>{contract.evidenceRequired.slice(0, 3).join(', ')}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="panel adapter-dry-run-panel">
+          <PanelHeader
+            icon={ClipboardCheck}
+            title="Adapter Dry Runs"
+            subtitle="Execute contract-level checks against configured connector manifests."
+          />
+          <div className="connector-list dry-run-list">
+            {connectorEntries.map(([id, connector]) => {
+              const result = adapterDryRuns[id]
+              return (
+                <button
+                  className="connector-row"
+                  key={id}
+                  onClick={() => onRunAdapterDryRun(id)}
+                  type="button"
+                >
+                  <ConnectorGlyph type={connector.type} />
+                  <div>
+                    <strong>{connector.display_name}</strong>
+                    <span>
+                      {result
+                        ? `${result.operations.length} operation(s), ${result.sampleResponse.previewRows} preview row target`
+                        : 'Run backend adapter dry run'}
+                    </span>
+                  </div>
+                  <StatusChip status={result?.status ?? 'warning'} label={result ? result.status : 'Not run'} />
+                </button>
+              )
+            })}
+          </div>
+        </section>
+      </section>
+    </>
   )
 }
 

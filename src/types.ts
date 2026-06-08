@@ -157,6 +157,8 @@ export type SavedVersionKind =
   | 'mapping_validation'
   | 'mapping_version'
   | 'integration_contract'
+  | 'backend_snapshot'
+  | 'adapter_dry_run'
 
 export type SavedVersion = {
   id: string
@@ -166,4 +168,64 @@ export type SavedVersion = {
   createdAt: string
   summary: string
   payload: unknown
+}
+
+export type BackendRecordKind =
+  | 'deployment_profile'
+  | 'connector_result'
+  | 'mapping_validation'
+  | 'integration_contract'
+  | 'adapter_contract'
+
+export type BackendRecord<TPayload = unknown> = {
+  id: string
+  kind: BackendRecordKind
+  version: number
+  status: StatusLevel
+  createdAt: string
+  updatedAt: string
+  label: string
+  summary: string
+  payload: TPayload
+}
+
+export type BackendHealth = {
+  mode: 'browser_local' | 'api'
+  status: StatusLevel
+  checkedAt: string
+  endpoint: string
+  latencyMs: number
+  records: number
+  evidence: string
+}
+
+export type AdapterOperation = 'health_check' | 'discover_metadata' | 'preview_rows' | 'validate_mapping'
+
+export type AdapterContract = {
+  id: string
+  connectorType: string
+  displayName: string
+  operations: AdapterOperation[]
+  authMode: string
+  requestShape: Record<string, string>
+  responseShape: Record<string, string>
+  evidenceRequired: string[]
+}
+
+export type AdapterDryRunResult = {
+  adapterId: string
+  connectorId: string
+  status: StatusLevel
+  executedAt: string
+  operations: Array<{
+    operation: AdapterOperation
+    status: StatusLevel
+    evidence: string
+  }>
+  sampleResponse: {
+    sourceObjects: string[]
+    targetObjects: string[]
+    previewRows: number
+    warnings: string[]
+  }
 }
