@@ -29,13 +29,14 @@ POST /api/records
 GET  /api/adapter-contracts
 POST /api/connectors/{connectorId}/metadata
 POST /api/connectors/{connectorId}/preview
+GET  /api/connectors/{connectorId}/runs
 POST /api/deployment-snapshots
 POST /api/adapter-dry-runs
 ```
 
 The frontend uses the API when `VITE_TRACS_API_URL` is set. Without that value, or if the API is unreachable, it uses browser-local fallback persistence.
 
-The CSV/manual upload connector is the first implemented live adapter. It reads the configured sample CSV, infers source columns, reports row counts, and returns bounded preview rows. Snowflake, SharePoint Excel, and external reference connectors still return contract/dry-run evidence until credential-backed adapters are added.
+The CSV/manual upload connector is the first implemented live adapter. It reads the configured sample CSV, infers source columns, reports row counts, and returns bounded preview rows. Metadata discovery and row previews are persisted as `connector_run` records. Snowflake, SharePoint Excel, and external reference connectors still return contract/dry-run evidence until credential-backed adapters are added.
 
 ### Planned Saved Versions
 
@@ -235,6 +236,7 @@ SAVED_VERSION (
 CONNECTOR_RUN (
   ID varchar primary key,
   CONNECTOR_ID varchar not null,
+  RUN_TYPE varchar not null,
   STATUS varchar not null,
   TESTED_AT timestamp not null,
   TESTED_BY varchar not null,

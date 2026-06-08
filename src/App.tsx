@@ -191,6 +191,7 @@ function App() {
   const [adapterDryRuns, setAdapterDryRuns] = useState<Record<string, AdapterDryRunResult>>({})
   const [sourceMetadata, setSourceMetadata] = useState<Record<string, ConnectorSourceMetadata>>({})
   const [sourcePreviews, setSourcePreviews] = useState<Record<string, ConnectorPreviewResult>>({})
+  const [connectorRuns, setConnectorRuns] = useState<Record<string, BackendRecord[]>>({})
 
   useEffect(() => {
     loadAppConfig()
@@ -361,9 +362,38 @@ function App() {
       backendClient.discoverConnectorMetadata(connectorId, connector),
       backendClient.previewConnectorRows(connectorId, connector, 5),
     ])
+    if (!metadata.record) {
+      await backendClient.saveRecord({
+        kind: 'connector_run',
+        label: `${connector.display_name} metadata discovery`,
+        status: metadata.columns.length > 0 ? 'pass' : 'warning',
+        summary: metadata.evidence,
+        payload: {
+          connectorId,
+          runType: 'metadata',
+          result: metadata,
+        },
+      })
+    }
+    if (!preview.record) {
+      await backendClient.saveRecord({
+        kind: 'connector_run',
+        label: `${connector.display_name} row preview`,
+        status: preview.returnedRows > 0 ? 'pass' : 'warning',
+        summary: preview.evidence,
+        payload: {
+          connectorId,
+          runType: 'preview',
+          result: preview,
+        },
+      })
+    }
+    const runs = await backendClient.listConnectorRuns(connectorId)
     setSourceMetadata((current) => ({ ...current, [connectorId]: metadata }))
     setSourcePreviews((current) => ({ ...current, [connectorId]: preview }))
+    setConnectorRuns((current) => ({ ...current, [connectorId]: runs }))
     setSelectedConnectorId(connectorId)
+    await refreshBackend()
     record(
       'connector',
       'discover_source',
@@ -492,6 +522,9 @@ function App() {
   const selectedSourcePreview = selectedConnectorId
     ? sourcePreviews[selectedConnectorId]
     : undefined
+  const selectedConnectorRuns = selectedConnectorId
+    ? connectorRuns[selectedConnectorId] ?? []
+    : []
 
   return (
     <div className="app-shell">
@@ -600,6 +633,7 @@ function App() {
             selectedConnector={selectedConnector}
             selectedConnectorId={selectedConnectorId}
             selectedConnectorResult={selectedConnectorResult}
+            selectedConnectorRuns={selectedConnectorRuns}
             selectedSourceMetadata={selectedSourceMetadata}
             selectedSourcePreview={selectedSourcePreview}
           />
@@ -1188,6 +1222,7 @@ function ConnectorHub({
   selectedConnector,
   selectedConnectorId,
   selectedConnectorResult,
+  selectedConnectorRuns,
   selectedSourceMetadata,
   selectedSourcePreview,
 }: {
@@ -1200,6 +1235,7 @@ function ConnectorHub({
   selectedConnector?: AppConfig['connectors']['connectors'][string]
   selectedConnectorId: string | null
   selectedConnectorResult?: ConnectorTestResult
+  selectedConnectorRuns: BackendRecord[]
   selectedSourceMetadata?: ConnectorSourceMetadata
   selectedSourcePreview?: ConnectorPreviewResult
 }) {
@@ -1371,6 +1407,22 @@ function ConnectorHub({
                       </tbody>
                     </table>
                   </div>
+                </div>
+              ) : null}
+              {selectedConnectorRuns.length > 0 ? (
+                <div className="connector-run-history">
+                  <h4>Persisted Connector Runs</h4>
+                  {selectedConnectorRuns.slice(0, 4).map((run) => (
+                    <div className="connector-run-row" key={run.id}>
+                      <div>
+                        <strong>{run.label}</strong>
+                        <span>
+                          v{run.version} / {new Date(run.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                      <StatusChip status={run.status} label={run.status} />
+                    </div>
+                  ))}
                 </div>
               ) : null}
             </div>

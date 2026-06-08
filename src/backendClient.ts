@@ -278,6 +278,19 @@ export class LocalBackendClient {
       evidence: `${Math.min(rows.length, boundedLimit)} preview row(s) returned from local CSV fixture.`,
     }
   }
+
+  async listConnectorRuns(connectorId: string): Promise<BackendRecord[]> {
+    return this.listRecords().then((records) =>
+      records.filter(
+        (record) =>
+          record.kind === 'connector_run' &&
+          typeof record.payload === 'object' &&
+          record.payload !== null &&
+          'connectorId' in record.payload &&
+          record.payload.connectorId === connectorId,
+      ),
+    )
+  }
 }
 
 class ApiBackendClient {
@@ -414,6 +427,16 @@ class ApiBackendClient {
       )
     } catch {
       return this.localFallback.previewConnectorRows(connectorId, connector, limit)
+    }
+  }
+
+  async listConnectorRuns(connectorId: string): Promise<BackendRecord[]> {
+    try {
+      return await this.request<BackendRecord[]>(
+        `/api/connectors/${encodeURIComponent(connectorId)}/runs`,
+      )
+    } catch {
+      return this.localFallback.listConnectorRuns(connectorId)
     }
   }
 }

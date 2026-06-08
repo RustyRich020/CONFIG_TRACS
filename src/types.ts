@@ -172,6 +172,7 @@ export type SavedVersion = {
 
 export type BackendRecordKind =
   | 'deployment_profile'
+  | 'connector_run'
   | 'connector_result'
   | 'mapping_validation'
   | 'integration_contract'
@@ -240,6 +241,7 @@ export type ConnectorSourceMetadata = {
   rowCount: number
   columns: CsvColumnProfile[]
   evidence: string
+  record?: BackendRecord
 }
 
 export type ConnectorPreviewResult = {
@@ -252,4 +254,5 @@ export type ConnectorPreviewResult = {
   returnedRows: number
   rows: Record<string, string>[]
   evidence: string
+  record?: BackendRecord
 }

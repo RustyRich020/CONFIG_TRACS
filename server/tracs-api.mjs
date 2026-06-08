@@ -71,6 +71,13 @@ async function saveRecord({ kind, label, status, summary, payload }) {
   return record
 }
 
+async function listConnectorRuns(connectorId) {
+  const records = await readRecords()
+  return records.filter(
+    (record) => record.kind === 'connector_run' && record.payload?.connectorId === connectorId,
+  )
+}
+
 function createDeploymentPayload({ config, deployment }) {
   return {
     environment: config.environment.environment,
@@ -131,7 +138,19 @@ async function handleRequest(req, res) {
         })
         return
       }
-      jsonResponse(res, 200, await discoverCsvMetadata(connectorId, body.connector))
+      const metadata = await discoverCsvMetadata(connectorId, body.connector)
+      const record = await saveRecord({
+        kind: 'connector_run',
+        label: `${body.connector.display_name} metadata discovery`,
+        status: metadata.columns.length > 0 ? 'pass' : 'warning',
+        summary: metadata.evidence,
+        payload: {
+          connectorId,
+          runType: 'metadata',
+          result: metadata,
+        },
+      })
+      jsonResponse(res, 200, { ...metadata, record })
       return
     }
 
@@ -145,11 +164,29 @@ async function handleRequest(req, res) {
         })
         return
       }
-      jsonResponse(
-        res,
-        200,
-        await previewCsvRows(connectorId, body.connector, body.limit ?? url.searchParams.get('limit')),
+      const preview = await previewCsvRows(
+        connectorId,
+        body.connector,
+        body.limit ?? url.searchParams.get('limit'),
       )
+      const record = await saveRecord({
+        kind: 'connector_run',
+        label: `${body.connector.display_name} row preview`,
+        status: preview.returnedRows > 0 ? 'pass' : 'warning',
+        summary: preview.evidence,
+        payload: {
+          connectorId,
+          runType: 'preview',
+          result: preview,
+        },
+      })
+      jsonResponse(res, 200, { ...preview, record })
+      return
+    }
+
+    const runsMatch = url.pathname.match(/^\/api\/connectors\/([^/]+)\/runs$/)
+    if (req.method === 'GET' && runsMatch) {
+      jsonResponse(res, 200, await listConnectorRuns(decodeURIComponent(runsMatch[1])))
       return
     }
 
