@@ -1,0 +1,36 @@
+connectors:
+  complaints_snowflake:
+    type: snowflake
+    display_name: Complaint Warehouse Views
+    database: TRACS_QA
+    schema: SILVER_QUALITY
+    role: TRACS_READER
+    refresh_mode: scheduled
+    refresh_cron: "0 */2 * * *"
+    objects:
+      - source: VW_COMPLAINTS
+        target: quality_event
+      - source: VW_RETURNS
+        target: return_case
+
+  returns_sharepoint_excel:
+    type: sharepoint_excel
+    display_name: Quality Returns Tracker
+    site_url: https://tenant.sharepoint.com/sites/Quality
+    library: Shared Documents
+    workbook: Returns Tracker.xlsx
+    sheet: Open RMAs
+    target: return_case
+    refresh_mode: manual_or_scheduled
+
+  capa_external:
+    type: external_reference
+    display_name: CAPA System Reference
+    target: capa_reference
+    integration_mode: reference_only
+
+  manual_csv_upload:
+    type: csv
+    display_name: Manual CSV Upload
+    target: quality_event
+    refresh_mode: manual

@@ -1,0 +1,11 @@
+checks:
+  - id: check_id
+    severity: blocking
+    description: Human-readable check description.
+    target:
+      area: connector
+      id: connector_id
+    evidence:
+      expected: Expected evidence shape.
+      remediation: How to resolve failed check.
+

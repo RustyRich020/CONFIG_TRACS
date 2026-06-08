@@ -1,0 +1,120 @@
+solution_domains:
+  erp:
+    display_name: Enterprise Resource Planning
+    modules:
+      - packaging_erp
+      - order_management
+      - inventory
+      - costing
+      - customer_management
+
+  scm:
+    display_name: Supply Chain Management
+    modules:
+      - supplier_management
+      - purchase_orders
+      - logistics
+      - inventory_planning
+      - supply_chain_simulator
+
+  shop_floor:
+    display_name: Shop Floor Management
+    modules:
+      - work_centers
+      - labor_tracking
+      - equipment_status
+      - work_instructions
+
+  mes:
+    display_name: Manufacturing Execution System
+    modules:
+      - work_orders
+      - production_events
+      - material_consumption
+      - test_results
+
+  pcs:
+    display_name: Production Control System
+    modules:
+      - scheduling
+      - dispatch
+      - line_status
+      - throughput
+      - downtime
+
+  quoting_costing:
+    display_name: Quoting & Costing
+    modules:
+      - quote_templates
+      - cost_models
+      - material_costing
+      - labor_costing
+      - margin_analysis
+
+  reporting_bi:
+    display_name: Reporting & BI
+    modules:
+      - report_catalog
+      - semantic_models
+      - data_freshness
+      - operational_dashboards
+
+  engineering:
+    display_name: Engineering
+    modules:
+      - bom
+      - engineering_change
+      - specifications
+      - document_references
+
+  plm:
+    display_name: Product Lifecycle Management
+    modules:
+      - product_revisions
+      - lifecycle_status
+      - requirements
+      - release_control
+
+  app:
+    display_name: Assembly Process Planning
+    modules:
+      - assembly_sequence
+      - operation_plans
+      - tooling
+      - work_instruction_links
+
+  quality:
+    display_name: Quality
+    modules:
+      - inspections
+      - nonconformance
+      - complaints
+      - returns
+      - capa_bridge
+      - audits
+
+  qms:
+    display_name: Quality Management System
+    modules:
+      - document_links
+      - training_links
+      - change_control_links
+      - capa_references
+      - validation_evidence
+
+  spc_sqc:
+    display_name: SPC / SQC
+    modules:
+      - control_charts
+      - sampling_plans
+      - capability_metrics
+      - measurement_rules
+
+  gage_management:
+    display_name: Gage Management
+    modules:
+      - gage_inventory
+      - calibration_events
+      - out_of_tolerance_review
+      - gage_usage_traceability
+

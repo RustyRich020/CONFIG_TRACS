@@ -1,0 +1,32 @@
+object: canonical_object_type
+source_connector: connector_id
+source_object: SOURCE_OBJECT_NAME
+
+primary_key:
+  target_field: object_id
+  source_field: SOURCE_PRIMARY_KEY
+
+fields:
+  object_id: SOURCE_PRIMARY_KEY
+  object_date: SOURCE_DATE_FIELD
+  product_code: SOURCE_PRODUCT_FIELD
+  status: SOURCE_STATUS_FIELD
+
+required:
+  - object_id
+  - object_date
+  - status
+
+transforms:
+  object_date:
+    type: date
+    accepted_formats:
+      - yyyy-MM-dd
+      - MM/dd/yyyy
+  status:
+    type: enum
+    allowed_values:
+      - new
+      - active
+      - closed
+

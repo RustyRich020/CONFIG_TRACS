@@ -1,0 +1,37 @@
+checks:
+  - id: connector_connection
+    severity: blocking
+    description: Each enabled connector must authenticate and return metadata.
+
+  - id: required_fields_present
+    severity: blocking
+    description: Required canonical fields must be mapped to source fields.
+
+  - id: primary_key_uniqueness
+    severity: blocking
+    description: Canonical object primary keys must be unique after mapping.
+
+  - id: required_null_rate
+    severity: warning
+    threshold: 0.01
+    description: Required fields should have less than 1 percent null values.
+
+  - id: date_parse_success
+    severity: blocking
+    threshold: 0.99
+    description: At least 99 percent of mapped date values must parse successfully.
+
+  - id: data_freshness
+    severity: warning
+    max_age_hours: 24
+    description: Source data should refresh within the configured freshness window.
+
+  - id: audit_logging_enabled
+    severity: blocking
+    description: Configuration and mapping changes must write to the audit log.
+
+  - id: row_count_reconciliation
+    severity: warning
+    tolerance_percent: 0.5
+    description: Source and canonical row counts should reconcile within tolerance.
+

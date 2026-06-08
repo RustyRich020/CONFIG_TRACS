@@ -1,0 +1,11 @@
+connectors:
+  connector_id:
+    type: csv
+    display_name: Manual CSV Upload
+    target: canonical_object_type
+    refresh_mode: manual
+    schema_inference:
+      header_row: 1
+      delimiter: comma
+      trim_whitespace: true
+

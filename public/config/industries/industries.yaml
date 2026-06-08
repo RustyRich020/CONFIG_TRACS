@@ -1,0 +1,132 @@
+industries:
+  packaging:
+    display_name: Packaging
+    enabled_domains:
+      - erp
+      - scm
+      - shop_floor
+      - mes
+      - quoting_costing
+      - quality
+      - reporting_bi
+      - traceability
+    terminology:
+      product: Item
+      work_order: Job
+      lot_serial: Lot
+      quality_event: Quality Event
+
+  automotive:
+    display_name: Automotive
+    enabled_domains:
+      - erp
+      - scm
+      - mes
+      - pcs
+      - engineering
+      - plm
+      - quality
+      - spc_sqc
+      - gage_management
+      - reporting_bi
+      - traceability
+    terminology:
+      product: Part
+      work_order: Work Order
+      quality_event: Defect / Quality Event
+
+  aerospace_defense:
+    display_name: Aerospace & Defense
+    enabled_domains:
+      - scm
+      - mes
+      - engineering
+      - plm
+      - quality
+      - gage_management
+      - reporting_bi
+      - traceability
+    terminology:
+      product: Serialized Part
+      lot_serial: Serial Number
+      quality_event: Nonconformance
+
+  construction_materials:
+    display_name: Construction Materials
+    enabled_domains:
+      - erp
+      - scm
+      - pcs
+      - quality
+      - spc_sqc
+      - reporting_bi
+      - traceability
+    terminology:
+      product: Material
+      lot_serial: Batch
+      quality_event: Quality Test / Deviation
+
+  electronics:
+    display_name: Electronics
+    enabled_domains:
+      - erp
+      - scm
+      - mes
+      - engineering
+      - plm
+      - app
+      - quality
+      - spc_sqc
+      - reporting_bi
+      - traceability
+    terminology:
+      product: Assembly
+      lot_serial: Component Lot / Serial
+      quality_event: Test Failure / Quality Event
+
+  food_beverage:
+    display_name: Food & Beverage
+    enabled_domains:
+      - erp
+      - scm
+      - mes
+      - pcs
+      - quality
+      - spc_sqc
+      - reporting_bi
+      - traceability
+    terminology:
+      product: Finished Good
+      lot_serial: Batch / Lot
+      quality_event: Quality Hold / Deviation
+
+  medical_pharmaceuticals:
+    display_name: Medical & Pharmaceuticals
+    enabled_domains:
+      - scm
+      - engineering
+      - plm
+      - quality
+      - qms
+      - spc_sqc
+      - gage_management
+      - reporting_bi
+      - traceability
+    terminology:
+      product: Device / Product
+      lot_serial: Lot / Serial
+      quality_event: Complaint / Quality Event
+
+  transportation:
+    display_name: Transportation
+    enabled_domains:
+      - erp
+      - scm
+      - shop_floor
+      - quality
+      - reporting_bi
+      - traceability
+    terminology:
+      product: Asset / Part
+      quality_event: Incident / Quality Event
+

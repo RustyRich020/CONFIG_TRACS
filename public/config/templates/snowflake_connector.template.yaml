@@ -1,0 +1,13 @@
+connectors:
+  connector_id:
+    type: snowflake
+    display_name: Source Display Name
+    database: DATABASE_NAME
+    schema: SCHEMA_NAME
+    role: LEAST_PRIVILEGE_ROLE
+    refresh_mode: scheduled
+    refresh_cron: "0 */2 * * *"
+    objects:
+      - source: SOURCE_VIEW_OR_TABLE
+        target: canonical_object_type
+

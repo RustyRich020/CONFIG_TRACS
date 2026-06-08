@@ -1,0 +1,53 @@
+object: quality_event
+source_connector: complaints_snowflake
+source_object: VW_COMPLAINTS
+
+primary_key:
+  target_field: event_id
+  source_field: COMPLAINT_ID
+
+fields:
+  event_id: COMPLAINT_ID
+  event_date: RECEIVED_DATE
+  event_type: COMPLAINT_TYPE
+  source_system: SOURCE_SYSTEM
+  product_code: ITEM_NUMBER
+  product_name: PRODUCT_NAME
+  lot_number: LOT
+  serial_number: SERIAL
+  severity: SEVERITY_CLASS
+  narrative: CUSTOMER_DESCRIPTION
+  status: CURRENT_STATUS
+  owner: OWNER_NAME
+  capa_reference_id: CAPA_ID
+
+required:
+  - event_id
+  - event_date
+  - event_type
+  - product_code
+  - status
+
+transforms:
+  event_date:
+    type: date
+    accepted_formats:
+      - yyyy-MM-dd
+      - MM/dd/yyyy
+  severity:
+    type: enum
+    allowed_values:
+      - low
+      - medium
+      - high
+      - critical
+  status:
+    type: enum
+    allowed_values:
+      - new
+      - triage
+      - investigation
+      - awaiting_return
+      - capa_referred
+      - closed
+

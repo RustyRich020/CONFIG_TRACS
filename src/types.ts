@@ -1,0 +1,169 @@
+export type StatusLevel = 'pass' | 'warning' | 'blocking'
+
+export type EnvironmentConfig = {
+  environment: {
+    name: string
+    display_name: string
+    auth_provider: string
+    audit_mode: string
+    default_timezone: string
+  }
+  deployment_profile: {
+    industries: string[]
+    solution_domains: string[]
+  }
+  warehouse: {
+    preferred_platform: string
+    canonical_database: string
+    canonical_schema: string
+  }
+  features: Record<string, boolean>
+}
+
+export type IndustryProfile = {
+  display_name: string
+  enabled_domains: string[]
+  terminology: Record<string, string>
+}
+
+export type SolutionDomain = {
+  display_name: string
+  modules: string[]
+}
+
+export type ObjectFamily = {
+  objects: string[]
+}
+
+export type ConnectorObject = {
+  source: string
+  target: string
+}
+
+export type ConnectorDefinition = {
+  type: string
+  display_name: string
+  refresh_mode?: string
+  refresh_cron?: string
+  database?: string
+  schema?: string
+  role?: string
+  site_url?: string
+  library?: string
+  workbook?: string
+  sheet?: string
+  target?: string
+  integration_mode?: string
+  objects?: ConnectorObject[]
+}
+
+export type ConnectorManifest = {
+  connectors: Record<string, ConnectorDefinition>
+}
+
+export type ReadinessRule = {
+  id: string
+  severity: StatusLevel
+  description: string
+  threshold?: number
+  max_age_hours?: number
+}
+
+export type AppConfig = {
+  environment: EnvironmentConfig
+  industries: Record<string, IndustryProfile>
+  solutionDomains: Record<string, SolutionDomain>
+  objectFamilies: Record<string, ObjectFamily>
+  connectors: ConnectorManifest
+  mappings: Record<string, MappingManifest>
+  readinessRules: ReadinessRule[]
+}
+
+export type DeploymentState = {
+  activeIndustries: string[]
+  activeDomains: string[]
+}
+
+export type ReadinessCheck = {
+  id: string
+  label: string
+  status: StatusLevel
+  evidence: string
+  remediation: string
+}
+
+export type AuditEvent = {
+  id: string
+  timestamp: string
+  actor: string
+  area: string
+  action: string
+  summary: string
+}
+
+export type ConnectorTestResult = {
+  connectorId: string
+  status: StatusLevel
+  testedAt: string
+  checks: ReadinessCheck[]
+  metadata: {
+    sourceType: string
+    displayName: string
+    sourceObjects: number
+    targetObjects: string[]
+    refreshMode: string
+    connectionMode: string
+  }
+}
+
+export type MappingManifest = {
+  object: string
+  source_connector: string
+  source_object: string
+  primary_key: {
+    target_field: string
+    source_field: string
+  }
+  fields: Record<string, string>
+  required: string[]
+  transforms?: Record<string, unknown>
+}
+
+export type CsvColumnProfile = {
+  name: string
+  nonEmptyCount: number
+  sampleValues: string[]
+  inferredType: 'date' | 'number' | 'text' | 'empty'
+}
+
+export type CsvSchemaInference = {
+  rowCount: number
+  columns: CsvColumnProfile[]
+}
+
+export type MappingValidationResult = {
+  status: StatusLevel
+  checks: ReadinessCheck[]
+  mappedFields: Array<{
+    targetField: string
+    sourceField: string
+    present: boolean
+    required: boolean
+  }>
+}
+
+export type SavedVersionKind =
+  | 'connector_test'
+  | 'mapping_validation'
+  | 'mapping_version'
+  | 'integration_contract'
+
+export type SavedVersion = {
+  id: string
+  kind: SavedVersionKind
+  label: string
+  status: StatusLevel
+  createdAt: string
+  summary: string
+  payload: unknown
+}

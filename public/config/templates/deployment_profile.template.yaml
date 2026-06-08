@@ -1,0 +1,22 @@
+deployment_profile:
+  name: customer_or_site_name
+  environment: qa
+  industries:
+    - packaging
+  solution_domains:
+    - erp
+    - scm
+    - mes
+    - quality
+    - reporting_bi
+    - traceability
+  terminology:
+    product: Item
+    work_order: Job
+    lot_serial: Lot
+    quality_event: Quality Event
+  approvals:
+    business_owner: ""
+    data_owner: ""
+    validation_owner: ""
+

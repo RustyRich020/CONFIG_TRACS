@@ -1,0 +1,4 @@
+COMPLAINT_ID,RECEIVED_DATE,COMPLAINT_TYPE,SOURCE_SYSTEM,ITEM_NUMBER,PRODUCT_NAME,LOT,SERIAL,SEVERITY_CLASS,CUSTOMER_DESCRIPTION,CURRENT_STATUS,OWNER_NAME,CAPA_ID
+CMP-1001,2026-05-18,complaint,manual_csv,ITM-4800,Packaging Line Sensor,LOT-A17,SN-81002,medium,Intermittent reading drift reported by customer,triage,Lisa Adams,CAPA-220
+CMP-1002,2026-05-22,return,manual_csv,ITM-4810,Sterile Pouch Assembly,LOT-A21,SN-81051,high,Returned unit failed incoming inspection,investigation,Christopher Lee,
+CMP-1003,2026-05-26,complaint,manual_csv,ITM-4822,Control Module,LOT-B04,SN-81116,low,Label mismatch noted during receiving,new,Lisa Adams,

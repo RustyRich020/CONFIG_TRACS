@@ -1,0 +1,75 @@
+object_families:
+  commercial:
+    objects:
+      - customer
+      - quote
+      - quote_line
+      - order
+      - order_line
+      - price_list
+
+  product:
+    objects:
+      - product
+      - item
+      - part
+      - material
+      - bom
+      - bom_component
+      - revision
+      - engineering_change
+
+  manufacturing:
+    objects:
+      - work_order
+      - routing
+      - operation
+      - work_center
+      - equipment
+      - production_event
+      - labor_event
+
+  supply_chain:
+    objects:
+      - supplier
+      - purchase_order
+      - shipment
+      - receipt
+      - inventory_transaction
+      - warehouse_location
+
+  quality:
+    objects:
+      - quality_event
+      - inspection
+      - nonconformance
+      - capa_reference
+      - complaint
+      - return_case
+      - audit
+      - deviation
+
+  measurement:
+    objects:
+      - spc_measurement
+      - sqc_sample
+      - control_plan
+      - gage
+      - calibration_event
+
+  traceability:
+    objects:
+      - lot
+      - serial
+      - batch
+      - genealogy_link
+      - document_reference
+      - process_link
+      - source_reference
+
+  analytics:
+    objects:
+      - metric_definition
+      - report_catalog
+      - semantic_model
+      - freshness_status

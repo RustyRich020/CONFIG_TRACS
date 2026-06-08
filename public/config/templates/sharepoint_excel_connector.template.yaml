@@ -1,0 +1,11 @@
+connectors:
+  connector_id:
+    type: sharepoint_excel
+    display_name: Workbook Display Name
+    site_url: https://tenant.sharepoint.com/sites/SiteName
+    library: Shared Documents
+    workbook: Workbook Name.xlsx
+    sheet: Sheet Name
+    target: canonical_object_type
+    refresh_mode: manual_or_scheduled
+

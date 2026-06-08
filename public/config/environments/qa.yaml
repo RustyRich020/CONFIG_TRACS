@@ -1,0 +1,36 @@
+environment:
+  name: qa
+  display_name: TRACS QA
+  auth_provider: entra_id
+  audit_mode: enabled
+  default_timezone: America/New_York
+
+deployment_profile:
+  industries:
+    - packaging
+    - medical_pharmaceuticals
+  solution_domains:
+    - erp
+    - scm
+    - mes
+    - quality
+    - qms
+    - reporting_bi
+    - traceability
+
+warehouse:
+  preferred_platform: snowflake
+  canonical_database: TRACS_QA
+  canonical_schema: GOLD_TRACS
+
+features:
+  industry_profiles: true
+  solution_domains: true
+  connector_hub: true
+  mapping_studio: true
+  readiness_checks: true
+  quality_event_intake: true
+  traceability_matrix: true
+  capa_bridge: true
+  regulatory_readiness: false
+  native_esignature: false

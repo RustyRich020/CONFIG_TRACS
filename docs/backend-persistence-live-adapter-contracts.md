@@ -1,0 +1,216 @@
+# Backend Persistence + Live Adapter Contracts
+
+## Goal
+
+Move TRACS from browser-local saved versions into a backend-backed workflow, while defining live adapter contracts for Snowflake, SharePoint Excel, CSV/manual upload, and future API/database connectors.
+
+## Scope
+
+This phase should add:
+
+- persisted saved versions
+- persisted connector test runs
+- persisted mapping validation runs
+- persisted integration contract exports
+- backend API contract for live connector adapters
+- adapter result payloads that match the current frontend record shapes
+
+This phase should not add secrets to the frontend or commit credentials into GitHub.
+
+## Persistence API
+
+### Saved Versions
+
+```http
+GET    /api/saved-versions
+POST   /api/saved-versions
+GET    /api/saved-versions/{versionId}
+DELETE /api/saved-versions/{versionId}
+```
+
+Saved version payload:
+
+```ts
+type SavedVersion = {
+  id: string
+  kind:
+    | 'connector_test'
+    | 'mapping_validation'
+    | 'mapping_version'
+    | 'integration_contract'
+  label: string
+  status: 'pass' | 'warning' | 'blocking'
+  createdAt: string
+  createdBy: string
+  summary: string
+  payload: unknown
+}
+```
+
+### Connector Runs
+
+```http
+POST /api/connectors/{connectorId}/test
+GET  /api/connectors/{connectorId}/runs
+GET  /api/connectors/{connectorId}/metadata
+GET  /api/connectors/{connectorId}/preview?sourceObject=...&limit=50
+```
+
+Connector test result:
+
+```ts
+type ConnectorTestResult = {
+  connectorId: string
+  status: 'pass' | 'warning' | 'blocking'
+  testedAt: string
+  testedBy: string
+  checks: ReadinessCheck[]
+  metadata: {
+    sourceType: string
+    displayName: string
+    sourceObjects: number
+    targetObjects: string[]
+    refreshMode: string
+    connectionMode: string
+  }
+}
+```
+
+### Mapping Runs
+
+```http
+POST /api/mappings/{mappingId}/validate
+GET  /api/mappings/{mappingId}/runs
+POST /api/mappings/{mappingId}/versions
+GET  /api/mappings/{mappingId}/versions
+```
+
+Mapping validation result:
+
+```ts
+type MappingValidationResult = {
+  status: 'pass' | 'warning' | 'blocking'
+  checks: ReadinessCheck[]
+  mappedFields: Array<{
+    targetField: string
+    sourceField: string
+    present: boolean
+    required: boolean
+  }>
+}
+```
+
+## Adapter Interface
+
+```ts
+type ConnectorAdapter = {
+  testConnection(): Promise<ConnectorTestResult>
+  discoverMetadata(): Promise<ConnectorMetadata>
+  previewRows(sourceObject: string, limit: number): Promise<Record<string, unknown>[]>
+  runExtract(sourceObject: string): Promise<ExtractResult>
+}
+```
+
+## Adapter Requirements
+
+### Snowflake
+
+Required inputs:
+
+- account or connection profile
+- database
+- schema
+- role
+- warehouse
+- secret reference
+
+Required checks:
+
+- credentials available by secret reference
+- role is present
+- database exists
+- schema exists
+- configured source objects exist
+- row preview can be queried
+
+### SharePoint Excel
+
+Required inputs:
+
+- site URL
+- library
+- workbook
+- sheet
+- secret reference or delegated Graph auth
+
+Required checks:
+
+- site resolves
+- library resolves
+- workbook exists
+- sheet exists
+- rows can be previewed
+
+### CSV / Manual Upload
+
+Required inputs:
+
+- file upload or fixture path
+- target canonical object
+- schema inference options
+
+Required checks:
+
+- file has headers
+- file has at least one data row
+- delimiter can be parsed
+- required mapped source fields exist
+
+## Backend Storage
+
+Recommended initial tables:
+
+```sql
+SAVED_VERSION (
+  ID varchar primary key,
+  KIND varchar not null,
+  LABEL varchar not null,
+  STATUS varchar not null,
+  CREATED_AT timestamp not null,
+  CREATED_BY varchar not null,
+  SUMMARY varchar,
+  PAYLOAD variant not null
+);
+
+CONNECTOR_RUN (
+  ID varchar primary key,
+  CONNECTOR_ID varchar not null,
+  STATUS varchar not null,
+  TESTED_AT timestamp not null,
+  TESTED_BY varchar not null,
+  RESULT_PAYLOAD variant not null
+);
+
+MAPPING_RUN (
+  ID varchar primary key,
+  MAPPING_ID varchar not null,
+  STATUS varchar not null,
+  VALIDATED_AT timestamp not null,
+  VALIDATED_BY varchar not null,
+  RESULT_PAYLOAD variant not null
+);
+```
+
+## GitHub Implementation Plan
+
+1. Create branch: `codex/backend-persistence-adapter-contracts`
+2. Add backend service scaffold.
+3. Add saved-version API routes.
+4. Replace frontend `localStorage` persistence with API-backed persistence.
+5. Keep `localStorage` fallback for offline/dev mode.
+6. Add connector adapter interfaces.
+7. Add CSV adapter implementation first.
+8. Add Snowflake and SharePoint adapter stubs with secret-reference requirements.
+9. Add CI checks for build and lint.
+10. Open PR with backend contract summary and validation evidence.
+
