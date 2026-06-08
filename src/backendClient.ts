@@ -7,7 +7,10 @@ import type {
   BackendRecordKind,
   ConnectorPreviewResult,
   ConnectorSourceMetadata,
+  CsvSchemaInference,
   DeploymentState,
+  MappingManifest,
+  MappingValidationResult,
   StatusLevel,
 } from './types'
 
@@ -291,6 +294,46 @@ export class LocalBackendClient {
       ),
     )
   }
+
+  async saveMappingRun({
+    mappingId,
+    mapping,
+    schema,
+    result,
+    summary,
+  }: {
+    mappingId: string
+    mapping: MappingManifest
+    schema: CsvSchemaInference
+    result: MappingValidationResult
+    summary: string
+  }): Promise<BackendRecord> {
+    return this.saveRecord({
+      kind: 'mapping_validation',
+      label: `${mappingId} validation`,
+      status: result.status,
+      summary,
+      payload: {
+        mappingId,
+        mapping,
+        schema,
+        result,
+      },
+    })
+  }
+
+  async listMappingRuns(mappingId: string): Promise<BackendRecord[]> {
+    return this.listRecords().then((records) =>
+      records.filter(
+        (record) =>
+          record.kind === 'mapping_validation' &&
+          typeof record.payload === 'object' &&
+          record.payload !== null &&
+          'mappingId' in record.payload &&
+          record.payload.mappingId === mappingId,
+      ),
+    )
+  }
 }
 
 class ApiBackendClient {
@@ -437,6 +480,42 @@ class ApiBackendClient {
       )
     } catch {
       return this.localFallback.listConnectorRuns(connectorId)
+    }
+  }
+
+  async saveMappingRun({
+    mappingId,
+    mapping,
+    schema,
+    result,
+    summary,
+  }: {
+    mappingId: string
+    mapping: MappingManifest
+    schema: CsvSchemaInference
+    result: MappingValidationResult
+    summary: string
+  }): Promise<BackendRecord> {
+    try {
+      return await this.request<BackendRecord>(
+        `/api/mappings/${encodeURIComponent(mappingId)}/runs`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ mapping, schema, result, summary }),
+        },
+      )
+    } catch {
+      return this.localFallback.saveMappingRun({ mappingId, mapping, schema, result, summary })
+    }
+  }
+
+  async listMappingRuns(mappingId: string): Promise<BackendRecord[]> {
+    try {
+      return await this.request<BackendRecord[]>(
+        `/api/mappings/${encodeURIComponent(mappingId)}/runs`,
+      )
+    } catch {
+      return this.localFallback.listMappingRuns(mappingId)
     }
   }
 }

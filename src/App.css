@@ -800,6 +800,47 @@
   font-size: 11px;
 }
 
+.mapping-run-history {
+  margin: 4px 14px 14px;
+  padding-top: 12px;
+  border-top: 1px solid #edf2f1;
+}
+
+.mapping-run-history h4 {
+  margin: 0 0 8px;
+  color: #1e3030;
+  font-size: 13px;
+}
+
+.mapping-run-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid #edf2f1;
+}
+
+.mapping-run-row:first-of-type {
+  border-top: 0;
+}
+
+.mapping-run-row strong,
+.mapping-run-row span {
+  display: block;
+}
+
+.mapping-run-row strong {
+  color: #1e3030;
+  font-size: 12px;
+}
+
+.mapping-run-row span {
+  margin-top: 3px;
+  color: #718080;
+  font-size: 11px;
+}
+
 .tested-count {
   padding: 0 14px 12px;
   color: #687878;

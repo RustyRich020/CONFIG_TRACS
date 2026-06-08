@@ -30,6 +30,8 @@ GET  /api/adapter-contracts
 POST /api/connectors/{connectorId}/metadata
 POST /api/connectors/{connectorId}/preview
 GET  /api/connectors/{connectorId}/runs
+GET  /api/mappings/{mappingId}/runs
+POST /api/mappings/{mappingId}/runs
 POST /api/deployment-snapshots
 POST /api/adapter-dry-runs
 ```
@@ -37,6 +39,8 @@ POST /api/adapter-dry-runs
 The frontend uses the API when `VITE_TRACS_API_URL` is set. Without that value, or if the API is unreachable, it uses browser-local fallback persistence.
 
 The CSV/manual upload connector is the first implemented live adapter. It reads the configured sample CSV, infers source columns, reports row counts, and returns bounded preview rows. Metadata discovery and row previews are persisted as `connector_run` records. Snowflake, SharePoint Excel, and external reference connectors still return contract/dry-run evidence until credential-backed adapters are added.
+
+Mapping Studio validation runs are persisted as `mapping_validation` records. The frontend still performs the current schema-to-manifest validation, then sends the reviewed mapping, inferred schema, validation result, and summary to the API for versioned storage.
 
 ### Planned Saved Versions
 

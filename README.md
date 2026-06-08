@@ -12,6 +12,7 @@ This prototype now includes the first practical build phases for TRACS:
 6. File-backed API Skeleton
 7. Live CSV Adapter Metadata + Preview
 8. Connector Run Persistence
+9. Mapping Run Persistence
 
 ## What It Proves
 
@@ -36,6 +37,8 @@ This prototype now includes the first practical build phases for TRACS:
 - Discovers CSV source metadata and returns bounded preview rows through API-backed or local adapter mode.
 - Saves CSV metadata discovery and preview evidence as versioned connector run records.
 - Shows persisted connector run history in the Connector Hub.
+- Saves Mapping Studio validation evidence as versioned backend records.
+- Shows persisted mapping validation history in Mapping Studio.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
@@ -101,6 +104,6 @@ Build credential-backed live connector adapters:
 
 1. Snowflake authentication and metadata discovery.
 2. SharePoint Excel authentication and workbook/sheet discovery.
-3. API-backed connector and mapping run persistence for non-CSV adapters.
+3. API-backed connector run persistence for non-CSV adapters.
 4. Database-backed record storage behind the existing API routes.
 5. Source preview rows for Snowflake and SharePoint adapters.

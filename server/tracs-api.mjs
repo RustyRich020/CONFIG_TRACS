@@ -78,6 +78,13 @@ async function listConnectorRuns(connectorId) {
   )
 }
 
+async function listMappingRuns(mappingId) {
+  const records = await readRecords()
+  return records.filter(
+    (record) => record.kind === 'mapping_validation' && record.payload?.mappingId === mappingId,
+  )
+}
+
 function createDeploymentPayload({ config, deployment }) {
   return {
     environment: config.environment.environment,
@@ -188,6 +195,39 @@ async function handleRequest(req, res) {
     if (req.method === 'GET' && runsMatch) {
       jsonResponse(res, 200, await listConnectorRuns(decodeURIComponent(runsMatch[1])))
       return
+    }
+
+    const mappingRunsMatch = url.pathname.match(/^\/api\/mappings\/([^/]+)\/runs$/)
+    if (mappingRunsMatch) {
+      const mappingId = decodeURIComponent(mappingRunsMatch[1])
+
+      if (req.method === 'GET') {
+        jsonResponse(res, 200, await listMappingRuns(mappingId))
+        return
+      }
+
+      if (req.method === 'POST') {
+        const body = await parseBody(req)
+        jsonResponse(
+          res,
+          201,
+          await saveRecord({
+            kind: 'mapping_validation',
+            label: `${mappingId} validation`,
+            status: body.result?.status ?? 'warning',
+            summary:
+              body.summary ??
+              `${body.result?.mappedFields?.filter?.((field) => field.present).length ?? 0}/${body.result?.mappedFields?.length ?? 0} mapped fields present.`,
+            payload: {
+              mappingId,
+              mapping: body.mapping,
+              schema: body.schema,
+              result: body.result,
+            },
+          }),
+        )
+        return
+      }
     }
 
     if (req.method === 'POST' && url.pathname === '/api/records') {

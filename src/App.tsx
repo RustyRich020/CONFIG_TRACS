@@ -192,6 +192,7 @@ function App() {
   const [sourceMetadata, setSourceMetadata] = useState<Record<string, ConnectorSourceMetadata>>({})
   const [sourcePreviews, setSourcePreviews] = useState<Record<string, ConnectorPreviewResult>>({})
   const [connectorRuns, setConnectorRuns] = useState<Record<string, BackendRecord[]>>({})
+  const [mappingRuns, setMappingRuns] = useState<Record<string, BackendRecord[]>>({})
 
   useEffect(() => {
     loadAppConfig()
@@ -445,23 +446,32 @@ function App() {
     )
   }
 
-  function runMappingValidation() {
+  async function runMappingValidation() {
     if (!config) return
+    const mappingId = 'quality_event'
     const schema = inferCsvSchema(csvText)
-    const result = validateMappingAgainstSchema(config.mappings.quality_event, schema)
+    const mapping = config.mappings.quality_event
+    const result = validateMappingAgainstSchema(mapping, schema)
+    const summary = `${result.mappedFields.filter((field) => field.present).length}/${result.mappedFields.length} mapped fields present.`
     setCsvSchema(schema)
     setMappingResult(result)
+    const savedRun = await backendClient.saveMappingRun({
+      mappingId,
+      mapping,
+      schema,
+      result,
+      summary,
+    })
+    const runs = await backendClient.listMappingRuns(mappingId)
+    setMappingRuns((current) => ({ ...current, [mappingId]: runs }))
+    await refreshBackend()
     saveVersion(
       createSavedVersion({
         kind: 'mapping_validation',
-        label: 'quality_event validation',
-        status: result.status,
-        summary: `${result.mappedFields.filter((field) => field.present).length}/${result.mappedFields.length} mapped fields present.`,
-        payload: {
-          mapping: config.mappings.quality_event,
-          schema,
-          result,
-        },
+        label: savedRun.label,
+        status: savedRun.status,
+        summary: savedRun.summary,
+        payload: savedRun,
       }),
     )
     saveVersion(
@@ -469,8 +479,8 @@ function App() {
         kind: 'mapping_version',
         label: 'quality_event mapping manifest',
         status: result.status,
-        summary: `${Object.keys(config.mappings.quality_event.fields).length} mapped fields versioned from active manifest.`,
-        payload: config.mappings.quality_event,
+        summary: `${Object.keys(mapping.fields).length} mapped fields versioned from active manifest.`,
+        payload: mapping,
       }),
     )
     record(
@@ -645,6 +655,7 @@ function App() {
             csvText={csvText}
             mapping={config.mappings.quality_event}
             mappingResult={mappingResult}
+            mappingRuns={mappingRuns.quality_event ?? []}
             onCsvTextChange={setCsvText}
             onValidate={runMappingValidation}
           />
@@ -922,6 +933,7 @@ function MappingStudio({
   csvText,
   mapping,
   mappingResult,
+  mappingRuns,
   onCsvTextChange,
   onValidate,
 }: {
@@ -929,6 +941,7 @@ function MappingStudio({
   csvText: string
   mapping: AppConfig['mappings'][string]
   mappingResult: MappingValidationResult | null
+  mappingRuns: BackendRecord[]
   onCsvTextChange: (value: string) => void
   onValidate: () => void
 }) {
@@ -1047,6 +1060,22 @@ function MappingStudio({
           ) : (
             <div className="empty-state compact">Validate the mapping to capture evidence.</div>
           )}
+          {mappingRuns.length > 0 ? (
+            <div className="mapping-run-history">
+              <h4>Persisted Mapping Runs</h4>
+              {mappingRuns.slice(0, 4).map((run) => (
+                <div className="mapping-run-row" key={run.id}>
+                  <div>
+                    <strong>{run.label}</strong>
+                    <span>
+                      v{run.version} / {new Date(run.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                  <StatusChip status={run.status} label={run.status} />
+                </div>
+              ))}
+            </div>
+          ) : null}
         </section>
       </section>
 
