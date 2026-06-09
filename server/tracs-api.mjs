@@ -1,13 +1,14 @@
 import { createServer } from 'node:http'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { adapterContracts, runAdapterDryRun } from './adapterContracts.mjs'
 import { scanAssetRegistry } from './assetRegistry.mjs'
 import { discoverCsvMetadata, previewCsvRows } from './csvAdapter.mjs'
+import { createFileRecordStore } from './recordStore.mjs'
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const dataFile = resolve(rootDir, 'data', 'backend-records.json')
+const recordStore = createFileRecordStore({ dataFile })
 const port = Number(process.env.TRACS_API_PORT ?? 8787)
 const host = process.env.TRACS_API_HOST ?? '127.0.0.1'
 
@@ -21,32 +22,6 @@ function jsonResponse(res, statusCode, payload) {
   res.end(JSON.stringify(payload, null, 2))
 }
 
-function summarizeStatus(records) {
-  if (records.some((record) => record.status === 'blocking')) return 'blocking'
-  if (records.some((record) => record.status === 'warning')) return 'warning'
-  return 'pass'
-}
-
-async function readRecords() {
-  try {
-    const raw = await readFile(dataFile, 'utf8')
-    return JSON.parse(raw)
-  } catch (error) {
-    if (error.code === 'ENOENT') return []
-    throw error
-  }
-}
-
-async function writeRecords(records) {
-  await mkdir(dirname(dataFile), { recursive: true })
-  await writeFile(dataFile, JSON.stringify(records.slice(0, 250), null, 2))
-}
-
-function nextVersion(records, kind, label) {
-  const matching = records.filter((record) => record.kind === kind && record.label === label)
-  return matching.length > 0 ? Math.max(...matching.map((record) => record.version)) + 1 : 1
-}
-
 async function parseBody(req) {
   const chunks = []
   for await (const chunk of req) chunks.push(chunk)
@@ -54,51 +29,26 @@ async function parseBody(req) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'))
 }
 
-async function saveRecord({ kind, label, status, summary, payload }) {
-  const records = await readRecords()
-  const now = new Date().toISOString()
-  const record = {
-    id: crypto.randomUUID(),
-    kind,
-    version: nextVersion(records, kind, label),
-    status,
-    createdAt: now,
-    updatedAt: now,
-    label,
-    summary,
-    payload,
-  }
-  await writeRecords([record, ...records])
-  return record
-}
-
 async function listConnectorRuns(connectorId) {
-  const records = await readRecords()
+  const records = await recordStore.listByKind('connector_run')
   return records.filter(
-    (record) => record.kind === 'connector_run' && record.payload?.connectorId === connectorId,
+    (record) => record.payload?.connectorId === connectorId,
   )
 }
 
 async function listMappingRuns(mappingId) {
-  const records = await readRecords()
+  const records = await recordStore.listByKind('mapping_validation')
   return records.filter(
-    (record) => record.kind === 'mapping_validation' && record.payload?.mappingId === mappingId,
+    (record) => record.payload?.mappingId === mappingId,
   )
 }
 
 async function listIntegrationContracts() {
-  const records = await readRecords()
-  return records.filter((record) => record.kind === 'integration_contract')
+  return recordStore.listByKind('integration_contract')
 }
 
 async function listControlledTemplates() {
-  const records = await readRecords()
-  return records.filter((record) => record.kind === 'controlled_template')
-}
-
-async function getRecord(recordId) {
-  const records = await readRecords()
-  return records.find((record) => record.id === recordId)
+  return recordStore.listByKind('controlled_template')
 }
 
 function slug(value) {
@@ -168,21 +118,20 @@ async function handleRequest(req, res) {
 
     if (req.method === 'GET' && url.pathname === '/api/health') {
       const startedAt = performance.now()
-      const records = await readRecords()
       jsonResponse(res, 200, {
-        mode: 'api',
-        status: summarizeStatus(records),
-        checkedAt: new Date().toISOString(),
+        ...(await recordStore.health(startedAt)),
         endpoint: `http://${host}:${port}`,
-        latencyMs: Math.max(1, Math.round(performance.now() - startedAt)),
-        records: records.length,
-        evidence: `File-backed API persistence is active at ${dataFile}.`,
       })
       return
     }
 
     if (req.method === 'GET' && url.pathname === '/api/records') {
-      jsonResponse(res, 200, await readRecords())
+      jsonResponse(res, 200, await recordStore.readRecords())
+      return
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/storage/schema') {
+      jsonResponse(res, 200, recordStore.schema)
       return
     }
 
@@ -215,7 +164,7 @@ async function handleRequest(req, res) {
       jsonResponse(
         res,
         201,
-        await saveRecord({
+        await recordStore.saveRecord({
           kind: 'controlled_template',
           label: payload.source.name,
           status: payload.status === 'active' ? 'pass' : 'warning',
@@ -228,7 +177,7 @@ async function handleRequest(req, res) {
 
     const templateMatch = url.pathname.match(/^\/api\/templates\/([^/]+)$/)
     if (req.method === 'PUT' && templateMatch) {
-      const previous = await getRecord(decodeURIComponent(templateMatch[1]))
+      const previous = await recordStore.getRecord(decodeURIComponent(templateMatch[1]))
       if (!previous || previous.kind !== 'controlled_template') {
         jsonResponse(res, 404, { error: 'Template record not found' })
         return
@@ -250,7 +199,7 @@ async function handleRequest(req, res) {
       jsonResponse(
         res,
         200,
-        await saveRecord({
+        await recordStore.saveRecord({
           kind: 'controlled_template',
           label: previous.label,
           status: payload.status === 'active' ? 'pass' : 'warning',
@@ -274,7 +223,7 @@ async function handleRequest(req, res) {
         return
       }
       const metadata = await discoverCsvMetadata(connectorId, body.connector)
-      const record = await saveRecord({
+      const record = await recordStore.saveRecord({
         kind: 'connector_run',
         label: `${body.connector.display_name} metadata discovery`,
         status: metadata.columns.length > 0 ? 'pass' : 'warning',
@@ -304,7 +253,7 @@ async function handleRequest(req, res) {
         body.connector,
         body.limit ?? url.searchParams.get('limit'),
       )
-      const record = await saveRecord({
+      const record = await recordStore.saveRecord({
         kind: 'connector_run',
         label: `${body.connector.display_name} row preview`,
         status: preview.returnedRows > 0 ? 'pass' : 'warning',
@@ -339,7 +288,7 @@ async function handleRequest(req, res) {
         jsonResponse(
           res,
           201,
-          await saveRecord({
+          await recordStore.saveRecord({
             kind: 'mapping_validation',
             label: `${mappingId} validation`,
             status: body.result?.status ?? 'warning',
@@ -369,7 +318,7 @@ async function handleRequest(req, res) {
         jsonResponse(
           res,
           201,
-          await saveRecord({
+          await recordStore.saveRecord({
             kind: 'integration_contract',
             label: body.label ?? 'Integration Contract',
             status: body.status ?? 'warning',
@@ -382,7 +331,7 @@ async function handleRequest(req, res) {
     }
 
     if (req.method === 'POST' && url.pathname === '/api/records') {
-      jsonResponse(res, 201, await saveRecord(await parseBody(req)))
+      jsonResponse(res, 201, await recordStore.saveRecord(await parseBody(req)))
       return
     }
 
@@ -392,7 +341,7 @@ async function handleRequest(req, res) {
       jsonResponse(
         res,
         201,
-        await saveRecord({
+        await recordStore.saveRecord({
           kind: 'deployment_profile',
           label: `${body.config.environment.environment.name} deployment profile`,
           status: body.readinessStatus,

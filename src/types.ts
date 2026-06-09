@@ -200,6 +200,26 @@ export type BackendHealth = {
   latencyMs: number
   records: number
   evidence: string
+  store?: {
+    mode: string
+    schemaVersion: string
+    dataFile?: string
+    maxRecords?: number
+  }
+}
+
+export type RecordStoreSchema = {
+  schemaVersion: string
+  tables: Array<{
+    name: string
+    purpose: string
+    columns: Array<{
+      name: string
+      type: string
+      constraints: string
+    }>
+  }>
+  indexes: string[]
 }
 
 export type AdapterOperation = 'health_check' | 'discover_metadata' | 'preview_rows' | 'validate_mapping'

@@ -61,6 +61,7 @@ import type {
   CsvSchemaInference,
   DeploymentState,
   MappingValidationResult,
+  RecordStoreSchema,
   SavedVersion,
   StatusLevel,
 } from './types'
@@ -191,6 +192,7 @@ function App() {
   const [savedVersions, setSavedVersions] = useState<SavedVersion[]>(() => loadSavedVersions())
   const [backendHealth, setBackendHealth] = useState<BackendHealth | null>(null)
   const [backendRecords, setBackendRecords] = useState<BackendRecord[]>([])
+  const [storageSchema, setStorageSchema] = useState<RecordStoreSchema | null>(null)
   const [adapterDryRuns, setAdapterDryRuns] = useState<Record<string, AdapterDryRunResult>>({})
   const [sourceMetadata, setSourceMetadata] = useState<Record<string, ConnectorSourceMetadata>>({})
   const [sourcePreviews, setSourcePreviews] = useState<Record<string, ConnectorPreviewResult>>({})
@@ -254,16 +256,18 @@ function App() {
   }
 
   async function refreshBackend() {
-    const [health, records, contracts, templates] = await Promise.all([
+    const [health, records, contracts, templates, schema] = await Promise.all([
       backendClient.health(),
       backendClient.listRecords(),
       backendClient.listIntegrationContracts(),
       backendClient.listControlledTemplates(),
+      backendClient.loadStorageSchema(),
     ])
     setBackendHealth(health)
     setBackendRecords(records)
     setContractRecords(contracts)
     setTemplateRecords(templates)
+    setStorageSchema(schema)
   }
 
   async function refreshAssetRegistry() {
@@ -780,6 +784,7 @@ function App() {
             onRefresh={refreshBackend}
             onRunAdapterDryRun={runAdapterDryRun}
             onSaveSnapshot={saveBackendSnapshot}
+            storageSchema={storageSchema}
           />
         ) : activeView === 'Contract' ? (
           <ContractWorkspace
@@ -942,6 +947,7 @@ function BackendPersistenceView({
   onRefresh,
   onRunAdapterDryRun,
   onSaveSnapshot,
+  storageSchema,
 }: {
   adapterContracts: AdapterContract[]
   adapterDryRuns: Record<string, AdapterDryRunResult>
@@ -951,6 +957,7 @@ function BackendPersistenceView({
   onRefresh: () => void
   onRunAdapterDryRun: (connectorId: string) => void
   onSaveSnapshot: () => void
+  storageSchema: RecordStoreSchema | null
 }) {
   const recordCounts = backendRecords.reduce(
     (summary, record) => {
@@ -997,6 +1004,7 @@ function BackendPersistenceView({
               </div>
               <div className="metadata-grid">
                 <Metadata label="Records" value={String(backendHealth.records)} />
+                <Metadata label="Store" value={backendHealth.store?.mode ?? backendHealth.mode} />
                 <Metadata label="Latency" value={`${backendHealth.latencyMs} ms`} />
                 <Metadata label="Checked" value={new Date(backendHealth.checkedAt).toLocaleTimeString()} />
                 <Metadata label="Evidence" value={backendHealth.evidence} />
@@ -1096,6 +1104,46 @@ function BackendPersistenceView({
             })}
           </div>
         </section>
+      </section>
+
+      <section className="panel storage-schema-panel">
+        <PanelHeader
+          icon={Database}
+          title="Record Store Schema Blueprint"
+          subtitle={storageSchema ? `${storageSchema.schemaVersion} with ${storageSchema.tables.length} table definition(s).` : 'Storage schema has not loaded yet.'}
+        />
+        {storageSchema ? (
+          <div className="storage-schema-grid">
+            {storageSchema.tables.map((table) => (
+              <article className="storage-table-card" key={table.name}>
+                <div>
+                  <strong>{table.name}</strong>
+                  <span>{table.purpose}</span>
+                </div>
+                <div className="storage-column-list">
+                  {table.columns.slice(0, 9).map((column) => (
+                    <span key={column.name}>
+                      {column.name} <em>{column.type}</em>
+                    </span>
+                  ))}
+                </div>
+              </article>
+            ))}
+            <article className="storage-table-card">
+              <div>
+                <strong>Indexes</strong>
+                <span>Initial query paths required for version history, status rollups, and relationship lookup.</span>
+              </div>
+              <div className="storage-column-list">
+                {storageSchema.indexes.map((index) => (
+                  <span key={index}>{index}</span>
+                ))}
+              </div>
+            </article>
+          </div>
+        ) : (
+          <div className="empty-state compact">Refresh backend health to load the storage schema blueprint.</div>
+        )}
       </section>
     </>
   )

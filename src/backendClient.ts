@@ -15,6 +15,7 @@ import type {
   MappingManifest,
   MappingValidationResult,
   LocalAsset,
+  RecordStoreSchema,
   StatusLevel,
 } from './types'
 
@@ -118,6 +119,23 @@ export class LocalBackendClient {
 
   async listRecords(): Promise<BackendRecord[]> {
     return readJson<BackendRecord[]>(recordsKey, [])
+  }
+
+  async loadStorageSchema(): Promise<RecordStoreSchema> {
+    return {
+      schemaVersion: 'browser_local_v1',
+      tables: [
+        {
+          name: 'local_storage_records',
+          purpose: 'Browser-local fallback for versioned TRACS records.',
+          columns: [
+            { name: 'key', type: 'text', constraints: 'localStorage key' },
+            { name: 'records_json', type: 'json', constraints: 'bounded to 250 records' },
+          ],
+        },
+      ],
+      indexes: ['not applicable in browser-local fallback'],
+    }
   }
 
   async saveRecord<TPayload>({
@@ -499,6 +517,14 @@ class ApiBackendClient {
       return await this.request<BackendRecord[]>('/api/records')
     } catch {
       return this.localFallback.listRecords()
+    }
+  }
+
+  async loadStorageSchema(): Promise<RecordStoreSchema> {
+    try {
+      return await this.request<RecordStoreSchema>('/api/storage/schema')
+    } catch {
+      return this.localFallback.loadStorageSchema()
     }
   }
 

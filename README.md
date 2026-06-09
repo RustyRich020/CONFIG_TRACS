@@ -16,6 +16,7 @@ This prototype now includes the first practical build phases for TRACS:
 10. Integration Contract Persistence
 11. Local Asset Registry + Template Library v1
 12. Controlled Template Promotion + Template Records v1
+13. Backend Record Store Abstraction + Database Schema Blueprint v1
 
 ## What It Proves
 
@@ -48,6 +49,8 @@ This prototype now includes the first practical build phases for TRACS:
 - Extends the Templates view into a filterable Template Library backed by the local asset registry.
 - Promotes selected local assets into controlled TRACS template records with source provenance, tags, status, and version history.
 - Flags controlled template records against the latest local asset fingerprint when the registry is available.
+- Moves API persistence behind a record store abstraction with a SQL-ready schema blueprint.
+- Exposes the record store schema in the Backend workspace for database implementation planning.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
@@ -99,6 +102,7 @@ npm run build
 - `src/backendContracts.ts`: frontend live adapter contract registry.
 - `src/App.tsx`: admin shell UI and interactions.
 - `server/tracs-api.mjs`: file-backed API service for deployment snapshots, backend records, and adapter dry runs.
+- `server/recordStore.mjs`: storage boundary for versioned backend records and the database schema blueprint.
 - `server/adapterContracts.mjs`: backend adapter dry-run contract implementation.
 - `server/csvAdapter.mjs`: CSV/manual upload adapter for metadata discovery and bounded source preview rows.
 - `server/assetRegistry.mjs`: read-only local scanner for MYROBOTS template and schema assets.
@@ -110,9 +114,9 @@ npm run build
 
 ## Next Phase
 
-Use controlled templates and local schemas to inform the real backend model:
+Use the record store abstraction to replace JSON persistence with a database adapter:
 
-1. Use `DATABASE-SCHEMAS` assets to design the first database-backed record registry.
-2. Add database-backed record storage behind the existing API routes.
+1. Implement a SQLite or Postgres adapter behind `server/recordStore.mjs`.
+2. Add migration execution for `tracs_records` and `tracs_record_links`.
 3. Add template detail editing for category/domain/tag overrides.
 4. Build credential-backed Snowflake and SharePoint metadata discovery.

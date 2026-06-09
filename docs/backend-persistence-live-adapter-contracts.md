@@ -26,6 +26,7 @@ This phase should not add secrets to the frontend or commit credentials into Git
 GET  /api/health
 GET  /api/records
 POST /api/records
+GET  /api/storage/schema
 GET  /api/adapter-contracts
 GET  /api/assets/registry
 GET  /api/templates
@@ -53,6 +54,8 @@ Integration contracts are persisted as `integration_contract` records. The Contr
 The asset registry route scans the local MYROBOTS root, defaulting to `C:\Users\Allen\MYROBOTS`, and returns a bounded read-only registry of candidate templates, database schemas, manifests, data templates, and reference files. Set `TRACS_ASSET_ROOT` to scan a different local library.
 
 Controlled templates are persisted as `controlled_template` records. Promotion copies the local asset registry metadata into a governed payload with `templateId`, source path, fingerprint, category/domain classification, active industry and solution tags, lifecycle status, and provenance notes. Updates create a new backend record version instead of mutating the original record.
+
+The API persistence layer now routes through `server/recordStore.mjs`, which keeps the current file-backed behavior but exposes a database-ready schema contract. `GET /api/storage/schema` returns the `tracs_records` and `tracs_record_links` blueprint that future SQLite or Postgres adapters should implement.
 
 ### Planned Saved Versions
 
