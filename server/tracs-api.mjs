@@ -3,6 +3,14 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { adapterContracts, runAdapterDryRun } from './adapterContracts.mjs'
 import { scanAssetRegistry } from './assetRegistry.mjs'
+import {
+  getCanonicalObject,
+  getTraceabilityResult,
+  listCanonicalObjects,
+  listQualityEvents,
+  listReportCatalog,
+  listTraceabilityLinks,
+} from './canonicalService.mjs'
 import { discoverCsvMetadata, previewCsvRows } from './csvAdapter.mjs'
 import { createFileRecordStore } from './recordStore.mjs'
 
@@ -149,6 +157,48 @@ async function handleRequest(req, res) {
           limit: Number(url.searchParams.get('limit') ?? 500),
         }),
       )
+      return
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/objects') {
+      jsonResponse(res, 200, await listCanonicalObjects())
+      return
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/quality-events') {
+      jsonResponse(res, 200, await listQualityEvents())
+      return
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/traceability-links') {
+      jsonResponse(res, 200, await listTraceabilityLinks())
+      return
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/reports') {
+      jsonResponse(res, 200, listReportCatalog())
+      return
+    }
+
+    const objectTraceabilityMatch = url.pathname.match(/^\/api\/objects\/(.+)\/traceability$/)
+    if (req.method === 'GET' && objectTraceabilityMatch) {
+      const result = await getTraceabilityResult(decodeURIComponent(objectTraceabilityMatch[1]))
+      if (!result) {
+        jsonResponse(res, 404, { error: 'Canonical object not found' })
+        return
+      }
+      jsonResponse(res, 200, result)
+      return
+    }
+
+    const objectMatch = url.pathname.match(/^\/api\/objects\/(.+)$/)
+    if (req.method === 'GET' && objectMatch) {
+      const object = await getCanonicalObject(decodeURIComponent(objectMatch[1]))
+      if (!object) {
+        jsonResponse(res, 404, { error: 'Canonical object not found' })
+        return
+      }
+      jsonResponse(res, 200, object)
       return
     }
 

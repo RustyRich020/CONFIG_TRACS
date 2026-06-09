@@ -6,6 +6,7 @@ import type {
   BackendHealth,
   BackendRecord,
   BackendRecordKind,
+  CanonicalObject,
   ControlledTemplatePayload,
   ControlledTemplateStatus,
   ConnectorPreviewResult,
@@ -15,8 +16,12 @@ import type {
   MappingManifest,
   MappingValidationResult,
   LocalAsset,
+  QualityEvent,
+  ReportCatalogItem,
   RecordStoreSchema,
   StatusLevel,
+  TraceabilityLink,
+  TraceabilityResult,
 } from './types'
 
 const recordsKey = 'tracs.backend.records.v1'
@@ -100,6 +105,227 @@ async function loadCsvFixture() {
   return { columns, rows }
 }
 
+function qualityEventFromRow(row: Record<string, string>): QualityEvent {
+  const eventId = row.COMPLAINT_ID
+  return {
+    id: `quality_event:${eventId}`,
+    objectType: 'quality_event',
+    family: 'quality',
+    displayName: `${eventId} ${row.PRODUCT_NAME}`,
+    status: row.CURRENT_STATUS,
+    sourceConnector: 'manual_csv_quality_events',
+    sourceSystem: row.SOURCE_SYSTEM,
+    sourceObject: 'quality_events_sample.csv',
+    sourceId: eventId,
+    createdAt: row.RECEIVED_DATE,
+    updatedAt: new Date().toISOString(),
+    canonical: {
+      event_id: eventId,
+      event_date: row.RECEIVED_DATE,
+      event_type: row.COMPLAINT_TYPE,
+      source_system: row.SOURCE_SYSTEM,
+      product_code: row.ITEM_NUMBER,
+      product_name: row.PRODUCT_NAME,
+      lot_number: row.LOT,
+      serial_number: row.SERIAL,
+      severity: row.SEVERITY_CLASS,
+      narrative: row.CUSTOMER_DESCRIPTION,
+      status: row.CURRENT_STATUS,
+      owner: row.OWNER_NAME,
+      capa_reference_id: row.CAPA_ID,
+    },
+    raw: row,
+  }
+}
+
+function derivedObjectsForEvent(event: QualityEvent): CanonicalObject[] {
+  const objects: CanonicalObject[] = [
+    event,
+    {
+      id: `product:${event.canonical.product_code}`,
+      objectType: 'product',
+      family: 'product',
+      displayName: event.canonical.product_name,
+      status: 'active',
+      sourceConnector: event.sourceConnector,
+      sourceSystem: event.sourceSystem,
+      sourceObject: event.sourceObject,
+      sourceId: event.canonical.product_code,
+      createdAt: event.createdAt,
+      updatedAt: event.updatedAt,
+      canonical: {
+        product_code: event.canonical.product_code,
+        product_name: event.canonical.product_name,
+      },
+      raw: event.raw,
+    },
+    {
+      id: `lot_serial:${event.canonical.lot_number}:${event.canonical.serial_number}`,
+      objectType: 'lot_serial',
+      family: 'traceability',
+      displayName: `${event.canonical.lot_number} / ${event.canonical.serial_number}`,
+      status: 'active',
+      sourceConnector: event.sourceConnector,
+      sourceSystem: event.sourceSystem,
+      sourceObject: event.sourceObject,
+      sourceId: `${event.canonical.lot_number}:${event.canonical.serial_number}`,
+      createdAt: event.createdAt,
+      updatedAt: event.updatedAt,
+      canonical: {
+        lot_number: event.canonical.lot_number,
+        serial_number: event.canonical.serial_number,
+        product_code: event.canonical.product_code,
+      },
+      raw: event.raw,
+    },
+  ]
+
+  if (event.canonical.event_type === 'return') {
+    objects.push({
+      id: `return_case:${event.canonical.event_id}`,
+      objectType: 'return_case',
+      family: 'quality',
+      displayName: `Return ${event.canonical.event_id}`,
+      status: event.canonical.status,
+      sourceConnector: event.sourceConnector,
+      sourceSystem: event.sourceSystem,
+      sourceObject: event.sourceObject,
+      sourceId: event.canonical.event_id,
+      createdAt: event.createdAt,
+      updatedAt: event.updatedAt,
+      canonical: {
+        return_id: event.canonical.event_id,
+        product_code: event.canonical.product_code,
+        lot_number: event.canonical.lot_number,
+        serial_number: event.canonical.serial_number,
+      },
+      raw: event.raw,
+    })
+  }
+
+  if (event.canonical.capa_reference_id) {
+    objects.push({
+      id: `capa_reference:${event.canonical.capa_reference_id}`,
+      objectType: 'capa_reference',
+      family: 'quality',
+      displayName: event.canonical.capa_reference_id,
+      status: 'referenced',
+      sourceConnector: event.sourceConnector,
+      sourceSystem: event.sourceSystem,
+      sourceObject: event.sourceObject,
+      sourceId: event.canonical.capa_reference_id,
+      createdAt: event.createdAt,
+      updatedAt: event.updatedAt,
+      canonical: {
+        capa_reference_id: event.canonical.capa_reference_id,
+        owner: event.canonical.owner,
+      },
+      raw: event.raw,
+    })
+  }
+
+  return objects
+}
+
+function traceabilityLinksForEvent(event: QualityEvent): TraceabilityLink[] {
+  const links: TraceabilityLink[] = [
+    {
+      id: `link:${event.id}:product`,
+      sourceObjectId: event.id,
+      sourceObjectType: event.objectType,
+      targetObjectId: `product:${event.canonical.product_code}`,
+      targetObjectType: 'product',
+      targetLabel: event.canonical.product_name,
+      relationshipType: 'event_to_product',
+      status: 'pass',
+      evidence: `${event.canonical.event_id} maps to product ${event.canonical.product_code}.`,
+    },
+    {
+      id: `link:${event.id}:lot_serial`,
+      sourceObjectId: event.id,
+      sourceObjectType: event.objectType,
+      targetObjectId: `lot_serial:${event.canonical.lot_number}:${event.canonical.serial_number}`,
+      targetObjectType: 'lot_serial',
+      targetLabel: `${event.canonical.lot_number} / ${event.canonical.serial_number}`,
+      relationshipType: 'event_to_lot_serial',
+      status: 'pass',
+      evidence: `${event.canonical.event_id} carries lot and serial traceability fields.`,
+    },
+  ]
+
+  if (event.canonical.event_type === 'return') {
+    links.push({
+      id: `link:${event.id}:return_case`,
+      sourceObjectId: event.id,
+      sourceObjectType: event.objectType,
+      targetObjectId: `return_case:${event.canonical.event_id}`,
+      targetObjectType: 'return_case',
+      targetLabel: `Return ${event.canonical.event_id}`,
+      relationshipType: 'event_to_return_case',
+      status: 'pass',
+      evidence: `${event.canonical.event_id} is typed as a return event.`,
+    })
+  }
+
+  if (event.canonical.capa_reference_id) {
+    links.push({
+      id: `link:${event.id}:capa`,
+      sourceObjectId: event.id,
+      sourceObjectType: event.objectType,
+      targetObjectId: `capa_reference:${event.canonical.capa_reference_id}`,
+      targetObjectType: 'capa_reference',
+      targetLabel: event.canonical.capa_reference_id,
+      relationshipType: 'event_to_capa_reference',
+      status: 'warning',
+      evidence: `${event.canonical.event_id} has an external CAPA reference but no live eQMS status yet.`,
+    })
+  }
+
+  return links
+}
+
+const fallbackReports: ReportCatalogItem[] = [
+  {
+    id: 'quality-events-overview',
+    title: 'Quality Events Overview',
+    platform: 'Power BI',
+    workspace: 'TRACS Quality',
+    owner: 'Quality Manager',
+    semanticModel: 'TRACS Quality Events',
+    refreshStatus: 'pass',
+    lastRefresh: '2026-06-08T12:30:00.000Z',
+    url: 'https://app.powerbi.com/groups/tracs-quality/reports/quality-events-overview',
+    sourceDependencies: ['quality_event', 'product', 'traceability_link'],
+    domains: ['quality', 'reporting_bi', 'traceability'],
+  },
+  {
+    id: 'returns-and-capa-bridge',
+    title: 'Returns and CAPA Bridge',
+    platform: 'Power BI',
+    workspace: 'TRACS Quality',
+    owner: 'QA / Validation Owner',
+    semanticModel: 'TRACS Returns and CAPA',
+    refreshStatus: 'warning',
+    lastRefresh: '2026-06-07T18:15:00.000Z',
+    url: 'https://app.powerbi.com/groups/tracs-quality/reports/returns-capa-bridge',
+    sourceDependencies: ['quality_event', 'return_case', 'capa_reference'],
+    domains: ['quality', 'qms', 'reporting_bi'],
+  },
+  {
+    id: 'operations-traceability',
+    title: 'Operations Traceability',
+    platform: 'Power BI',
+    workspace: 'TRACS Operations',
+    owner: 'Operations Manager',
+    semanticModel: 'TRACS Traceability',
+    refreshStatus: 'pass',
+    lastRefresh: '2026-06-08T10:45:00.000Z',
+    url: 'https://app.powerbi.com/groups/tracs-operations/reports/traceability',
+    sourceDependencies: ['product', 'lot_serial', 'work_order', 'shipment'],
+    domains: ['mes', 'scm', 'traceability', 'reporting_bi'],
+  },
+]
+
 export class LocalBackendClient {
   private endpoint = 'localStorage://tracs.backend.records.v1'
 
@@ -119,6 +345,42 @@ export class LocalBackendClient {
 
   async listRecords(): Promise<BackendRecord[]> {
     return readJson<BackendRecord[]>(recordsKey, [])
+  }
+
+  async listQualityEvents(): Promise<QualityEvent[]> {
+    const { rows } = await loadCsvFixture()
+    return rows.map(qualityEventFromRow)
+  }
+
+  async listCanonicalObjects(): Promise<CanonicalObject[]> {
+    const events = await this.listQualityEvents()
+    const objects = new Map<string, CanonicalObject>()
+    events.flatMap(derivedObjectsForEvent).forEach((object) => objects.set(object.id, object))
+    return Array.from(objects.values())
+  }
+
+  async listTraceabilityLinks(): Promise<TraceabilityLink[]> {
+    const events = await this.listQualityEvents()
+    return events.flatMap(traceabilityLinksForEvent)
+  }
+
+  async getObjectTraceability(objectId: string): Promise<TraceabilityResult | null> {
+    const [objects, links] = await Promise.all([
+      this.listCanonicalObjects(),
+      this.listTraceabilityLinks(),
+    ])
+    const object = objects.find((item) => item.id === objectId)
+    if (!object) return null
+    return {
+      object,
+      links: links.filter(
+        (link) => link.sourceObjectId === objectId || link.targetObjectId === objectId,
+      ),
+    }
+  }
+
+  async listReports(): Promise<ReportCatalogItem[]> {
+    return fallbackReports
   }
 
   async loadStorageSchema(): Promise<RecordStoreSchema> {
@@ -517,6 +779,48 @@ class ApiBackendClient {
       return await this.request<BackendRecord[]>('/api/records')
     } catch {
       return this.localFallback.listRecords()
+    }
+  }
+
+  async listQualityEvents(): Promise<QualityEvent[]> {
+    try {
+      return await this.request<QualityEvent[]>('/api/quality-events')
+    } catch {
+      return this.localFallback.listQualityEvents()
+    }
+  }
+
+  async listCanonicalObjects(): Promise<CanonicalObject[]> {
+    try {
+      return await this.request<CanonicalObject[]>('/api/objects')
+    } catch {
+      return this.localFallback.listCanonicalObjects()
+    }
+  }
+
+  async listTraceabilityLinks(): Promise<TraceabilityLink[]> {
+    try {
+      return await this.request<TraceabilityLink[]>('/api/traceability-links')
+    } catch {
+      return this.localFallback.listTraceabilityLinks()
+    }
+  }
+
+  async getObjectTraceability(objectId: string): Promise<TraceabilityResult | null> {
+    try {
+      return await this.request<TraceabilityResult>(
+        `/api/objects/${encodeURIComponent(objectId)}/traceability`,
+      )
+    } catch {
+      return this.localFallback.getObjectTraceability(objectId)
+    }
+  }
+
+  async listReports(): Promise<ReportCatalogItem[]> {
+    try {
+      return await this.request<ReportCatalogItem[]>('/api/reports')
+    } catch {
+      return this.localFallback.listReports()
     }
   }
 

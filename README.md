@@ -17,6 +17,7 @@ This prototype now includes the first practical build phases for TRACS:
 11. Local Asset Registry + Template Library v1
 12. Controlled Template Promotion + Template Records v1
 13. Backend Record Store Abstraction + Database Schema Blueprint v1
+14. Canonical Workflow Surface v1
 
 ## What It Proves
 
@@ -51,6 +52,8 @@ This prototype now includes the first practical build phases for TRACS:
 - Flags controlled template records against the latest local asset fingerprint when the registry is available.
 - Moves API persistence behind a record store abstraction with a SQL-ready schema blueprint.
 - Exposes the record store schema in the Backend workspace for database implementation planning.
+- Exposes sample-backed canonical objects, quality events, traceability links, and report catalog items through typed API routes.
+- Adds Quality Events, Object Explorer, Traceability, and Report Catalog workspaces to the shell.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
@@ -103,6 +106,7 @@ npm run build
 - `src/App.tsx`: admin shell UI and interactions.
 - `server/tracs-api.mjs`: file-backed API service for deployment snapshots, backend records, and adapter dry runs.
 - `server/recordStore.mjs`: storage boundary for versioned backend records and the database schema blueprint.
+- `server/canonicalService.mjs`: sample-backed canonical object, quality event, traceability, and report catalog service.
 - `server/adapterContracts.mjs`: backend adapter dry-run contract implementation.
 - `server/csvAdapter.mjs`: CSV/manual upload adapter for metadata discovery and bounded source preview rows.
 - `server/assetRegistry.mjs`: read-only local scanner for MYROBOTS template and schema assets.
@@ -114,9 +118,9 @@ npm run build
 
 ## Next Phase
 
-Use the record store abstraction to replace JSON persistence with a database adapter:
+Use the canonical workflow surface to move from sample-backed records to live connector-backed records:
 
-1. Implement a SQLite or Postgres adapter behind `server/recordStore.mjs`.
-2. Add migration execution for `tracs_records` and `tracs_record_links`.
+1. Persist canonical objects and traceability links through `server/recordStore.mjs`.
+2. Add live connector-backed canonical load for Snowflake, SharePoint Excel, and CSV sources.
 3. Add template detail editing for category/domain/tag overrides.
-4. Build credential-backed Snowflake and SharePoint metadata discovery.
+4. Add report catalog config files and freshness checks.

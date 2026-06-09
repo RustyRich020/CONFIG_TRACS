@@ -53,6 +53,7 @@ import type {
   AuditEvent,
   BackendHealth,
   BackendRecord,
+  CanonicalObject,
   ControlledTemplatePayload,
   LocalAsset,
   ConnectorPreviewResult,
@@ -61,9 +62,12 @@ import type {
   CsvSchemaInference,
   DeploymentState,
   MappingValidationResult,
+  QualityEvent,
+  ReportCatalogItem,
   RecordStoreSchema,
   SavedVersion,
   StatusLevel,
+  TraceabilityLink,
 } from './types'
 
 const navItems = [
@@ -73,6 +77,10 @@ const navItems = [
   { label: 'Connectors', icon: Database },
   { label: 'Templates', icon: PanelTop },
   { label: 'Mapping', icon: GitBranch },
+  { label: 'Quality Events', icon: ShieldCheck },
+  { label: 'Object Explorer', icon: Boxes },
+  { label: 'Traceability', icon: Route },
+  { label: 'Reports', icon: Gauge },
   { label: 'Versions', icon: History },
   { label: 'Backend', icon: ServerCog },
   { label: 'Readiness', icon: ClipboardCheck },
@@ -175,6 +183,12 @@ function titleize(value: string) {
     .join(' ')
 }
 
+function severityStatus(severity: string): StatusLevel {
+  if (severity === 'critical') return 'blocking'
+  if (severity === 'high' || severity === 'medium') return 'warning'
+  return 'pass'
+}
+
 function App() {
   const [config, setConfig] = useState<AppConfig | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -201,6 +215,11 @@ function App() {
   const [contractRecords, setContractRecords] = useState<BackendRecord[]>([])
   const [templateRecords, setTemplateRecords] = useState<BackendRecord<ControlledTemplatePayload>[]>([])
   const [assetRegistry, setAssetRegistry] = useState<AssetRegistry | null>(null)
+  const [qualityEvents, setQualityEvents] = useState<QualityEvent[]>([])
+  const [canonicalObjects, setCanonicalObjects] = useState<CanonicalObject[]>([])
+  const [traceabilityLinks, setTraceabilityLinks] = useState<TraceabilityLink[]>([])
+  const [reportCatalog, setReportCatalog] = useState<ReportCatalogItem[]>([])
+  const [selectedQualityEventId, setSelectedQualityEventId] = useState<string | null>(null)
 
   useEffect(() => {
     loadAppConfig()
@@ -225,9 +244,10 @@ function App() {
             const schema = inferCsvSchema(sample)
             setCsvSchema(schema)
             setMappingResult(validateMappingAgainstSchema(loaded.mappings.quality_event, schema))
-          })
+        })
         refreshBackend()
         refreshAssetRegistry()
+        refreshWorkflowSurface()
       })
       .catch((loadError: Error) => setError(loadError.message))
   }, [])
@@ -273,6 +293,20 @@ function App() {
   async function refreshAssetRegistry() {
     const registry = await backendClient.loadAssetRegistry()
     setAssetRegistry(registry)
+  }
+
+  async function refreshWorkflowSurface() {
+    const [events, objects, links, reports] = await Promise.all([
+      backendClient.listQualityEvents(),
+      backendClient.listCanonicalObjects(),
+      backendClient.listTraceabilityLinks(),
+      backendClient.listReports(),
+    ])
+    setQualityEvents(events)
+    setCanonicalObjects(objects)
+    setTraceabilityLinks(links)
+    setReportCatalog(reports)
+    setSelectedQualityEventId((current) => current ?? events[0]?.id ?? null)
   }
 
   async function promoteTemplateAsset(asset: LocalAsset) {
@@ -621,7 +655,6 @@ function App() {
   const domainEntries = preferredDomainOrder
     .filter((key) => config.solutionDomains[key])
     .map((key) => [key, config.solutionDomains[key]] as const)
-  const connectorCount = Object.keys(config.connectors.connectors).length
   const connectorEntries = Object.entries(config.connectors.connectors)
   const selectedConnector = selectedConnectorId
     ? config.connectors.connectors[selectedConnectorId]
@@ -681,13 +714,21 @@ function App() {
                   ? 'Template Library'
                   : activeView === 'Mapping'
                     ? 'Mapping Studio'
-                    : activeView === 'Versions'
-                      ? 'Saved Versions'
-                      : activeView === 'Backend'
-                        ? 'Backend Persistence'
-                        : activeView === 'Contract'
-                          ? 'Integration Contract'
-                        : 'Foundation Shell'}
+                    : activeView === 'Quality Events'
+                      ? 'Quality Events'
+                      : activeView === 'Object Explorer'
+                        ? 'Object Explorer'
+                        : activeView === 'Traceability'
+                          ? 'Traceability'
+                          : activeView === 'Reports'
+                            ? 'Report Catalog'
+                            : activeView === 'Versions'
+                              ? 'Saved Versions'
+                              : activeView === 'Backend'
+                                ? 'Backend Persistence'
+                                : activeView === 'Contract'
+                                  ? 'Integration Contract'
+                                  : 'Foundation Shell'}
             </h1>
             <p>
               {activeView === 'Connectors'
@@ -696,13 +737,21 @@ function App() {
                   ? 'Promote local assets into controlled TRACS template records with provenance, tags, and version history.'
                   : activeView === 'Mapping'
                     ? 'Infer source schema from CSV samples and validate source-to-canonical field mappings.'
-                    : activeView === 'Versions'
-                      ? 'Review saved connector, mapping, and contract versions persisted in this browser.'
-                      : activeView === 'Backend'
-                        ? 'Persist deployment snapshots, verify adapter contracts, and prepare the API boundary for live systems.'
-                        : activeView === 'Contract'
-                          ? 'Save, export, and review versioned integration contracts for the active deployment.'
-                        : 'Configure industries, activate domains, validate setup, and export the deployment contract.'}
+                    : activeView === 'Quality Events'
+                      ? 'Search and inspect mapped quality-event records from the canonical TRACS model.'
+                      : activeView === 'Object Explorer'
+                        ? 'Review canonical objects across quality, product, traceability, and reporting families.'
+                        : activeView === 'Traceability'
+                          ? 'Inspect event-to-product, lot/serial, return, and CAPA relationships.'
+                          : activeView === 'Reports'
+                            ? 'Launch governed BI reports with owner, freshness, semantic model, and source dependencies.'
+                            : activeView === 'Versions'
+                              ? 'Review saved connector, mapping, and contract versions persisted in this browser.'
+                              : activeView === 'Backend'
+                                ? 'Persist deployment snapshots, verify adapter contracts, and prepare the API boundary for live systems.'
+                                : activeView === 'Contract'
+                                  ? 'Save, export, and review versioned integration contracts for the active deployment.'
+                                  : 'Configure industries, activate domains, validate setup, and export the deployment contract.'}
             </p>
           </div>
           <div className="topbar-actions">
@@ -734,9 +783,9 @@ function App() {
         <section className="metrics-grid" aria-label="Deployment metrics">
           <Metric label="Active profiles" value={deployment.activeIndustries.length} icon={Factory} />
           <Metric label="Enabled domains" value={deployment.activeDomains.length} icon={Layers3} />
-          <Metric label="Object families" value={activeFamilies.length} icon={Boxes} />
-          <Metric label="Connector manifests" value={connectorCount} icon={Database} />
-          <Metric label="Backend records" value={backendRecords.length} icon={ServerCog} />
+          <Metric label="Quality events" value={qualityEvents.length} icon={ShieldCheck} />
+          <Metric label="Trace links" value={traceabilityLinks.length} icon={Route} />
+          <Metric label="Reports" value={reportCatalog.length} icon={Gauge} />
         </section>
 
         {activeView === 'Connectors' ? (
@@ -772,6 +821,24 @@ function App() {
             onCsvTextChange={setCsvText}
             onValidate={runMappingValidation}
           />
+        ) : activeView === 'Quality Events' ? (
+          <QualityEventsView
+            events={qualityEvents}
+            onSelect={setSelectedQualityEventId}
+            selectedEventId={selectedQualityEventId}
+            traceabilityLinks={traceabilityLinks}
+          />
+        ) : activeView === 'Object Explorer' ? (
+          <ObjectExplorerView objects={canonicalObjects} />
+        ) : activeView === 'Traceability' ? (
+          <TraceabilityView
+            events={qualityEvents}
+            links={traceabilityLinks}
+            onSelectEvent={setSelectedQualityEventId}
+            selectedEventId={selectedQualityEventId}
+          />
+        ) : activeView === 'Reports' ? (
+          <ReportCatalogView reports={reportCatalog} />
         ) : activeView === 'Versions' ? (
           <SavedVersionsView savedVersions={savedVersions} />
         ) : activeView === 'Backend' ? (
@@ -1144,6 +1211,347 @@ function BackendPersistenceView({
         ) : (
           <div className="empty-state compact">Refresh backend health to load the storage schema blueprint.</div>
         )}
+      </section>
+    </>
+  )
+}
+
+function QualityEventsView({
+  events,
+  onSelect,
+  selectedEventId,
+  traceabilityLinks,
+}: {
+  events: QualityEvent[]
+  onSelect: (eventId: string) => void
+  selectedEventId: string | null
+  traceabilityLinks: TraceabilityLink[]
+}) {
+  const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('All')
+  const selectedEvent = events.find((event) => event.id === selectedEventId) ?? events[0]
+  const statuses = useMemo(
+    () => ['All', ...Array.from(new Set(events.map((event) => event.canonical.status))).sort()],
+    [events],
+  )
+  const filteredEvents = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase()
+    return events.filter((event) => {
+      const matchesStatus = statusFilter === 'All' || event.canonical.status === statusFilter
+      const haystack = [
+        event.canonical.event_id,
+        event.canonical.product_code,
+        event.canonical.product_name,
+        event.canonical.owner,
+        event.canonical.narrative,
+      ]
+        .join(' ')
+        .toLowerCase()
+      return matchesStatus && (normalizedQuery.length === 0 || haystack.includes(normalizedQuery))
+    })
+  }, [events, query, statusFilter])
+  const selectedLinks = selectedEvent
+    ? traceabilityLinks.filter((link) => link.sourceObjectId === selectedEvent.id)
+    : []
+
+  return (
+    <>
+      <section className="connector-toolbar panel">
+        <div>
+          <h2>Quality Event Worklist</h2>
+          <p>
+            Canonical quality events are mapped from the source sample and ready for search, inspection, and traceability review.
+          </p>
+        </div>
+        <div className="workflow-toolbar">
+          <label>
+            <Search size={15} />
+            <input
+              aria-label="Search quality events"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search event, product, owner"
+              value={query}
+            />
+          </label>
+          <select
+            aria-label="Filter by status"
+            onChange={(event) => setStatusFilter(event.target.value)}
+            value={statusFilter}
+          >
+            {statuses.map((status) => (
+              <option key={status} value={status}>
+                {titleize(status)}
+              </option>
+            ))}
+          </select>
+        </div>
+      </section>
+
+      <section className="workflow-grid">
+        <section className="panel workflow-list-panel">
+          <PanelHeader
+            icon={ShieldCheck}
+            title="Canonical Quality Events"
+            subtitle={`${filteredEvents.length}/${events.length} event(s) visible.`}
+          />
+          <div className="workflow-list">
+            {filteredEvents.map((event) => (
+              <button
+                className={selectedEvent?.id === event.id ? 'workflow-row selected' : 'workflow-row'}
+                key={event.id}
+                onClick={() => onSelect(event.id)}
+                type="button"
+              >
+                <div>
+                  <strong>{event.canonical.event_id}</strong>
+                  <span>{event.canonical.product_name}</span>
+                </div>
+                <span>{event.canonical.owner}</span>
+                <StatusChip status={severityStatus(event.canonical.severity)} label={event.canonical.severity} />
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="panel workflow-detail-panel">
+          <PanelHeader
+            icon={ScrollText}
+            title="Event Detail"
+            subtitle={selectedEvent ? selectedEvent.displayName : 'Select a quality event.'}
+          />
+          {selectedEvent ? (
+            <div className="workflow-detail">
+              <div className="detail-heading">
+                <div>
+                  <h3>{selectedEvent.canonical.event_id}</h3>
+                  <p>{selectedEvent.canonical.narrative}</p>
+                </div>
+                <StatusChip status={severityStatus(selectedEvent.canonical.severity)} label={selectedEvent.canonical.severity} />
+              </div>
+              <div className="metadata-grid">
+                <Metadata label="Status" value={titleize(selectedEvent.canonical.status)} />
+                <Metadata label="Event type" value={titleize(selectedEvent.canonical.event_type)} />
+                <Metadata label="Product" value={`${selectedEvent.canonical.product_code} / ${selectedEvent.canonical.product_name}`} />
+                <Metadata label="Lot / Serial" value={`${selectedEvent.canonical.lot_number} / ${selectedEvent.canonical.serial_number}`} />
+                <Metadata label="Owner" value={selectedEvent.canonical.owner || 'Unassigned'} />
+                <Metadata label="CAPA reference" value={selectedEvent.canonical.capa_reference_id || 'No CAPA reference'} />
+                <Metadata label="Source connector" value={selectedEvent.sourceConnector} />
+                <Metadata label="Source object" value={selectedEvent.sourceObject} />
+              </div>
+              <div className="relationship-list">
+                <h4>Traceability Links</h4>
+                {selectedLinks.map((link) => (
+                  <div className="relationship-row" key={link.id}>
+                    <Route size={15} />
+                    <div>
+                      <strong>{titleize(link.relationshipType)}</strong>
+                      <span>{link.targetLabel} / {link.evidence}</span>
+                    </div>
+                    <StatusChip status={link.status} label={link.status} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="empty-state">No quality events are loaded.</div>
+          )}
+        </section>
+      </section>
+    </>
+  )
+}
+
+function ObjectExplorerView({ objects }: { objects: CanonicalObject[] }) {
+  const familyCounts = objects.reduce(
+    (summary, object) => {
+      summary[object.family] = (summary[object.family] ?? 0) + 1
+      return summary
+    },
+    {} as Record<string, number>,
+  )
+
+  return (
+    <>
+      <section className="connector-toolbar panel">
+        <div>
+          <h2>Canonical Object Registry</h2>
+          <p>
+            Objects are normalized into stable TRACS identities across quality, product, and traceability families.
+          </p>
+        </div>
+        <div className="version-summary">
+          {Object.entries(familyCounts).map(([family, count]) => (
+            <span key={family}>{count} {titleize(family)}</span>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel object-explorer-panel">
+        <PanelHeader
+          icon={Boxes}
+          title="Canonical Objects"
+          subtitle={`${objects.length} object(s) loaded from the current canonical sample.`}
+        />
+        <div className="object-registry-table">
+          <div className="object-registry-row object-registry-head">
+            <span>Object</span>
+            <span>Family</span>
+            <span>Status</span>
+            <span>Source</span>
+            <span>Canonical ID</span>
+          </div>
+          {objects.map((object) => (
+            <div className="object-registry-row" key={object.id}>
+              <div>
+                <strong>{object.displayName}</strong>
+                <span>{titleize(object.objectType)}</span>
+              </div>
+              <span className="chip active">{titleize(object.family)}</span>
+              <span>{titleize(object.status)}</span>
+              <span>{object.sourceConnector}</span>
+              <span>{object.id}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+    </>
+  )
+}
+
+function TraceabilityView({
+  events,
+  links,
+  onSelectEvent,
+  selectedEventId,
+}: {
+  events: QualityEvent[]
+  links: TraceabilityLink[]
+  onSelectEvent: (eventId: string) => void
+  selectedEventId: string | null
+}) {
+  const selectedEvent = events.find((event) => event.id === selectedEventId) ?? events[0]
+  const selectedLinks = selectedEvent
+    ? links.filter((link) => link.sourceObjectId === selectedEvent.id)
+    : []
+
+  return (
+    <>
+      <section className="connector-toolbar panel">
+        <div>
+          <h2>Traceability Matrix</h2>
+          <p>
+            Follow quality-event relationships into product, lot/serial, return, and external CAPA references.
+          </p>
+        </div>
+        <select
+          aria-label="Select traceability event"
+          className="workflow-select"
+          onChange={(event) => onSelectEvent(event.target.value)}
+          value={selectedEvent?.id ?? ''}
+        >
+          {events.map((event) => (
+            <option key={event.id} value={event.id}>
+              {event.canonical.event_id} / {event.canonical.product_code}
+            </option>
+          ))}
+        </select>
+      </section>
+
+      <section className="traceability-grid">
+        <section className="panel trace-source-panel">
+          <PanelHeader
+            icon={ShieldCheck}
+            title="Source Event"
+            subtitle={selectedEvent ? selectedEvent.displayName : 'No source event selected.'}
+          />
+          {selectedEvent ? (
+            <div className="workflow-detail">
+              <div className="trace-node source">
+                <strong>{selectedEvent.canonical.event_id}</strong>
+                <span>{selectedEvent.canonical.narrative}</span>
+              </div>
+              <div className="metadata-grid">
+                <Metadata label="Product" value={selectedEvent.canonical.product_code} />
+                <Metadata label="Lot" value={selectedEvent.canonical.lot_number} />
+                <Metadata label="Serial" value={selectedEvent.canonical.serial_number} />
+                <Metadata label="Status" value={titleize(selectedEvent.canonical.status)} />
+              </div>
+            </div>
+          ) : (
+            <div className="empty-state compact">No event selected.</div>
+          )}
+        </section>
+
+        <section className="panel trace-links-panel">
+          <PanelHeader
+            icon={Route}
+            title="Linked Objects"
+            subtitle={`${selectedLinks.length} relationship(s) derived from canonical fields.`}
+          />
+          <div className="trace-node-list">
+            {selectedLinks.map((link) => (
+              <div className="trace-link-card" key={link.id}>
+                <div className="trace-line" />
+                <div className="trace-node">
+                  <strong>{link.targetLabel}</strong>
+                  <span>{titleize(link.targetObjectType)} / {titleize(link.relationshipType)}</span>
+                </div>
+                <p>{link.evidence}</p>
+                <StatusChip status={link.status} label={link.status} />
+              </div>
+            ))}
+          </div>
+        </section>
+      </section>
+    </>
+  )
+}
+
+function ReportCatalogView({ reports }: { reports: ReportCatalogItem[] }) {
+  const staleCount = reports.filter((report) => report.refreshStatus !== 'pass').length
+
+  return (
+    <>
+      <section className="connector-toolbar panel">
+        <div>
+          <h2>Report Catalog</h2>
+          <p>
+            Governed BI launch points show owner, workspace, semantic model, freshness, and canonical dependencies.
+          </p>
+        </div>
+        <div className="version-summary">
+          <span>{reports.length} reports</span>
+          <span>{staleCount} need review</span>
+        </div>
+      </section>
+
+      <section className="report-grid">
+        {reports.map((report) => (
+          <article className="panel report-card" key={report.id}>
+            <div className="report-card-header">
+              <div>
+                <strong>{report.title}</strong>
+                <span>{report.workspace} / {report.semanticModel}</span>
+              </div>
+              <StatusChip status={report.refreshStatus} label={report.refreshStatus} />
+            </div>
+            <div className="metadata-grid">
+              <Metadata label="Platform" value={report.platform} />
+              <Metadata label="Owner" value={report.owner} />
+              <Metadata label="Last refresh" value={new Date(report.lastRefresh).toLocaleString()} />
+              <Metadata label="Domains" value={report.domains.map(titleize).join(', ')} />
+            </div>
+            <div className="source-column-list report-dependencies">
+              {report.sourceDependencies.map((dependency) => (
+                <span className="chip active" key={dependency}>{dependency}</span>
+              ))}
+            </div>
+            <a className="secondary-link" href={report.url} target="_blank">
+              <ExternalLink size={15} />
+              Open Report
+            </a>
+          </article>
+        ))}
       </section>
     </>
   )

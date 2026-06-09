@@ -160,6 +160,7 @@ export type SavedVersionKind =
   | 'backend_snapshot'
   | 'adapter_dry_run'
   | 'controlled_template'
+  | 'canonical_object'
 
 export type SavedVersion = {
   id: string
@@ -179,6 +180,9 @@ export type BackendRecordKind =
   | 'integration_contract'
   | 'adapter_contract'
   | 'controlled_template'
+  | 'canonical_object'
+  | 'traceability_link'
+  | 'report_catalog_item'
 
 export type BackendRecord<TPayload = unknown> = {
   id: string
@@ -326,4 +330,70 @@ export type ControlledTemplatePayload = {
     solutions: string[]
   }
   provenanceNotes: string
+}
+
+export type CanonicalObject = {
+  id: string
+  objectType: string
+  family: string
+  displayName: string
+  status: string
+  sourceConnector: string
+  sourceSystem: string
+  sourceObject: string
+  sourceId: string
+  createdAt: string
+  updatedAt: string
+  canonical: Record<string, string>
+  raw: Record<string, string>
+}
+
+export type QualityEvent = CanonicalObject & {
+  objectType: 'quality_event'
+  canonical: {
+    event_id: string
+    event_date: string
+    event_type: string
+    source_system: string
+    product_code: string
+    product_name: string
+    lot_number: string
+    serial_number: string
+    severity: string
+    narrative: string
+    status: string
+    owner: string
+    capa_reference_id: string
+  }
+}
+
+export type TraceabilityLink = {
+  id: string
+  sourceObjectId: string
+  sourceObjectType: string
+  targetObjectId: string
+  targetObjectType: string
+  targetLabel: string
+  relationshipType: string
+  status: StatusLevel
+  evidence: string
+}
+
+export type TraceabilityResult = {
+  object: CanonicalObject
+  links: TraceabilityLink[]
+}
+
+export type ReportCatalogItem = {
+  id: string
+  title: string
+  platform: string
+  workspace: string
+  owner: string
+  semanticModel: string
+  refreshStatus: StatusLevel
+  lastRefresh: string
+  url: string
+  sourceDependencies: string[]
+  domains: string[]
 }
