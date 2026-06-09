@@ -27,6 +27,7 @@ GET  /api/health
 GET  /api/records
 POST /api/records
 GET  /api/adapter-contracts
+GET  /api/assets/registry
 POST /api/connectors/{connectorId}/metadata
 POST /api/connectors/{connectorId}/preview
 GET  /api/connectors/{connectorId}/runs
@@ -45,6 +46,8 @@ The CSV/manual upload connector is the first implemented live adapter. It reads 
 Mapping Studio validation runs are persisted as `mapping_validation` records. The frontend still performs the current schema-to-manifest validation, then sends the reviewed mapping, inferred schema, validation result, and summary to the API for versioned storage.
 
 Integration contracts are persisted as `integration_contract` records. The Contract workspace saves the same generated payload that can be downloaded for governance review, including readiness status, backend evidence, adapter contracts, and recent backend records.
+
+The asset registry route scans the local MYROBOTS root, defaulting to `C:\Users\Allen\MYROBOTS`, and returns a bounded read-only registry of candidate templates, database schemas, manifests, data templates, and reference files. Set `TRACS_ASSET_ROOT` to scan a different local library.
 
 ### Planned Saved Versions
 

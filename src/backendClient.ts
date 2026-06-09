@@ -2,6 +2,7 @@ import { getAdapterContract } from './backendContracts'
 import type {
   AdapterDryRunResult,
   AppConfig,
+  AssetRegistry,
   BackendHealth,
   BackendRecord,
   BackendRecordKind,
@@ -358,6 +359,21 @@ export class LocalBackendClient {
       records.filter((record) => record.kind === 'integration_contract'),
     )
   }
+
+  async loadAssetRegistry(): Promise<AssetRegistry> {
+    return {
+      root: 'API not configured',
+      scannedAt: new Date().toISOString(),
+      limit: 0,
+      assets: [],
+      summary: {
+        total: 0,
+        byKind: {},
+        byCategory: {},
+        bySourceFamily: {},
+      },
+    }
+  }
 }
 
 class ApiBackendClient {
@@ -572,6 +588,14 @@ class ApiBackendClient {
       return await this.request<BackendRecord[]>('/api/integration-contracts')
     } catch {
       return this.localFallback.listIntegrationContracts()
+    }
+  }
+
+  async loadAssetRegistry(): Promise<AssetRegistry> {
+    try {
+      return await this.request<AssetRegistry>('/api/assets/registry')
+    } catch {
+      return this.localFallback.loadAssetRegistry()
     }
   }
 }

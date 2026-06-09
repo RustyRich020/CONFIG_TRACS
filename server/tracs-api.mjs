@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { adapterContracts, runAdapterDryRun } from './adapterContracts.mjs'
+import { scanAssetRegistry } from './assetRegistry.mjs'
 import { discoverCsvMetadata, previewCsvRows } from './csvAdapter.mjs'
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -137,6 +138,18 @@ async function handleRequest(req, res) {
 
     if (req.method === 'GET' && url.pathname === '/api/adapter-contracts') {
       jsonResponse(res, 200, adapterContracts)
+      return
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/assets/registry') {
+      jsonResponse(
+        res,
+        200,
+        await scanAssetRegistry({
+          root: url.searchParams.get('root') ?? undefined,
+          limit: Number(url.searchParams.get('limit') ?? 500),
+        }),
+      )
       return
     }
 

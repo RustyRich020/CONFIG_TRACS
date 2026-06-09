@@ -14,6 +14,7 @@ This prototype now includes the first practical build phases for TRACS:
 8. Connector Run Persistence
 9. Mapping Run Persistence
 10. Integration Contract Persistence
+11. Local Asset Registry + Template Library v1
 
 ## What It Proves
 
@@ -42,6 +43,8 @@ This prototype now includes the first practical build phases for TRACS:
 - Shows persisted mapping validation history in Mapping Studio.
 - Saves integration contracts as versioned backend records.
 - Provides a Contract workspace for saving, exporting, and reviewing contract history.
+- Scans `C:\Users\Allen\MYROBOTS` for local QMS templates, schemas, manifests, and reference assets.
+- Extends the Templates view into a filterable Template Library backed by the local asset registry.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
@@ -95,6 +98,7 @@ npm run build
 - `server/tracs-api.mjs`: file-backed API service for deployment snapshots, backend records, and adapter dry runs.
 - `server/adapterContracts.mjs`: backend adapter dry-run contract implementation.
 - `server/csvAdapter.mjs`: CSV/manual upload adapter for metadata discovery and bounded source preview rows.
+- `server/assetRegistry.mjs`: read-only local scanner for MYROBOTS template and schema assets.
 - `public/config/industries/industries.yaml`: industry profile definitions.
 - `public/config/solutions/solution_domains.yaml`: solution domain definitions.
 - `public/config/mappings/domain_object_families.yaml`: canonical object family definitions.
@@ -103,10 +107,9 @@ npm run build
 
 ## Next Phase
 
-Build credential-backed live connector adapters:
+Use the local asset registry to inform the real backend model:
 
-1. Snowflake authentication and metadata discovery.
-2. SharePoint Excel authentication and workbook/sheet discovery.
-3. API-backed connector run persistence for non-CSV adapters.
-4. Database-backed record storage behind the existing API routes.
-5. Source preview rows for Snowflake and SharePoint adapters.
+1. Promote selected MYROBOTS templates into controlled TRACS template records.
+2. Use `DATABASE-SCHEMAS` assets to design the first database-backed run registry.
+3. Add database-backed record storage behind the existing API routes.
+4. Build credential-backed Snowflake and SharePoint metadata discovery.

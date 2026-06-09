@@ -256,3 +256,30 @@ export type ConnectorPreviewResult = {
   evidence: string
   record?: BackendRecord
 }
+
+export type LocalAsset = {
+  id: string
+  name: string
+  kind: 'template' | 'database_schema' | 'data_template' | 'manifest' | 'reference'
+  category: string
+  domain: string
+  sourceFamily: string
+  extension: string
+  relativePath: string
+  absolutePath: string
+  sizeBytes: number
+  lastModified: string
+}
+
+export type AssetRegistry = {
+  root: string
+  scannedAt: string
+  limit: number
+  assets: LocalAsset[]
+  summary: {
+    total: number
+    byKind: Record<string, number>
+    byCategory: Record<string, number>
+    bySourceFamily: Record<string, number>
+  }
+}

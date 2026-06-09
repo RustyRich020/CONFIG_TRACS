@@ -49,9 +49,11 @@ import type {
   AppConfig,
   AdapterDryRunResult,
   AdapterContract,
+  AssetRegistry,
   AuditEvent,
   BackendHealth,
   BackendRecord,
+  LocalAsset,
   ConnectorPreviewResult,
   ConnectorSourceMetadata,
   ConnectorTestResult,
@@ -194,6 +196,7 @@ function App() {
   const [connectorRuns, setConnectorRuns] = useState<Record<string, BackendRecord[]>>({})
   const [mappingRuns, setMappingRuns] = useState<Record<string, BackendRecord[]>>({})
   const [contractRecords, setContractRecords] = useState<BackendRecord[]>([])
+  const [assetRegistry, setAssetRegistry] = useState<AssetRegistry | null>(null)
 
   useEffect(() => {
     loadAppConfig()
@@ -220,6 +223,7 @@ function App() {
             setMappingResult(validateMappingAgainstSchema(loaded.mappings.quality_event, schema))
           })
         refreshBackend()
+        refreshAssetRegistry()
       })
       .catch((loadError: Error) => setError(loadError.message))
   }, [])
@@ -256,6 +260,11 @@ function App() {
     setBackendHealth(health)
     setBackendRecords(records)
     setContractRecords(contracts)
+  }
+
+  async function refreshAssetRegistry() {
+    const registry = await backendClient.loadAssetRegistry()
+    setAssetRegistry(registry)
   }
 
   function deploymentReadinessStatus(): StatusLevel {
@@ -688,7 +697,7 @@ function App() {
             selectedSourcePreview={selectedSourcePreview}
           />
         ) : activeView === 'Templates' ? (
-          <TemplatesView />
+          <TemplatesView assetRegistry={assetRegistry} onRefreshAssets={refreshAssetRegistry} />
         ) : activeView === 'Mapping' ? (
           <MappingStudio
             csvSchema={csvSchema}
@@ -1281,20 +1290,45 @@ function MappingStudio({
   )
 }
 
-function TemplatesView() {
+function TemplatesView({
+  assetRegistry,
+  onRefreshAssets,
+}: {
+  assetRegistry: AssetRegistry | null
+  onRefreshAssets: () => void
+}) {
+  const [activeCategory, setActiveCategory] = useState('All')
+  const categories = useMemo(
+    () => ['All', ...Object.keys(assetRegistry?.summary.byCategory ?? {}).sort()],
+    [assetRegistry],
+  )
+  const filteredAssets = useMemo(() => {
+    const assets = assetRegistry?.assets ?? []
+    return activeCategory === 'All'
+      ? assets
+      : assets.filter((asset) => asset.category === activeCategory)
+  }, [activeCategory, assetRegistry])
+  const topAssets = filteredAssets.slice(0, 60)
+
   return (
     <>
       <section className="connector-toolbar panel">
         <div>
-          <h2>Template Catalog</h2>
+          <h2>Template Library</h2>
           <p>
-            Use these templates as the controlled starting point for new deployments, connectors, mappings, checks, and governance exports.
+            Use controlled TRACS starters and local MYROBOTS assets as the source library for deployment templates, QMS procedures, schemas, and reference packages.
           </p>
         </div>
-        <a className="secondary-link" href="/config/templates/integration_contract.template.md" target="_blank">
-          <ExternalLink size={15} />
-          Open Contract Template
-        </a>
+        <div className="toolbar-actions">
+          <button className="secondary-action" onClick={onRefreshAssets} type="button">
+            <Search size={15} />
+            Rescan Assets
+          </button>
+          <a className="secondary-link" href="/config/templates/integration_contract.template.md" target="_blank">
+            <ExternalLink size={15} />
+            Open Contract Template
+          </a>
+        </div>
       </section>
 
       <section className="template-grid">
@@ -1314,7 +1348,77 @@ function TemplatesView() {
           </article>
         ))}
       </section>
+
+      <section className="asset-library-grid">
+        <section className="panel asset-summary-panel">
+          <PanelHeader
+            icon={PanelTop}
+            title="MYROBOTS Asset Registry"
+            subtitle={assetRegistry ? `${assetRegistry.assets.length} scanned assets from ${assetRegistry.root}.` : 'Asset registry has not loaded yet.'}
+          />
+          {assetRegistry ? (
+            <>
+              <div className="asset-summary-grid">
+                <Metadata label="Total assets" value={String(assetRegistry.summary.total)} />
+                <Metadata label="Templates" value={String(assetRegistry.summary.byKind.template ?? 0)} />
+                <Metadata label="Schemas" value={String(assetRegistry.summary.byKind.database_schema ?? 0)} />
+                <Metadata label="Scanned" value={new Date(assetRegistry.scannedAt).toLocaleString()} />
+              </div>
+              <div className="asset-category-list">
+                {categories.map((category) => (
+                  <button
+                    className={activeCategory === category ? 'asset-filter active' : 'asset-filter'}
+                    key={category}
+                    onClick={() => setActiveCategory(category)}
+                    type="button"
+                  >
+                    <span>{category}</span>
+                    <strong>
+                      {category === 'All'
+                        ? assetRegistry.summary.total
+                        : assetRegistry.summary.byCategory[category] ?? 0}
+                    </strong>
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="empty-state compact">Start the TRACS API to scan local MYROBOTS assets.</div>
+          )}
+        </section>
+
+        <section className="panel asset-list-panel">
+          <PanelHeader
+            icon={ScrollText}
+            title="Local Asset Candidates"
+            subtitle={`${topAssets.length}/${filteredAssets.length} asset(s) shown for ${activeCategory}.`}
+          />
+          {topAssets.length > 0 ? (
+            <div className="asset-list">
+              {topAssets.map((asset) => (
+                <AssetRow asset={asset} key={asset.id} />
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state compact">No local assets found for this filter.</div>
+          )}
+        </section>
+      </section>
     </>
+  )
+}
+
+function AssetRow({ asset }: { asset: LocalAsset }) {
+  return (
+    <div className="asset-row">
+      <div>
+        <strong>{asset.name}</strong>
+        <span>{asset.relativePath}</span>
+      </div>
+      <span className="chip active">{asset.category}</span>
+      <span className="asset-source">{asset.sourceFamily}</span>
+      <span className="asset-kind">{titleize(asset.kind)}</span>
+    </div>
   )
 }
 
