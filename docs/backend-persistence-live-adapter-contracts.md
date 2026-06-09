@@ -28,6 +28,9 @@ GET  /api/records
 POST /api/records
 GET  /api/adapter-contracts
 GET  /api/assets/registry
+GET  /api/templates
+POST /api/templates/promote
+PUT  /api/templates/{recordId}
 POST /api/connectors/{connectorId}/metadata
 POST /api/connectors/{connectorId}/preview
 GET  /api/connectors/{connectorId}/runs
@@ -48,6 +51,8 @@ Mapping Studio validation runs are persisted as `mapping_validation` records. Th
 Integration contracts are persisted as `integration_contract` records. The Contract workspace saves the same generated payload that can be downloaded for governance review, including readiness status, backend evidence, adapter contracts, and recent backend records.
 
 The asset registry route scans the local MYROBOTS root, defaulting to `C:\Users\Allen\MYROBOTS`, and returns a bounded read-only registry of candidate templates, database schemas, manifests, data templates, and reference files. Set `TRACS_ASSET_ROOT` to scan a different local library.
+
+Controlled templates are persisted as `controlled_template` records. Promotion copies the local asset registry metadata into a governed payload with `templateId`, source path, fingerprint, category/domain classification, active industry and solution tags, lifecycle status, and provenance notes. Updates create a new backend record version instead of mutating the original record.
 
 ### Planned Saved Versions
 

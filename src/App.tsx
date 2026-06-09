@@ -53,6 +53,7 @@ import type {
   AuditEvent,
   BackendHealth,
   BackendRecord,
+  ControlledTemplatePayload,
   LocalAsset,
   ConnectorPreviewResult,
   ConnectorSourceMetadata,
@@ -196,6 +197,7 @@ function App() {
   const [connectorRuns, setConnectorRuns] = useState<Record<string, BackendRecord[]>>({})
   const [mappingRuns, setMappingRuns] = useState<Record<string, BackendRecord[]>>({})
   const [contractRecords, setContractRecords] = useState<BackendRecord[]>([])
+  const [templateRecords, setTemplateRecords] = useState<BackendRecord<ControlledTemplatePayload>[]>([])
   const [assetRegistry, setAssetRegistry] = useState<AssetRegistry | null>(null)
 
   useEffect(() => {
@@ -252,19 +254,71 @@ function App() {
   }
 
   async function refreshBackend() {
-    const [health, records, contracts] = await Promise.all([
+    const [health, records, contracts, templates] = await Promise.all([
       backendClient.health(),
       backendClient.listRecords(),
       backendClient.listIntegrationContracts(),
+      backendClient.listControlledTemplates(),
     ])
     setBackendHealth(health)
     setBackendRecords(records)
     setContractRecords(contracts)
+    setTemplateRecords(templates)
   }
 
   async function refreshAssetRegistry() {
     const registry = await backendClient.loadAssetRegistry()
     setAssetRegistry(registry)
+  }
+
+  async function promoteTemplateAsset(asset: LocalAsset) {
+    const solutions = Array.from(new Set([...deployment.activeDomains, asset.domain])).filter(
+      Boolean,
+    )
+    const saved = await backendClient.promoteAssetToTemplate({
+      asset,
+      industries: deployment.activeIndustries,
+      solutions,
+      status: 'draft',
+    })
+    const templates = await backendClient.listControlledTemplates()
+    setTemplateRecords(templates)
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'controlled_template',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record(
+      'template',
+      'promote',
+      `${asset.name} promoted to controlled template record v${saved.version}.`,
+    )
+  }
+
+  async function activateTemplateRecord(templateRecord: BackendRecord<ControlledTemplatePayload>) {
+    const saved = await backendClient.updateControlledTemplate(templateRecord, { status: 'active' })
+    const templates = await backendClient.listControlledTemplates()
+    setTemplateRecords(templates)
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'controlled_template',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record(
+      'template',
+      'activate',
+      `${templateRecord.payload.templateId} activated as controlled template v${saved.version}.`,
+    )
   }
 
   function deploymentReadinessStatus(): StatusLevel {
@@ -620,7 +674,7 @@ function App() {
               {activeView === 'Connectors'
                 ? 'Connector Hub'
                 : activeView === 'Templates'
-                  ? 'Templates'
+                  ? 'Template Library'
                   : activeView === 'Mapping'
                     ? 'Mapping Studio'
                     : activeView === 'Versions'
@@ -635,7 +689,7 @@ function App() {
               {activeView === 'Connectors'
                 ? 'Register connector manifests, run adapter readiness tests, preview metadata, and capture evidence.'
                 : activeView === 'Templates'
-                  ? 'Use reusable templates for profiles, connectors, mappings, readiness checks, and contracts.'
+                  ? 'Promote local assets into controlled TRACS template records with provenance, tags, and version history.'
                   : activeView === 'Mapping'
                     ? 'Infer source schema from CSV samples and validate source-to-canonical field mappings.'
                     : activeView === 'Versions'
@@ -697,7 +751,13 @@ function App() {
             selectedSourcePreview={selectedSourcePreview}
           />
         ) : activeView === 'Templates' ? (
-          <TemplatesView assetRegistry={assetRegistry} onRefreshAssets={refreshAssetRegistry} />
+          <TemplatesView
+            assetRegistry={assetRegistry}
+            onActivateTemplate={activateTemplateRecord}
+            onPromoteAsset={promoteTemplateAsset}
+            onRefreshAssets={refreshAssetRegistry}
+            templateRecords={templateRecords}
+          />
         ) : activeView === 'Mapping' ? (
           <MappingStudio
             csvSchema={csvSchema}
@@ -1292,10 +1352,16 @@ function MappingStudio({
 
 function TemplatesView({
   assetRegistry,
+  onActivateTemplate,
+  onPromoteAsset,
   onRefreshAssets,
+  templateRecords,
 }: {
   assetRegistry: AssetRegistry | null
+  onActivateTemplate: (templateRecord: BackendRecord<ControlledTemplatePayload>) => void
+  onPromoteAsset: (asset: LocalAsset) => void
   onRefreshAssets: () => void
+  templateRecords: BackendRecord<ControlledTemplatePayload>[]
 }) {
   const [activeCategory, setActiveCategory] = useState('All')
   const categories = useMemo(
@@ -1309,6 +1375,27 @@ function TemplatesView({
       : assets.filter((asset) => asset.category === activeCategory)
   }, [activeCategory, assetRegistry])
   const topAssets = filteredAssets.slice(0, 60)
+  const latestTemplateRecords = useMemo(() => {
+    const byTemplateId = new Map<string, BackendRecord<ControlledTemplatePayload>>()
+    templateRecords
+      .slice()
+      .sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt))
+      .forEach((record) => {
+        if (!byTemplateId.has(record.payload.templateId)) {
+          byTemplateId.set(record.payload.templateId, record)
+        }
+      })
+    return Array.from(byTemplateId.values())
+  }, [templateRecords])
+  const controlledByAssetId = useMemo(() => {
+    return new Map(latestTemplateRecords.map((record) => [record.payload.source.id, record]))
+  }, [latestTemplateRecords])
+  const assetById = useMemo(() => {
+    return new Map((assetRegistry?.assets ?? []).map((asset) => [asset.id, asset]))
+  }, [assetRegistry])
+  const activeTemplates = latestTemplateRecords.filter(
+    (record) => record.payload.status === 'active',
+  ).length
 
   return (
     <>
@@ -1362,6 +1449,8 @@ function TemplatesView({
                 <Metadata label="Total assets" value={String(assetRegistry.summary.total)} />
                 <Metadata label="Templates" value={String(assetRegistry.summary.byKind.template ?? 0)} />
                 <Metadata label="Schemas" value={String(assetRegistry.summary.byKind.database_schema ?? 0)} />
+                <Metadata label="Controlled" value={String(latestTemplateRecords.length)} />
+                <Metadata label="Active" value={String(activeTemplates)} />
                 <Metadata label="Scanned" value={new Date(assetRegistry.scannedAt).toLocaleString()} />
               </div>
               <div className="asset-category-list">
@@ -1396,7 +1485,12 @@ function TemplatesView({
           {topAssets.length > 0 ? (
             <div className="asset-list">
               {topAssets.map((asset) => (
-                <AssetRow asset={asset} key={asset.id} />
+                <AssetRow
+                  asset={asset}
+                  controlledRecord={controlledByAssetId.get(asset.id)}
+                  key={asset.id}
+                  onPromote={onPromoteAsset}
+                />
               ))}
             </div>
           ) : (
@@ -1404,11 +1498,49 @@ function TemplatesView({
           )}
         </section>
       </section>
+
+      <section className="panel controlled-template-panel">
+        <PanelHeader
+          icon={ShieldCheck}
+          title="Controlled Template Records"
+          subtitle="Promoted assets become governed TRACS templates with source provenance, version history, and deployment tags."
+        />
+        {latestTemplateRecords.length > 0 ? (
+          <div className="controlled-template-table">
+            <div className="controlled-template-row controlled-template-head">
+              <span>Template</span>
+              <span>Status</span>
+              <span>Classification</span>
+              <span>Tags</span>
+              <span>Source</span>
+              <span>Action</span>
+            </div>
+            {latestTemplateRecords.map((record) => (
+              <TemplateRecordRow
+                currentAsset={assetById.get(record.payload.source.id)}
+                key={record.id}
+                onActivate={onActivateTemplate}
+                templateRecord={record}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state">Promote a local asset to create the first controlled template record.</div>
+        )}
+      </section>
     </>
   )
 }
 
-function AssetRow({ asset }: { asset: LocalAsset }) {
+function AssetRow({
+  asset,
+  controlledRecord,
+  onPromote,
+}: {
+  asset: LocalAsset
+  controlledRecord?: BackendRecord<ControlledTemplatePayload>
+  onPromote: (asset: LocalAsset) => void
+}) {
   return (
     <div className="asset-row">
       <div>
@@ -1418,6 +1550,61 @@ function AssetRow({ asset }: { asset: LocalAsset }) {
       <span className="chip active">{asset.category}</span>
       <span className="asset-source">{asset.sourceFamily}</span>
       <span className="asset-kind">{titleize(asset.kind)}</span>
+      {controlledRecord ? (
+        <span className="controlled-state">{controlledRecord.payload.status}</span>
+      ) : (
+        <button className="secondary-action compact" onClick={() => onPromote(asset)} type="button">
+          <ShieldCheck size={14} />
+          Promote
+        </button>
+      )}
+    </div>
+  )
+}
+
+function TemplateRecordRow({
+  currentAsset,
+  onActivate,
+  templateRecord,
+}: {
+  currentAsset?: LocalAsset
+  onActivate: (templateRecord: BackendRecord<ControlledTemplatePayload>) => void
+  templateRecord: BackendRecord<ControlledTemplatePayload>
+}) {
+  const template = templateRecord.payload
+  const sourceChanged =
+    Boolean(currentAsset?.fingerprint) && currentAsset?.fingerprint !== template.source.fingerprint
+
+  return (
+    <div className="controlled-template-row">
+      <div>
+        <strong>{templateRecord.label}</strong>
+        <span>{template.templateId}</span>
+      </div>
+      <StatusChip
+        status={template.status === 'active' ? 'pass' : 'warning'}
+        label={template.status}
+      />
+      <div>
+        <strong>{template.classification.category}</strong>
+        <span>{titleize(template.classification.domain)} / {titleize(template.classification.kind)}</span>
+      </div>
+      <div>
+        <strong>{template.tags.industries.length || 0} profile(s)</strong>
+        <span>{template.tags.solutions.slice(0, 3).map(titleize).join(', ') || 'No solution tags'}</span>
+      </div>
+      <div>
+        <strong>{sourceChanged ? 'Source changed' : template.source.sourceFamily}</strong>
+        <span>{template.source.relativePath}</span>
+      </div>
+      {template.status === 'active' ? (
+        <span className="controlled-state">Active</span>
+      ) : (
+        <button className="secondary-action compact" onClick={() => onActivate(templateRecord)} type="button">
+          <CheckCircle2 size={14} />
+          Activate
+        </button>
+      )}
     </div>
   )
 }

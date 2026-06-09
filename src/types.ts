@@ -159,6 +159,7 @@ export type SavedVersionKind =
   | 'integration_contract'
   | 'backend_snapshot'
   | 'adapter_dry_run'
+  | 'controlled_template'
 
 export type SavedVersion = {
   id: string
@@ -177,6 +178,7 @@ export type BackendRecordKind =
   | 'mapping_validation'
   | 'integration_contract'
   | 'adapter_contract'
+  | 'controlled_template'
 
 export type BackendRecord<TPayload = unknown> = {
   id: string
@@ -269,6 +271,7 @@ export type LocalAsset = {
   absolutePath: string
   sizeBytes: number
   lastModified: string
+  fingerprint: string
 }
 
 export type AssetRegistry = {
@@ -282,4 +285,25 @@ export type AssetRegistry = {
     byCategory: Record<string, number>
     bySourceFamily: Record<string, number>
   }
+}
+
+export type ControlledTemplateStatus = 'candidate' | 'draft' | 'active' | 'retired'
+
+export type ControlledTemplatePayload = {
+  templateId: string
+  status: ControlledTemplateStatus
+  versionLabel: string
+  promotedAt: string
+  source: LocalAsset
+  classification: {
+    category: string
+    domain: string
+    kind: LocalAsset['kind']
+    sourceFamily: string
+  }
+  tags: {
+    industries: string[]
+    solutions: string[]
+  }
+  provenanceNotes: string
 }

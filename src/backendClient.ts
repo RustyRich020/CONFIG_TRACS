@@ -6,12 +6,15 @@ import type {
   BackendHealth,
   BackendRecord,
   BackendRecordKind,
+  ControlledTemplatePayload,
+  ControlledTemplateStatus,
   ConnectorPreviewResult,
   ConnectorSourceMetadata,
   CsvSchemaInference,
   DeploymentState,
   MappingManifest,
   MappingValidationResult,
+  LocalAsset,
   StatusLevel,
 } from './types'
 
@@ -39,6 +42,13 @@ function summarizeStatus(records: BackendRecord[]): StatusLevel {
 function nextVersion(records: BackendRecord[], kind: BackendRecordKind, label: string) {
   const matching = records.filter((record) => record.kind === kind && record.label === label)
   return matching.length > 0 ? Math.max(...matching.map((record) => record.version)) + 1 : 1
+}
+
+function titleForKind(kind: LocalAsset['kind']) {
+  return kind
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
 }
 
 function parseCsvLine(line: string) {
@@ -360,6 +370,76 @@ export class LocalBackendClient {
     )
   }
 
+  async listControlledTemplates(): Promise<BackendRecord<ControlledTemplatePayload>[]> {
+    return this.listRecords().then((records) =>
+      records.filter((record) => record.kind === 'controlled_template'),
+    ) as Promise<BackendRecord<ControlledTemplatePayload>[]>
+  }
+
+  async promoteAssetToTemplate({
+    asset,
+    industries,
+    solutions,
+    status = 'draft',
+  }: {
+    asset: LocalAsset
+    industries: string[]
+    solutions: string[]
+    status?: ControlledTemplateStatus
+  }): Promise<BackendRecord<ControlledTemplatePayload>> {
+    const payload: ControlledTemplatePayload = {
+      templateId: `tpl-${asset.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 72)}-${asset.id.slice(0, 8)}`,
+      status,
+      versionLabel: 'v1',
+      promotedAt: new Date().toISOString(),
+      source: asset,
+      classification: {
+        category: asset.category,
+        domain: asset.domain,
+        kind: asset.kind,
+        sourceFamily: asset.sourceFamily,
+      },
+      tags: {
+        industries,
+        solutions,
+      },
+      provenanceNotes: `Promoted from local asset registry path ${asset.relativePath} for controlled TRACS template review.`,
+    }
+
+    return this.saveRecord({
+      kind: 'controlled_template',
+      label: asset.name,
+      status: status === 'active' ? 'pass' : 'warning',
+      summary: `${asset.category} ${titleForKind(asset.kind)} promoted from ${asset.sourceFamily}.`,
+      payload,
+    })
+  }
+
+  async updateControlledTemplate(
+    record: BackendRecord<ControlledTemplatePayload>,
+    updates: Partial<ControlledTemplatePayload>,
+  ): Promise<BackendRecord<ControlledTemplatePayload>> {
+    const nextStatus = updates.status ?? record.payload.status
+    return this.saveRecord({
+      kind: 'controlled_template',
+      label: record.label,
+      status: nextStatus === 'active' ? 'pass' : 'warning',
+      summary: `${record.payload.classification.category} template updated to ${nextStatus}.`,
+      payload: {
+        ...record.payload,
+        ...updates,
+        classification: {
+          ...record.payload.classification,
+          ...updates.classification,
+        },
+        tags: {
+          ...record.payload.tags,
+          ...updates.tags,
+        },
+      },
+    })
+  }
+
   async loadAssetRegistry(): Promise<AssetRegistry> {
     return {
       root: 'API not configured',
@@ -588,6 +668,52 @@ class ApiBackendClient {
       return await this.request<BackendRecord[]>('/api/integration-contracts')
     } catch {
       return this.localFallback.listIntegrationContracts()
+    }
+  }
+
+  async listControlledTemplates(): Promise<BackendRecord<ControlledTemplatePayload>[]> {
+    try {
+      return await this.request<BackendRecord<ControlledTemplatePayload>[]>('/api/templates')
+    } catch {
+      return this.localFallback.listControlledTemplates()
+    }
+  }
+
+  async promoteAssetToTemplate({
+    asset,
+    industries,
+    solutions,
+    status = 'draft',
+  }: {
+    asset: LocalAsset
+    industries: string[]
+    solutions: string[]
+    status?: ControlledTemplateStatus
+  }): Promise<BackendRecord<ControlledTemplatePayload>> {
+    try {
+      return await this.request<BackendRecord<ControlledTemplatePayload>>('/api/templates/promote', {
+        method: 'POST',
+        body: JSON.stringify({ asset, industries, solutions, status }),
+      })
+    } catch {
+      return this.localFallback.promoteAssetToTemplate({ asset, industries, solutions, status })
+    }
+  }
+
+  async updateControlledTemplate(
+    record: BackendRecord<ControlledTemplatePayload>,
+    updates: Partial<ControlledTemplatePayload>,
+  ): Promise<BackendRecord<ControlledTemplatePayload>> {
+    try {
+      return await this.request<BackendRecord<ControlledTemplatePayload>>(
+        `/api/templates/${encodeURIComponent(record.id)}`,
+        {
+          method: 'PUT',
+          body: JSON.stringify(updates),
+        },
+      )
+    } catch {
+      return this.localFallback.updateControlledTemplate(record, updates)
     }
   }
 

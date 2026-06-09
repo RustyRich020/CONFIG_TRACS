@@ -74,6 +74,10 @@ function assetKind(extension) {
   return 'reference'
 }
 
+function fingerprintAsset(relativePath, metadata) {
+  return Buffer.from(`${relativePath}:${metadata.size}:${metadata.mtimeMs}`).toString('base64url')
+}
+
 async function walk(root, current, assets, options) {
   if (assets.length >= options.limit) return
   const entries = await readdir(current, { withFileTypes: true })
@@ -110,6 +114,7 @@ async function walk(root, current, assets, options) {
       absolutePath: fullPath,
       sizeBytes: metadata.size,
       lastModified: metadata.mtime.toISOString(),
+      fingerprint: fingerprintAsset(relativePath, metadata),
     })
   }
 }

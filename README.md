@@ -15,6 +15,7 @@ This prototype now includes the first practical build phases for TRACS:
 9. Mapping Run Persistence
 10. Integration Contract Persistence
 11. Local Asset Registry + Template Library v1
+12. Controlled Template Promotion + Template Records v1
 
 ## What It Proves
 
@@ -45,6 +46,8 @@ This prototype now includes the first practical build phases for TRACS:
 - Provides a Contract workspace for saving, exporting, and reviewing contract history.
 - Scans `C:\Users\Allen\MYROBOTS` for local QMS templates, schemas, manifests, and reference assets.
 - Extends the Templates view into a filterable Template Library backed by the local asset registry.
+- Promotes selected local assets into controlled TRACS template records with source provenance, tags, status, and version history.
+- Flags controlled template records against the latest local asset fingerprint when the registry is available.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
@@ -107,9 +110,9 @@ npm run build
 
 ## Next Phase
 
-Use the local asset registry to inform the real backend model:
+Use controlled templates and local schemas to inform the real backend model:
 
-1. Promote selected MYROBOTS templates into controlled TRACS template records.
-2. Use `DATABASE-SCHEMAS` assets to design the first database-backed run registry.
-3. Add database-backed record storage behind the existing API routes.
+1. Use `DATABASE-SCHEMAS` assets to design the first database-backed record registry.
+2. Add database-backed record storage behind the existing API routes.
+3. Add template detail editing for category/domain/tag overrides.
 4. Build credential-backed Snowflake and SharePoint metadata discovery.

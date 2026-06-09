@@ -449,7 +449,7 @@
 
 .asset-row {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto 110px 110px;
+  grid-template-columns: minmax(220px, 1fr) auto 110px 110px auto;
   align-items: center;
   gap: 12px;
   padding: 12px 0;
@@ -485,6 +485,76 @@
   color: #687878;
   font-size: 11px;
   font-weight: 760;
+}
+
+.secondary-action.compact {
+  min-height: 32px;
+  padding-inline: 10px;
+  font-size: 12px;
+}
+
+.controlled-state {
+  display: inline-flex;
+  justify-content: center;
+  min-width: 80px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: #0d5f63;
+  background: #e7f5f3;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.controlled-template-panel {
+  margin-top: 16px;
+}
+
+.controlled-template-table {
+  display: grid;
+  padding: 8px 14px 14px;
+}
+
+.controlled-template-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.1fr) 96px minmax(160px, 0.9fr) minmax(150px, 0.85fr) minmax(220px, 1.3fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  border-bottom: 1px solid #edf2f1;
+  color: #617171;
+  font-size: 12px;
+}
+
+.controlled-template-row:last-child {
+  border-bottom: 0;
+}
+
+.controlled-template-head {
+  min-height: 32px;
+  color: #7a8989;
+  font-size: 11px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.controlled-template-row strong,
+.controlled-template-row span {
+  display: block;
+}
+
+.controlled-template-row strong {
+  overflow-wrap: anywhere;
+  color: #1e3030;
+  font-size: 12px;
+}
+
+.controlled-template-row div > span {
+  overflow-wrap: anywhere;
+  margin-top: 4px;
+  color: #718080;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .version-summary {
@@ -1599,7 +1669,8 @@
   .schema-row,
   .version-row,
   .contract-version-row,
-  .asset-row {
+  .asset-row,
+  .controlled-template-row {
     grid-template-columns: 1fr;
     gap: 5px;
     padding: 10px 0;
@@ -1608,7 +1679,8 @@
   .table-head,
   .mapping-head,
   .schema-head,
-  .version-head {
+  .version-head,
+  .controlled-template-head {
     display: none;
   }
 }

@@ -15,7 +15,7 @@ function jsonResponse(res, statusCode, payload) {
   res.writeHead(statusCode, {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'content-type',
-    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+    'Access-Control-Allow-Methods': 'GET,POST,PUT,OPTIONS',
     'Content-Type': 'application/json;charset=utf-8',
   })
   res.end(JSON.stringify(payload, null, 2))
@@ -91,6 +91,56 @@ async function listIntegrationContracts() {
   return records.filter((record) => record.kind === 'integration_contract')
 }
 
+async function listControlledTemplates() {
+  const records = await readRecords()
+  return records.filter((record) => record.kind === 'controlled_template')
+}
+
+async function getRecord(recordId) {
+  const records = await readRecords()
+  return records.find((record) => record.id === recordId)
+}
+
+function slug(value) {
+  return String(value ?? 'template')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 72)
+}
+
+function createControlledTemplatePayload(body) {
+  const asset = body.asset
+  if (!asset?.id || !asset?.name || !asset?.relativePath) {
+    throw new Error('Template promotion requires an asset with id, name, and relativePath.')
+  }
+
+  const now = new Date().toISOString()
+  const category = body.category ?? asset.category ?? 'Reference'
+  const domain = body.domain ?? asset.domain ?? 'reference'
+  const status = body.status ?? 'draft'
+  return {
+    templateId: body.templateId ?? `tpl-${slug(asset.name)}-${asset.id.slice(0, 8)}`,
+    status,
+    versionLabel: body.versionLabel ?? 'v1',
+    promotedAt: body.promotedAt ?? now,
+    source: asset,
+    classification: {
+      category,
+      domain,
+      kind: body.kind ?? asset.kind,
+      sourceFamily: asset.sourceFamily ?? 'MYROBOTS',
+    },
+    tags: {
+      industries: body.industries ?? [],
+      solutions: body.solutions ?? [],
+    },
+    provenanceNotes:
+      body.provenanceNotes ??
+      `Promoted from local asset registry path ${asset.relativePath} for controlled TRACS template review.`,
+  }
+}
+
 function createDeploymentPayload({ config, deployment }) {
   return {
     environment: config.environment.environment,
@@ -148,6 +198,66 @@ async function handleRequest(req, res) {
         await scanAssetRegistry({
           root: url.searchParams.get('root') ?? undefined,
           limit: Number(url.searchParams.get('limit') ?? 500),
+        }),
+      )
+      return
+    }
+
+    if (url.pathname === '/api/templates') {
+      if (req.method === 'GET') {
+        jsonResponse(res, 200, await listControlledTemplates())
+        return
+      }
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/templates/promote') {
+      const payload = createControlledTemplatePayload(await parseBody(req))
+      jsonResponse(
+        res,
+        201,
+        await saveRecord({
+          kind: 'controlled_template',
+          label: payload.source.name,
+          status: payload.status === 'active' ? 'pass' : 'warning',
+          summary: `${payload.classification.category} ${payload.classification.kind} promoted from ${payload.source.sourceFamily}.`,
+          payload,
+        }),
+      )
+      return
+    }
+
+    const templateMatch = url.pathname.match(/^\/api\/templates\/([^/]+)$/)
+    if (req.method === 'PUT' && templateMatch) {
+      const previous = await getRecord(decodeURIComponent(templateMatch[1]))
+      if (!previous || previous.kind !== 'controlled_template') {
+        jsonResponse(res, 404, { error: 'Template record not found' })
+        return
+      }
+
+      const body = await parseBody(req)
+      const payload = {
+        ...previous.payload,
+        ...body,
+        classification: {
+          ...previous.payload.classification,
+          ...(body.classification ?? {}),
+        },
+        tags: {
+          ...previous.payload.tags,
+          ...(body.tags ?? {}),
+        },
+      }
+      jsonResponse(
+        res,
+        200,
+        await saveRecord({
+          kind: 'controlled_template',
+          label: previous.label,
+          status: payload.status === 'active' ? 'pass' : 'warning',
+          summary:
+            body.summary ??
+            `${payload.classification.category} template updated to ${payload.status}.`,
+          payload,
         }),
       )
       return
