@@ -164,6 +164,8 @@ export type SavedVersionKind =
   | 'canonical_load'
   | 'readiness_evidence_packet'
   | 'report_catalog_item'
+  | 'extraction_job'
+  | 'extraction_run'
 
 export type SavedVersion = {
   id: string
@@ -188,6 +190,8 @@ export type BackendRecordKind =
   | 'report_catalog_item'
   | 'canonical_load'
   | 'readiness_evidence_packet'
+  | 'extraction_job'
+  | 'extraction_run'
 
 export type BackendRecord<TPayload = unknown> = {
   id: string
@@ -432,6 +436,33 @@ export type CanonicalLoadRequest = {
   connectorType?: string
   sourceObject?: string
   targetObject?: string
+}
+
+export type ExtractionJobPayload = {
+  jobId: string
+  name: string
+  status: 'draft' | 'active' | 'paused'
+  scheduleMode: 'manual' | 'scheduled_stub'
+  mappingId: string
+  connectorId: string
+  connectorType: string
+  sourceObject: string
+  targetObject: string
+  createdAt: string
+  updatedAt: string
+  evidence: string
+}
+
+export type ExtractionRunPayload = {
+  runId: string
+  jobId: string
+  startedAt: string
+  finishedAt: string
+  status: StatusLevel
+  request: CanonicalLoadRequest
+  result: CanonicalLoadResult
+  evidence: string
+  warnings: string[]
 }
 
 export type ReadinessEvidenceException = {

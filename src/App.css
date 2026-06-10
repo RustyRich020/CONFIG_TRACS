@@ -209,6 +209,11 @@
   background: #0a4f52;
 }
 
+.primary-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -461,6 +466,33 @@
   display: grid;
   grid-template-columns: minmax(360px, 1fr) minmax(440px, 1.2fr) minmax(320px, 0.9fr);
   gap: 16px;
+}
+
+.extraction-job-panel {
+  margin-top: 16px;
+}
+
+.extraction-job-grid {
+  display: grid;
+  grid-template-columns: minmax(420px, 1fr) minmax(360px, 0.85fr);
+  gap: 16px;
+  padding: 16px;
+}
+
+.extraction-job-form {
+  padding: 0;
+}
+
+.extraction-job-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  grid-column: 1 / -1;
+}
+
+.extraction-run-history {
+  margin: 0 16px 16px;
 }
 
 .workflow-grid,
@@ -2160,6 +2192,7 @@
   .traceability-grid,
   .report-grid,
   .report-editor-grid,
+  .extraction-job-grid,
   .template-editor-grid,
   .mapping-grid,
   .asset-library-grid,

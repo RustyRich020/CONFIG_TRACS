@@ -63,6 +63,8 @@ import type {
   ConnectorTestResult,
   CsvSchemaInference,
   DeploymentState,
+  ExtractionJobPayload,
+  ExtractionRunPayload,
   MappingValidationResult,
   QualityEvent,
   ReportCatalogItem,
@@ -853,6 +855,94 @@ function App() {
     )
   }
 
+  async function saveExtractionJob() {
+    if (!config) return
+    const mapping = config.mappings.quality_event
+    const connector =
+      config.connectors.connectors[canonicalLoadConnectorId] ??
+      config.connectors.connectors[mapping.source_connector]
+    const connectorId = config.connectors.connectors[canonicalLoadConnectorId]
+      ? canonicalLoadConnectorId
+      : mapping.source_connector
+    const profile = canonicalLoadProfileForConnector(connectorId, connector, mapping)
+    const now = new Date().toISOString()
+    const payload: ExtractionJobPayload = {
+      jobId: `extraction_job:${profile.sourceConnector}:${profile.targetObject}`,
+      name: `${connector.display_name} ${profile.targetObject} extraction`,
+      status: 'active',
+      scheduleMode: 'manual',
+      mappingId: profile.mappingId,
+      connectorId: profile.sourceConnector,
+      connectorType: profile.connectorType,
+      sourceObject: profile.sourceObject,
+      targetObject: profile.targetObject,
+      createdAt: now,
+      updatedAt: now,
+      evidence: `${connector.display_name} extraction job routes ${profile.sourceObject} into ${profile.targetObject}.`,
+    }
+    const saved = await backendClient.saveRecord({
+      kind: 'extraction_job',
+      label: payload.jobId,
+      status: 'pass',
+      summary: payload.evidence,
+      payload,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'extraction_job',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record('extraction', 'save_job', `${payload.name} saved as extraction job v${saved.version}.`)
+  }
+
+  async function runExtractionJob(job: BackendRecord<ExtractionJobPayload>) {
+    const request = {
+      mappingId: job.payload.mappingId,
+      sourceConnector: job.payload.connectorId,
+      connectorType: job.payload.connectorType,
+      sourceObject: job.payload.sourceObject,
+      targetObject: job.payload.targetObject,
+    }
+    const startedAt = new Date().toISOString()
+    const result = await backendClient.loadCanonicalFromMapping(request)
+    const finishedAt = new Date().toISOString()
+    const status: StatusLevel = result.record?.status ?? (result.warnings.length > 0 ? 'warning' : 'pass')
+    const payload: ExtractionRunPayload = {
+      runId: `extraction_run:${job.payload.jobId}:${finishedAt}`,
+      jobId: job.payload.jobId,
+      startedAt,
+      finishedAt,
+      status,
+      request,
+      result,
+      evidence: `${job.payload.name} completed. ${result.evidence}`,
+      warnings: result.warnings,
+    }
+    const saved = await backendClient.saveRecord({
+      kind: 'extraction_run',
+      label: job.payload.jobId,
+      status,
+      summary: payload.evidence,
+      payload,
+    })
+    await Promise.all([refreshBackend(), refreshWorkflowSurface()])
+    saveVersion(
+      createSavedVersion({
+        kind: 'extraction_run',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record('extraction', 'run_job', `${job.payload.name} extraction job run saved as v${saved.version}.`)
+  }
+
   async function persistReadinessEvidencePacket({
     approval,
     download,
@@ -1128,6 +1218,12 @@ function App() {
             connectorEntries={connectorEntries}
             csvSchema={csvSchema}
             csvText={csvText}
+            extractionJobs={backendRecords.filter(
+              (record): record is BackendRecord<ExtractionJobPayload> => record.kind === 'extraction_job',
+            )}
+            extractionRuns={backendRecords.filter(
+              (record): record is BackendRecord<ExtractionRunPayload> => record.kind === 'extraction_run',
+            )}
             latestCanonicalLoad={backendRecords.find(
               (record): record is BackendRecord<CanonicalLoadResult> =>
                 record.kind === 'canonical_load',
@@ -1136,8 +1232,10 @@ function App() {
             mappingResult={mappingResult}
             mappingRuns={mappingRuns.quality_event ?? []}
             onCsvTextChange={setCsvText}
+            onCreateExtractionJob={saveExtractionJob}
             onLoadConnectorChange={setCanonicalLoadConnectorId}
             onLoadCanonical={loadCanonicalFromMapping}
+            onRunExtractionJob={runExtractionJob}
             onValidate={runMappingValidation}
           />
         ) : activeView === 'Quality Events' ? (
@@ -2426,31 +2524,47 @@ function MappingStudio({
   connectorEntries,
   csvSchema,
   csvText,
+  extractionJobs,
+  extractionRuns,
   latestCanonicalLoad,
   mapping,
   mappingResult,
   mappingRuns,
   onCsvTextChange,
+  onCreateExtractionJob,
   onLoadConnectorChange,
   onLoadCanonical,
+  onRunExtractionJob,
   onValidate,
 }: {
   canonicalLoadConnectorId: string
   connectorEntries: Array<[string, AppConfig['connectors']['connectors'][string]]>
   csvSchema: CsvSchemaInference | null
   csvText: string
+  extractionJobs: BackendRecord<ExtractionJobPayload>[]
+  extractionRuns: BackendRecord<ExtractionRunPayload>[]
   latestCanonicalLoad?: BackendRecord<CanonicalLoadResult>
   mapping: AppConfig['mappings'][string]
   mappingResult: MappingValidationResult | null
   mappingRuns: BackendRecord[]
   onCsvTextChange: (value: string) => void
+  onCreateExtractionJob: () => void
   onLoadConnectorChange: (value: string) => void
   onLoadCanonical: () => void
+  onRunExtractionJob: (job: BackendRecord<ExtractionJobPayload>) => void
   onValidate: () => void
 }) {
   const summary = mappingResult
     ? summarizeReadiness(mappingResult.checks)
     : ({ pass: 0, warning: 0, blocking: 0 } as Record<StatusLevel, number>)
+  const [selectedJobId, setSelectedJobId] = useState(extractionJobs[0]?.id ?? '')
+  const selectedJob =
+    extractionJobs.find((job) => job.id === selectedJobId) ??
+    extractionJobs.find((job) => job.payload.connectorId === canonicalLoadConnectorId) ??
+    extractionJobs[0]
+  const selectedJobRuns = selectedJob
+    ? extractionRuns.filter((run) => run.payload.jobId === selectedJob.payload.jobId)
+    : []
 
   return (
     <>
@@ -2620,6 +2734,94 @@ function MappingStudio({
             </div>
           ) : null}
         </section>
+      </section>
+
+      <section className="panel extraction-job-panel">
+        <PanelHeader
+          icon={ServerCog}
+          title="Connector Extraction Jobs"
+          subtitle="Save reusable connector-backed jobs, then run them into canonical load and traceability records."
+        />
+        <div className="extraction-job-grid">
+          <div className="template-editor-form extraction-job-form">
+            <label>
+              <span>Saved job</span>
+              <select
+                value={selectedJob?.id ?? ''}
+                onChange={(event) => setSelectedJobId(event.target.value)}
+              >
+                {extractionJobs.length > 0 ? (
+                  extractionJobs.map((job) => (
+                    <option key={job.id} value={job.id}>
+                      {job.payload.name}
+                    </option>
+                  ))
+                ) : (
+                  <option value="">No saved extraction jobs</option>
+                )}
+              </select>
+            </label>
+            <label>
+              <span>Active connector profile</span>
+              <input
+                readOnly
+                value={
+                  connectorEntries.find(([connectorId]) => connectorId === canonicalLoadConnectorId)?.[1]
+                    .display_name ?? canonicalLoadConnectorId
+                }
+              />
+            </label>
+            <div className="extraction-job-actions">
+              <button className="secondary-action" onClick={onCreateExtractionJob} type="button">
+                <ServerCog size={15} />
+                Save Extraction Job
+              </button>
+              <button
+                className="primary-action"
+                disabled={!selectedJob}
+                onClick={() => selectedJob && onRunExtractionJob(selectedJob)}
+                type="button"
+              >
+                <Database size={16} />
+                Run Job
+              </button>
+            </div>
+          </div>
+          <div className="latest-contract">
+            {selectedJob ? (
+              <>
+                <StatusChip status={selectedJob.status} label={selectedJob.payload.status} />
+                <h3>{selectedJob.payload.name}</h3>
+                <p>{selectedJob.payload.evidence}</p>
+                <div className="metadata-grid">
+                  <Metadata label="Connector" value={selectedJob.payload.connectorId} />
+                  <Metadata label="Source object" value={selectedJob.payload.sourceObject} />
+                  <Metadata label="Target object" value={selectedJob.payload.targetObject} />
+                  <Metadata label="Runs" value={String(selectedJobRuns.length)} />
+                </div>
+              </>
+            ) : (
+              <div className="empty-state compact">Save the active connector profile as an extraction job.</div>
+            )}
+          </div>
+        </div>
+        {selectedJobRuns.length > 0 ? (
+          <div className="mapping-run-history extraction-run-history">
+            <h4>Extraction Run History</h4>
+            {selectedJobRuns.slice(0, 4).map((run) => (
+              <div className="mapping-run-row" key={run.id}>
+                <div>
+                  <strong>{run.payload.jobId}</strong>
+                  <span>
+                    v{run.version} / {new Date(run.createdAt).toLocaleString()} / {run.payload.result.objectCount} object(s), {run.payload.result.linkCount} link(s)
+                  </span>
+                  {run.payload.warnings.length > 0 ? <small>{run.payload.warnings.join(' ')}</small> : null}
+                </div>
+                <StatusChip status={run.status} label={run.status} />
+              </div>
+            ))}
+          </div>
+        ) : null}
       </section>
 
       {csvSchema ? (
