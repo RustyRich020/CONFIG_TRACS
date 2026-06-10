@@ -163,6 +163,7 @@ export type SavedVersionKind =
   | 'canonical_object'
   | 'canonical_load'
   | 'readiness_evidence_packet'
+  | 'report_catalog_item'
 
 export type SavedVersion = {
   id: string
@@ -404,6 +405,9 @@ export type ReportCatalogItem = {
   url: string
   sourceDependencies: string[]
   domains: string[]
+  publishStatus?: 'draft' | 'blocked' | 'published'
+  publishGateEvidence?: string
+  publishedAt?: string
 }
 
 export type CanonicalLoadResult = {

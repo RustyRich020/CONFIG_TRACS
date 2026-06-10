@@ -227,6 +227,39 @@ function reportFreshnessException(report: ReportCatalogItem): ReadinessEvidenceE
   }
 }
 
+function reportFreshnessStatus(lastRefresh: string, maxAgeHours: number) {
+  const ageHours = (Date.now() - Date.parse(lastRefresh)) / 36e5
+  if (!Number.isFinite(ageHours)) {
+    return {
+      refreshStatus: 'blocking' as StatusLevel,
+      freshnessEvidence: 'Last refresh timestamp is missing or invalid.',
+    }
+  }
+  const roundedAge = Math.max(0, Math.round(ageHours * 10) / 10)
+  return {
+    refreshStatus: ageHours <= maxAgeHours ? 'pass' as StatusLevel : 'warning' as StatusLevel,
+    freshnessEvidence: `Last refreshed ${roundedAge} hour(s) ago; threshold is ${maxAgeHours} hour(s).`,
+  }
+}
+
+function evaluateReportPublishGate(report: ReportCatalogItem, canonicalObjects: CanonicalObject[]) {
+  const availableObjectTypes = new Set(canonicalObjects.map((object) => object.objectType))
+  const missingDependencies = report.sourceDependencies.filter(
+    (dependency) => !availableObjectTypes.has(dependency),
+  )
+  const blockers = [
+    report.refreshStatus === 'pass' ? null : `freshness status is ${report.refreshStatus}`,
+    missingDependencies.length > 0 ? `missing canonical dependencies: ${missingDependencies.join(', ')}` : null,
+  ].filter((item): item is string => Boolean(item))
+  return {
+    status: blockers.length > 0 ? 'blocking' as StatusLevel : 'pass' as StatusLevel,
+    evidence:
+      blockers.length > 0
+        ? `Publish blocked because ${blockers.join('; ')}.`
+        : `Publish gate passed with ${report.sourceDependencies.length} canonical dependency check(s) and fresh report data.`,
+  }
+}
+
 function createReadinessEvidencePacket({
   backendRecords,
   environment,
@@ -829,6 +862,43 @@ function App() {
     )
   }
 
+  async function saveReportCatalogItem(report: ReportCatalogItem, publish: boolean) {
+    const freshness = reportFreshnessStatus(report.lastRefresh, report.maxAgeHours)
+    const normalizedReport: ReportCatalogItem = {
+      ...report,
+      ...freshness,
+    }
+    const gate = evaluateReportPublishGate(normalizedReport, canonicalObjects)
+    const payload: ReportCatalogItem = {
+      ...normalizedReport,
+      publishStatus: publish ? (gate.status === 'pass' ? 'published' : 'blocked') : 'draft',
+      publishGateEvidence: publish ? gate.evidence : 'Draft saved; publish gate has not been applied.',
+      publishedAt: publish && gate.status === 'pass' ? new Date().toISOString() : normalizedReport.publishedAt,
+    }
+    const saved = await backendClient.saveRecord({
+      kind: 'report_catalog_item',
+      label: payload.id,
+      status: publish ? gate.status : payload.refreshStatus,
+      summary: publish ? gate.evidence : `${payload.title} report catalog draft saved.`,
+      payload,
+    })
+    await Promise.all([refreshBackend(), refreshWorkflowSurface()])
+    saveVersion(
+      createSavedVersion({
+        kind: 'report_catalog_item',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record(
+      'report',
+      publish ? 'publish_gate' : 'save_draft',
+      `${payload.title} saved as report catalog record v${saved.version}.`,
+    )
+  }
+
   if (error) {
     return (
       <main className="error-shell">
@@ -1053,7 +1123,11 @@ function App() {
             selectedEventId={selectedQualityEventId}
           />
         ) : activeView === 'Reports' ? (
-          <ReportCatalogView reports={reportCatalog} />
+          <ReportCatalogView
+            canonicalObjects={canonicalObjects}
+            onSaveReport={saveReportCatalogItem}
+            reports={reportCatalog}
+          />
         ) : activeView === 'Evidence' ? (
           <EvidencePacketWorkspace
             backendRecords={backendRecords}
@@ -1907,8 +1981,18 @@ function TraceabilityView({
   )
 }
 
-function ReportCatalogView({ reports }: { reports: ReportCatalogItem[] }) {
+function ReportCatalogView({
+  canonicalObjects,
+  onSaveReport,
+  reports,
+}: {
+  canonicalObjects: CanonicalObject[]
+  onSaveReport: (report: ReportCatalogItem, publish: boolean) => void
+  reports: ReportCatalogItem[]
+}) {
   const staleCount = reports.filter((report) => report.refreshStatus !== 'pass').length
+  const [selectedReportId, setSelectedReportId] = useState(reports[0]?.id ?? '')
+  const selectedReport = reports.find((report) => report.id === selectedReportId) ?? reports[0]
 
   return (
     <>
@@ -1948,14 +2032,149 @@ function ReportCatalogView({ reports }: { reports: ReportCatalogItem[] }) {
                 <span className="chip active" key={dependency}>{dependency}</span>
               ))}
             </div>
-            <a className="secondary-link" href={report.url} target="_blank">
-              <ExternalLink size={15} />
-              Open Report
-            </a>
+            <div className="report-card-actions">
+              <button className="secondary-action compact" onClick={() => setSelectedReportId(report.id)} type="button">
+                <FileCog size={14} />
+                Edit
+              </button>
+              <a className="secondary-link" href={report.url} target="_blank">
+                <ExternalLink size={15} />
+                Open Report
+              </a>
+            </div>
           </article>
         ))}
       </section>
+
+      {selectedReport ? (
+        <ReportCatalogEditor
+          canonicalObjects={canonicalObjects}
+          key={selectedReport.id}
+          onSave={onSaveReport}
+          report={selectedReport}
+        />
+      ) : null}
     </>
+  )
+}
+
+function ReportCatalogEditor({
+  canonicalObjects,
+  onSave,
+  report,
+}: {
+  canonicalObjects: CanonicalObject[]
+  onSave: (report: ReportCatalogItem, publish: boolean) => void
+  report: ReportCatalogItem
+}) {
+  const [title, setTitle] = useState(report.title)
+  const [owner, setOwner] = useState(report.owner)
+  const [workspace, setWorkspace] = useState(report.workspace)
+  const [semanticModel, setSemanticModel] = useState(report.semanticModel)
+  const [lastRefresh, setLastRefresh] = useState(report.lastRefresh)
+  const [maxAgeHours, setMaxAgeHours] = useState(String(report.maxAgeHours))
+  const [url, setUrl] = useState(report.url)
+  const [dependencies, setDependencies] = useState(report.sourceDependencies.join(', '))
+  const [domains, setDomains] = useState(report.domains.join(', '))
+
+  function splitCsv(value: string) {
+    return value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+
+  function draftReport(): ReportCatalogItem {
+    const freshness = reportFreshnessStatus(lastRefresh, Number(maxAgeHours) || report.maxAgeHours)
+    return {
+      ...report,
+      title,
+      owner,
+      workspace,
+      semanticModel,
+      lastRefresh,
+      maxAgeHours: Number(maxAgeHours) || report.maxAgeHours,
+      url,
+      sourceDependencies: splitCsv(dependencies),
+      domains: splitCsv(domains),
+      ...freshness,
+    }
+  }
+
+  const previewReport = draftReport()
+  const gate = evaluateReportPublishGate(previewReport, canonicalObjects)
+
+  return (
+    <section className="panel report-editor-panel">
+      <PanelHeader
+        icon={FileCog}
+        title="Report Catalog Editor"
+        subtitle="Edit governed report metadata and run publish gates before release."
+      />
+      <div className="report-editor-grid">
+        <div className="template-editor-form">
+          <label>
+            <span>Title</span>
+            <input value={title} onChange={(event) => setTitle(event.target.value)} />
+          </label>
+          <label>
+            <span>Owner</span>
+            <input value={owner} onChange={(event) => setOwner(event.target.value)} />
+          </label>
+          <label>
+            <span>Workspace</span>
+            <input value={workspace} onChange={(event) => setWorkspace(event.target.value)} />
+          </label>
+          <label>
+            <span>Semantic model</span>
+            <input value={semanticModel} onChange={(event) => setSemanticModel(event.target.value)} />
+          </label>
+          <label>
+            <span>Last refresh</span>
+            <input value={lastRefresh} onChange={(event) => setLastRefresh(event.target.value)} />
+          </label>
+          <label>
+            <span>Freshness SLA hours</span>
+            <input value={maxAgeHours} onChange={(event) => setMaxAgeHours(event.target.value)} />
+          </label>
+          <label className="template-editor-notes">
+            <span>URL</span>
+            <input value={url} onChange={(event) => setUrl(event.target.value)} />
+          </label>
+          <label className="template-editor-notes">
+            <span>Source dependencies</span>
+            <input value={dependencies} onChange={(event) => setDependencies(event.target.value)} />
+          </label>
+          <label className="template-editor-notes">
+            <span>Domains</span>
+            <input value={domains} onChange={(event) => setDomains(event.target.value)} />
+          </label>
+          <div className="report-editor-actions">
+            <button className="secondary-action" onClick={() => onSave(draftReport(), false)} type="button">
+              <ServerCog size={15} />
+              Save Draft
+            </button>
+            <button className="primary-action" onClick={() => onSave(draftReport(), true)} type="button">
+              <CheckCircle2 size={16} />
+              Run Publish Gate
+            </button>
+          </div>
+        </div>
+        <div className="template-editor-summary">
+          <div className="latest-contract">
+            <StatusChip status={gate.status} label={previewReport.publishStatus ?? gate.status} />
+            <h3>{previewReport.title}</h3>
+            <p>{gate.evidence}</p>
+            <div className="metadata-grid">
+              <Metadata label="Freshness" value={previewReport.refreshStatus} />
+              <Metadata label="Freshness evidence" value={previewReport.freshnessEvidence} />
+              <Metadata label="Dependencies" value={previewReport.sourceDependencies.join(', ')} />
+              <Metadata label="Publish state" value={previewReport.publishStatus ?? 'unsaved draft'} />
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
   )
 }
 

@@ -62,6 +62,13 @@ async function listControlledTemplates() {
   return recordStore.listByKind('controlled_template')
 }
 
+async function reportCatalogForRead() {
+  const reports = await listReportCatalog()
+  const latestRecords = await recordStore.latestByKind('report_catalog_item')
+  const overrides = new Map(latestRecords.map((record) => [record.label, record.payload]))
+  return reports.map((report) => overrides.get(report.id) ?? report)
+}
+
 async function persistedCanonicalObjects() {
   const records = await recordStore.latestByKind('canonical_object')
   return records.map((record) => record.payload)
@@ -293,7 +300,7 @@ async function handleRequest(req, res) {
     }
 
     if (req.method === 'GET' && url.pathname === '/api/reports') {
-      jsonResponse(res, 200, await listReportCatalog())
+      jsonResponse(res, 200, await reportCatalogForRead())
       return
     }
 

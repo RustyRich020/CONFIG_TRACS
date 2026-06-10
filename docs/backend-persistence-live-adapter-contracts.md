@@ -74,6 +74,8 @@ The canonical workflow routes are sample-backed in v1. `server/canonicalService.
 
 The canonical load route persists mapped canonical objects and traceability links as latest-version backend records. `POST /api/canonical-loads` now accepts `mappingId`, `sourceConnector`, `connectorType`, `sourceObject`, and `targetObject`, allowing Snowflake, SharePoint Excel, and CSV connector profiles to produce distinct load evidence. Snowflake and SharePoint profile loads are still sample-backed until credential-backed extraction is enabled, so their canonical load records include warning evidence. After a canonical load, object and traceability routes prefer persisted records and only fall back to sample derivation when no canonical load has been run.
 
+Report catalog records now use YAML config as seed data and `report_catalog_item` backend records as governed overrides. The Reports workspace can save draft catalog edits or run publish gates. Publish gates block release when freshness is stale or declared source dependencies are not present in the canonical object registry.
+
 The report catalog route reads `public/config/reports/report_catalog.yaml` and computes `refreshStatus` from each report's `last_refresh` and `max_age_hours` values. The frontend browser-local fallback reads the same YAML file so report readiness behavior stays consistent with or without the API.
 
 ### Planned Saved Versions
