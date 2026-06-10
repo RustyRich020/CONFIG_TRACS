@@ -167,6 +167,7 @@ export type SavedVersionKind =
   | 'extraction_job'
   | 'extraction_run'
   | 'credential_validation'
+  | 'notification_delivery'
 
 export type SavedVersion = {
   id: string
@@ -194,6 +195,7 @@ export type BackendRecordKind =
   | 'extraction_job'
   | 'extraction_run'
   | 'credential_validation'
+  | 'notification_delivery'
 
 export type BackendRecord<TPayload = unknown> = {
   id: string
@@ -597,5 +599,30 @@ export type ReadinessEvidencePacket = {
   }
   openExceptions: ReadinessEvidenceException[]
   approval: ReadinessEvidenceApproval
+  evidence: string
+}
+
+export type NotificationDeliveryPayload = {
+  deliveryId: string
+  generatedAt: string
+  source: 'report_catalog' | 'readiness_evidence'
+  channels: Array<'email' | 'teams' | 'sharepoint_folder'>
+  recipients: string[]
+  subject: string
+  summary: string
+  evidence: unknown
+}
+
+export type NotificationDeliveryResult = {
+  deliveryId: string
+  deliveredAt: string
+  status: StatusLevel
+  channelResults: Array<{
+    channel: 'email' | 'teams' | 'sharepoint_folder'
+    status: StatusLevel
+    mode: 'dry_run'
+    target: string
+    evidence: string
+  }>
   evidence: string
 }

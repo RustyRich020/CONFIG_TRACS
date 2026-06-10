@@ -20,6 +20,8 @@ import type {
   MappingManifest,
   MappingValidationResult,
   LocalAsset,
+  NotificationDeliveryPayload,
+  NotificationDeliveryResult,
   QualityEvent,
   ReportCatalogItem,
   RecordStoreSchema,
@@ -634,6 +636,37 @@ export class LocalBackendClient {
     }
   }
 
+  async deliverNotificationDryRun(
+    payload: NotificationDeliveryPayload,
+  ): Promise<NotificationDeliveryResult & { record?: BackendRecord }> {
+    const deliveredAt = new Date().toISOString()
+    const channelResults = payload.channels.map((channel) => ({
+      channel,
+      status: 'warning' as StatusLevel,
+      mode: 'dry_run' as const,
+      target: 'browser-local fallback',
+      evidence: `${channel} delivery dry-run prepared in browser-local mode; API delivery adapter was not reachable.`,
+    }))
+    const result: NotificationDeliveryResult = {
+      deliveryId: payload.deliveryId,
+      deliveredAt,
+      status: 'warning',
+      channelResults,
+      evidence: `${payload.channels.length} notification delivery dry-run(s) prepared in browser-local fallback mode.`,
+    }
+    const record = await this.saveRecord({
+      kind: 'notification_delivery',
+      label: payload.subject,
+      status: result.status,
+      summary: result.evidence,
+      payload: {
+        request: payload,
+        result,
+      },
+    })
+    return { ...result, record }
+  }
+
   async discoverConnectorMetadata(
     connectorId: string,
     connector: AppConfig['connectors']['connectors'][string],
@@ -1087,6 +1120,22 @@ class ApiBackendClient {
       })
     } catch {
       return this.localFallback.saveRecord({ kind, label, status, summary, payload })
+    }
+  }
+
+  async deliverNotificationDryRun(
+    payload: NotificationDeliveryPayload,
+  ): Promise<NotificationDeliveryResult & { record?: BackendRecord }> {
+    try {
+      return await this.request<NotificationDeliveryResult & { record?: BackendRecord }>(
+        '/api/notifications/delivery-dry-run',
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        },
+      )
+    } catch {
+      return this.localFallback.deliverNotificationDryRun(payload)
     }
   }
 

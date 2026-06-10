@@ -16,6 +16,7 @@ import {
   validateConnectorCredentials,
 } from './credentialMetadataAdapters.mjs'
 import { discoverCsvMetadata, previewCsvRows } from './csvAdapter.mjs'
+import { runNotificationDeliveryDryRun } from './notificationDeliveryAdapters.mjs'
 import { createFileRecordStore } from './recordStore.mjs'
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -533,6 +534,23 @@ async function handleRequest(req, res) {
 
     if (req.method === 'POST' && url.pathname === '/api/records') {
       jsonResponse(res, 201, await recordStore.saveRecord(await parseBody(req)))
+      return
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/notifications/delivery-dry-run') {
+      const payload = await parseBody(req)
+      const result = runNotificationDeliveryDryRun(payload)
+      const record = await recordStore.saveRecord({
+        kind: 'notification_delivery',
+        label: payload.subject ?? payload.deliveryId ?? 'notification delivery dry-run',
+        status: result.status,
+        summary: result.evidence,
+        payload: {
+          request: payload,
+          result,
+        },
+      })
+      jsonResponse(res, 200, { ...result, record })
       return
     }
 

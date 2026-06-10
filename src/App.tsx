@@ -69,6 +69,8 @@ import type {
   ExtractionJobPayload,
   ExtractionRunPayload,
   MappingValidationResult,
+  NotificationDeliveryPayload,
+  NotificationDeliveryResult,
   QualityEvent,
   ReportCatalogItem,
   ReadinessCheck,
@@ -403,6 +405,27 @@ function createExtractionQueueExport(
         evidence: job.payload.evidence,
       }
     }),
+  }
+}
+
+function notificationToDeliveryPayload(
+  source: NotificationDeliveryPayload['source'],
+  subject: string,
+  notification: {
+    notificationId: string
+    recipients: string[]
+    summary: string
+  } & Record<string, unknown>,
+): NotificationDeliveryPayload {
+  return {
+    deliveryId: `notification_delivery:${notification.notificationId}`,
+    generatedAt: new Date().toISOString(),
+    source,
+    channels: ['email', 'teams', 'sharepoint_folder'],
+    recipients: notification.recipients,
+    subject,
+    summary: notification.summary,
+    evidence: notification,
   }
 }
 
@@ -1193,6 +1216,25 @@ function App() {
     )
   }
 
+  async function deliverNotifications(payload: NotificationDeliveryPayload) {
+    const result = await backendClient.deliverNotificationDryRun(payload)
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'notification_delivery',
+        label: payload.subject,
+        status: result.status,
+        summary: result.evidence,
+        payload: result,
+      }),
+    )
+    record(
+      'notification',
+      'delivery_dry_run',
+      `${payload.subject} delivery dry-run completed with ${result.status} status.`,
+    )
+  }
+
   async function saveReportCatalogItem(report: ReportCatalogItem, action: ReportCatalogSaveAction) {
     const freshness = reportFreshnessStatus(report.lastRefresh, report.maxAgeHours)
     const normalizedReport: ReportCatalogItem = {
@@ -1532,16 +1574,26 @@ function App() {
         ) : activeView === 'Reports' ? (
           <ReportCatalogView
             canonicalObjects={canonicalObjects}
+            deliveryRecords={backendRecords.filter(
+              (record): record is BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }> =>
+                record.kind === 'notification_delivery',
+            )}
+            onDeliverNotifications={deliverNotifications}
             onSaveReport={saveReportCatalogItem}
             reports={reportCatalog}
           />
         ) : activeView === 'Evidence' ? (
           <EvidencePacketWorkspace
             backendRecords={backendRecords}
+            deliveryRecords={backendRecords.filter(
+              (record): record is BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }> =>
+                record.kind === 'notification_delivery',
+            )}
             evidenceRecords={backendRecords.filter(
               (record) => record.kind === 'readiness_evidence_packet',
             )}
             environment={config.environment.environment.name}
+            onDeliverNotifications={deliverNotifications}
             onDownloadPacket={(approval) => persistReadinessEvidencePacket({ approval, download: true })}
             onSavePacket={(approval) => persistReadinessEvidencePacket({ approval, download: false })}
             readinessChecks={readinessChecks}
@@ -1592,8 +1644,10 @@ function App() {
 
 function EvidencePacketWorkspace({
   backendRecords,
+  deliveryRecords,
   environment,
   evidenceRecords,
+  onDeliverNotifications,
   onDownloadPacket,
   onSavePacket,
   readinessChecks,
@@ -1601,8 +1655,10 @@ function EvidencePacketWorkspace({
   reports,
 }: {
   backendRecords: BackendRecord[]
+  deliveryRecords: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>[]
   environment: string
   evidenceRecords: BackendRecord[]
+  onDeliverNotifications: (payload: NotificationDeliveryPayload) => void
   onDownloadPacket: (approval: ReadinessEvidenceApproval) => void
   onSavePacket: (approval: ReadinessEvidenceApproval) => void
   readinessChecks: ReadinessCheck[]
@@ -1669,6 +1725,15 @@ function EvidencePacketWorkspace({
     dispositions: approvalDispositions.map(({ disposition }) => disposition),
     auditHistory: approvalAuditHistory,
   }
+  const evidenceNotification = createEvidenceApprovalNotification(packet, approval)
+  const evidenceDeliveryPayload = notificationToDeliveryPayload(
+    'readiness_evidence',
+    `${environment.toUpperCase()} readiness evidence approval`,
+    evidenceNotification,
+  )
+  const evidenceDeliveryRecords = deliveryRecords.filter(
+    (record) => record.payload.request.source === 'readiness_evidence',
+  )
 
   function approvalForSave(): ReadinessEvidenceApproval {
     const timestamp = new Date().toISOString()
@@ -1735,12 +1800,20 @@ function EvidencePacketWorkspace({
           <button
             className="secondary-action"
             onClick={() =>
-              downloadJson('tracs-evidence-approval-notifications.json', createEvidenceApprovalNotification(packet, approvalForSave()))
+              downloadJson('tracs-evidence-approval-notifications.json', evidenceNotification)
             }
             type="button"
           >
             <Bell size={15} />
             Export Notices
+          </button>
+          <button
+            className="secondary-action"
+            onClick={() => onDeliverNotifications(evidenceDeliveryPayload)}
+            type="button"
+          >
+            <PlugZap size={15} />
+            Dry-Run Delivery
           </button>
           <button className="secondary-action" onClick={() => onSavePacket(approvalForSave())} type="button">
             <ServerCog size={15} />
@@ -1998,6 +2071,36 @@ function EvidencePacketWorkspace({
           </div>
         ) : (
           <div className="empty-state">No readiness evidence packet has been saved yet.</div>
+        )}
+      </section>
+
+      <section className="panel">
+        <PanelHeader
+          icon={Bell}
+          title="Notification Delivery Evidence"
+          subtitle="Dry-run delivery records for email, Teams, and SharePoint folder handoff."
+        />
+        {evidenceDeliveryRecords.length > 0 ? (
+          <div className="mapping-run-history">
+            {evidenceDeliveryRecords.slice(0, 4).map((record) => (
+              <div className="mapping-run-row" key={record.id}>
+                <div>
+                  <strong>{record.label}</strong>
+                  <span>
+                    v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.result.evidence}
+                  </span>
+                  <small>
+                    {record.payload.result.channelResults
+                      .map((channel) => `${channel.channel}: ${channel.status}`)
+                      .join(' / ')}
+                  </small>
+                </div>
+                <StatusChip status={record.status} label={record.status} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state">No evidence notification delivery dry-run has been recorded yet.</div>
         )}
       </section>
     </>
@@ -2827,16 +2930,23 @@ function TraceabilityView({
 
 function ReportCatalogView({
   canonicalObjects,
+  deliveryRecords,
+  onDeliverNotifications,
   onSaveReport,
   reports,
 }: {
   canonicalObjects: CanonicalObject[]
+  deliveryRecords: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>[]
+  onDeliverNotifications: (payload: NotificationDeliveryPayload) => void
   onSaveReport: (report: ReportCatalogItem, action: ReportCatalogSaveAction) => void
   reports: ReportCatalogItem[]
 }) {
   const staleCount = reports.filter((report) => report.refreshStatus !== 'pass').length
   const [selectedReportId, setSelectedReportId] = useState(reports[0]?.id ?? '')
   const selectedReport = reports.find((report) => report.id === selectedReportId) ?? reports[0]
+  const reportDeliveryRecords = deliveryRecords.filter(
+    (record) => record.payload.request.source === 'report_catalog',
+  )
 
   return (
     <>
@@ -2864,6 +2974,50 @@ function ReportCatalogView({
           >
             <Bell size={15} />
             Export Notices
+          </button>
+          <button
+            className="secondary-action"
+            onClick={() =>
+              onDeliverNotifications(
+                notificationToDeliveryPayload(
+                  'report_catalog',
+                  'TRACS report catalog approval notices',
+                  {
+                    notificationId: `report_catalog_batch:${new Date().toISOString()}`,
+                    generatedAt: new Date().toISOString(),
+                    type: 'report_catalog_approval',
+                    reportId: 'batch',
+                    title: 'Report catalog batch',
+                    owner: 'TRACS',
+                    workspace: 'Report Catalog',
+                    semanticModel: 'Multiple',
+                    routeStage: 'quality_review',
+                    recipients: Array.from(
+                      new Set(
+                        reports.flatMap((report) =>
+                          report.routedReviewers?.length
+                            ? report.routedReviewers
+                            : [report.approvalReviewer, report.owner].filter(
+                                (recipient): recipient is string => Boolean(recipient),
+                              ),
+                        ),
+                      ),
+                    ),
+                    dueAt: '',
+                    approvalStatus: 'pending',
+                    publishStatus: 'draft',
+                    freshnessStatus: staleCount > 0 ? 'warning' : 'pass',
+                    summary: `${reports.length} report catalog approval notice(s) prepared for delivery dry-run.`,
+                    evidence: reports.map((report) => report.freshnessEvidence),
+                    sourceDependencies: Array.from(new Set(reports.flatMap((report) => report.sourceDependencies))),
+                  },
+                ),
+              )
+            }
+            type="button"
+          >
+            <PlugZap size={15} />
+            Dry-Run Delivery
           </button>
         </div>
       </section>
@@ -2912,21 +3066,57 @@ function ReportCatalogView({
       {selectedReport ? (
         <ReportCatalogEditor
           canonicalObjects={canonicalObjects}
+          deliveryRecords={reportDeliveryRecords}
           key={selectedReport.id}
+          onDeliverNotifications={onDeliverNotifications}
           onSave={onSaveReport}
           report={selectedReport}
         />
       ) : null}
+
+      <section className="panel report-editor-panel">
+        <PanelHeader
+          icon={Bell}
+          title="Report Notification Delivery Evidence"
+          subtitle="Recent dry-run records for email, Teams, and SharePoint folder delivery contracts."
+        />
+        {reportDeliveryRecords.length > 0 ? (
+          <div className="mapping-run-history">
+            {reportDeliveryRecords.slice(0, 5).map((record) => (
+              <div className="mapping-run-row" key={record.id}>
+                <div>
+                  <strong>{record.label}</strong>
+                  <span>
+                    v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.result.evidence}
+                  </span>
+                  <small>
+                    {record.payload.result.channelResults
+                      .map((channel) => `${channel.channel}: ${channel.status}`)
+                      .join(' / ')}
+                  </small>
+                </div>
+                <StatusChip status={record.status} label={record.status} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state">No report notification delivery dry-run has been recorded yet.</div>
+        )}
+      </section>
     </>
   )
 }
 
 function ReportCatalogEditor({
   canonicalObjects,
+  deliveryRecords,
+  onDeliverNotifications,
   onSave,
   report,
 }: {
   canonicalObjects: CanonicalObject[]
+  deliveryRecords: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>[]
+  onDeliverNotifications: (payload: NotificationDeliveryPayload) => void
   onSave: (report: ReportCatalogItem, action: ReportCatalogSaveAction) => void
   report: ReportCatalogItem
 }) {
@@ -2982,6 +3172,7 @@ function ReportCatalogEditor({
 
   const previewReport = draftReport()
   const gate = evaluateReportPublishGate(previewReport, canonicalObjects)
+  const previewNotification = createReportApprovalNotification(previewReport)
 
   return (
     <section className="panel report-editor-panel">
@@ -3076,12 +3267,28 @@ function ReportCatalogEditor({
             <button
               className="secondary-action"
               onClick={() =>
-                downloadJson('tracs-report-approval-notification.json', createReportApprovalNotification(draftReport()))
+                downloadJson('tracs-report-approval-notification.json', previewNotification)
               }
               type="button"
             >
               <Bell size={15} />
               Export Notice
+            </button>
+            <button
+              className="secondary-action"
+              onClick={() =>
+                onDeliverNotifications(
+                  notificationToDeliveryPayload(
+                    'report_catalog',
+                    `${previewReport.title} approval notice`,
+                    previewNotification,
+                  ),
+                )
+              }
+              type="button"
+            >
+              <PlugZap size={15} />
+              Dry-Run Delivery
             </button>
             <button className="secondary-action" onClick={() => onSave(draftReport(), 'draft')} type="button">
               <ServerCog size={15} />
@@ -3127,6 +3334,21 @@ function ReportCatalogEditor({
                     <small>{entry.summary}</small>
                   </div>
                   <StatusChip status="pass" label="notice" />
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {deliveryRecords.length > 0 ? (
+            <div className="report-approval-history">
+              <h4>Delivery Dry-Runs</h4>
+              {deliveryRecords.slice(0, 3).map((record) => (
+                <div className="connector-run-row" key={record.id}>
+                  <div>
+                    <strong>{record.payload.request.subject}</strong>
+                    <span>{new Date(record.createdAt).toLocaleString()}</span>
+                    <small>{record.payload.result.evidence}</small>
+                  </div>
+                  <StatusChip status={record.status} label={record.status} />
                 </div>
               ))}
             </div>
