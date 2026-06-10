@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "api": "node server/tracs-api.mjs",
+    "api:sqlite": "node --experimental-sqlite server/tracs-api.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",

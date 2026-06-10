@@ -12,6 +12,9 @@ dist
 dist-ssr
 .vite
 data/backend-records.json
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite-wal
 *.local
 
 # Editor directories and files

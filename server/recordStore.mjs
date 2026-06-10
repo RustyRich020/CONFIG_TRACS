@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto'
+import { mkdirSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { dirname } from 'node:path'
+
+const require = createRequire(import.meta.url)
 
 export const recordStoreSchema = {
   schemaVersion: 'record_store_v1',
@@ -100,6 +104,20 @@ function summarizeStatus(records) {
   return 'pass'
 }
 
+function parseRecordRow(row) {
+  return {
+    id: row.id,
+    kind: row.kind,
+    version: row.version,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    label: row.label,
+    summary: row.summary,
+    payload: JSON.parse(row.payload_json),
+  }
+}
+
 export function createFileRecordStore({ dataFile, maxRecords = 250 }) {
   async function readRecords() {
     try {
@@ -174,6 +192,145 @@ export function createFileRecordStore({ dataFile, maxRecords = 250 }) {
 
   return {
     dataFile,
+    schema: recordStoreSchema,
+    readRecords,
+    saveRecord,
+    listByKind,
+    latestByKind,
+    getRecord,
+    health,
+  }
+}
+
+export function createSqliteRecordStore({ databaseFile, maxRecords = 1000 }) {
+  const { DatabaseSync } = require('node:sqlite')
+  mkdirSync(dirname(databaseFile), { recursive: true })
+  const database = new DatabaseSync(databaseFile)
+  database.exec(`
+    create table if not exists tracs_records (
+      id text primary key,
+      kind text not null,
+      label text not null,
+      version integer not null,
+      status text not null,
+      summary text not null,
+      payload_json text not null,
+      created_at text not null,
+      updated_at text not null
+    );
+    create index if not exists idx_tracs_records_kind_created_at on tracs_records(kind, created_at desc);
+    create index if not exists idx_tracs_records_kind_label_version on tracs_records(kind, label, version desc);
+    create index if not exists idx_tracs_records_status_created_at on tracs_records(status, created_at desc);
+    create table if not exists tracs_record_links (
+      id text primary key,
+      source_record_id text not null,
+      target_record_id text not null,
+      relationship_type text not null,
+      created_at text not null
+    );
+    create index if not exists idx_tracs_record_links_source on tracs_record_links(source_record_id, relationship_type);
+    create index if not exists idx_tracs_record_links_target on tracs_record_links(target_record_id, relationship_type);
+  `)
+
+  const listStatement = database.prepare(`
+    select id, kind, label, version, status, summary, payload_json, created_at, updated_at
+    from tracs_records
+    order by created_at desc
+    limit ?
+  `)
+  const listByKindStatement = database.prepare(`
+    select id, kind, label, version, status, summary, payload_json, created_at, updated_at
+    from tracs_records
+    where kind = ?
+    order by created_at desc
+    limit ?
+  `)
+  const getStatement = database.prepare(`
+    select id, kind, label, version, status, summary, payload_json, created_at, updated_at
+    from tracs_records
+    where id = ?
+  `)
+  const nextVersionStatement = database.prepare(`
+    select coalesce(max(version), 0) + 1 as next_version
+    from tracs_records
+    where kind = ? and label = ?
+  `)
+  const insertStatement = database.prepare(`
+    insert into tracs_records (
+      id, kind, label, version, status, summary, payload_json, created_at, updated_at
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+
+  async function readRecords() {
+    return listStatement.all(maxRecords).map(parseRecordRow)
+  }
+
+  async function saveRecord({ kind, label, status, summary, payload }) {
+    const now = new Date().toISOString()
+    const record = {
+      id: randomUUID(),
+      kind,
+      version: nextVersionStatement.get(kind, label).next_version,
+      status,
+      createdAt: now,
+      updatedAt: now,
+      label,
+      summary,
+      payload,
+    }
+    insertStatement.run(
+      record.id,
+      record.kind,
+      record.label,
+      record.version,
+      record.status,
+      record.summary,
+      JSON.stringify(record.payload),
+      record.createdAt,
+      record.updatedAt,
+    )
+    return record
+  }
+
+  async function listByKind(kind) {
+    return listByKindStatement.all(kind, maxRecords).map(parseRecordRow)
+  }
+
+  async function latestByKind(kind) {
+    const records = await listByKind(kind)
+    const latest = new Map()
+    records.forEach((record) => {
+      const existing = latest.get(record.label)
+      if (!existing || record.version > existing.version) latest.set(record.label, record)
+    })
+    return Array.from(latest.values())
+  }
+
+  async function getRecord(recordId) {
+    const row = getStatement.get(recordId)
+    return row ? parseRecordRow(row) : undefined
+  }
+
+  async function health(startedAt) {
+    const records = await readRecords()
+    return {
+      mode: 'api',
+      status: summarizeStatus(records),
+      checkedAt: new Date().toISOString(),
+      records: records.length,
+      latencyMs: Math.max(1, Math.round(performance.now() - startedAt)),
+      store: {
+        mode: 'sqlite',
+        schemaVersion: recordStoreSchema.schemaVersion,
+        databaseFile,
+        maxRecords,
+      },
+      evidence: `SQLite record store is active at ${databaseFile}.`,
+    }
+  }
+
+  return {
+    databaseFile,
     schema: recordStoreSchema,
     readRecords,
     saveRecord,

@@ -19,11 +19,15 @@ import {
 } from './credentialMetadataAdapters.mjs'
 import { discoverCsvMetadata, previewCsvRows } from './csvAdapter.mjs'
 import { runNotificationDeliveryDryRun } from './notificationDeliveryAdapters.mjs'
-import { createFileRecordStore } from './recordStore.mjs'
+import { createFileRecordStore, createSqliteRecordStore } from './recordStore.mjs'
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const dataFile = resolve(rootDir, 'data', 'backend-records.json')
-const recordStore = createFileRecordStore({ dataFile })
+const sqliteFile = resolve(rootDir, process.env.TRACS_SQLITE_FILE ?? 'data/tracs-records.sqlite')
+const recordStore =
+  process.env.TRACS_RECORD_STORE === 'sqlite'
+    ? createSqliteRecordStore({ databaseFile: sqliteFile })
+    : createFileRecordStore({ dataFile })
 const port = Number(process.env.TRACS_API_PORT ?? 8787)
 const host = process.env.TRACS_API_HOST ?? '127.0.0.1'
 

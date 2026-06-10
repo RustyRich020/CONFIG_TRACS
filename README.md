@@ -90,6 +90,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Adds notification delivery dry-run adapters for email, Teams, and SharePoint export folders with persisted delivery evidence.
 - Discovers external-reference metadata and bounded preview rows through a credential-aware backend adapter.
 - Filters traceability graphs by object family, status, and saved evidence packet coverage.
+- Adds a selectable SQLite record store adapter behind the existing API persistence contract.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
@@ -140,6 +141,16 @@ npm run dev -- --host 127.0.0.1 --port 5173
 
 API records are written to `data/backend-records.json`, which is intentionally ignored by Git.
 
+To run the API with SQLite persistence instead of JSON file persistence:
+
+```bash
+$env:TRACS_RECORD_STORE='sqlite'
+$env:TRACS_SQLITE_FILE='data/tracs-records.sqlite'
+npm run api:sqlite
+```
+
+SQLite records are written to `data/*.sqlite`, which is intentionally ignored by Git. The API route contracts remain the same for JSON and SQLite stores.
+
 ## Build
 
 ```bash
@@ -155,7 +166,7 @@ npm run build
 - `src/backendContracts.ts`: frontend live adapter contract registry.
 - `src/App.tsx`: admin shell UI and interactions.
 - `server/tracs-api.mjs`: file-backed API service for deployment snapshots, backend records, and adapter dry runs.
-- `server/recordStore.mjs`: storage boundary for versioned backend records and the database schema blueprint.
+- `server/recordStore.mjs`: storage boundary for JSON and SQLite versioned backend records plus the database schema blueprint.
 - `server/canonicalService.mjs`: sample-backed canonical object, quality event, traceability, and report catalog service.
 - `server/adapterContracts.mjs`: backend adapter dry-run contract implementation.
 - `server/credentialMetadataAdapters.mjs`: credential-aware Snowflake, Microsoft Graph, and external-reference metadata discovery adapters.
@@ -172,7 +183,7 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add storage adapter implementation for SQLite or Postgres.
+1. Add Postgres storage adapter contract and migration checklist.
 2. Add live notification delivery connectors after tenant-specific email, Teams, and SharePoint targets are approved.
 3. Add source-specific external-reference mapping templates for CAPA, supplier, and document systems.
 4. Add traceability graph export packages for evidence packets.
