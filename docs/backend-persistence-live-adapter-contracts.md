@@ -52,9 +52,11 @@ POST /api/adapter-dry-runs
 
 The frontend uses the API when `VITE_TRACS_API_URL` is set. Without that value, or if the API is unreachable, it uses browser-local fallback persistence.
 
-The CSV/manual upload connector reads the configured sample CSV, infers source columns, reports row counts, and returns bounded preview rows. Metadata discovery and row previews are persisted as `connector_run` records. External reference connectors still return contract/dry-run evidence until credential-backed adapters are added.
+The CSV/manual upload connector reads the configured sample CSV, infers source columns, reports row counts, and returns bounded preview rows. Metadata discovery and row previews are persisted as `connector_run` records.
 
 Snowflake and SharePoint Excel metadata discovery are now credential-aware backend adapters. `POST /api/connectors/{connectorId}/metadata` routes Snowflake manifests through the Snowflake SQL API when `TRACS_SNOWFLAKE_ACCOUNT_URL` or `TRACS_SNOWFLAKE_ACCOUNT` plus `TRACS_SNOWFLAKE_TOKEN` are configured. SharePoint Excel manifests route through Microsoft Graph when `TRACS_GRAPH_TOKEN` is configured. When credentials are missing, the API persists warning `connector_run` evidence with the required environment variables and manifest source objects instead of returning a hard failure or exposing secrets.
+
+External-reference metadata discovery and bounded preview are also credential-aware backend adapters. Metadata uses the connector `metadata_path` or `TRACS_EXTERNAL_API_METADATA_PATH`; preview uses `preview_path` or `TRACS_EXTERNAL_API_PREVIEW_PATH`, with `{limit}` replacement and a maximum of 50 returned preview rows. Both routes require `TRACS_EXTERNAL_API_BASE_URL` and `TRACS_EXTERNAL_API_TOKEN`; when missing, the API persists warning evidence from the connector manifest without exposing endpoint secrets or returning rows.
 
 Credential validation uses `POST /api/connectors/{connectorId}/credential-validation` and persists `credential_validation` records. The route checks required server environment references and token rotation evidence without returning token values. Snowflake rotation evidence reads `TRACS_SNOWFLAKE_TOKEN_ROTATED_AT` with optional `TRACS_SNOWFLAKE_TOKEN_MAX_AGE_DAYS`; Microsoft Graph reads `TRACS_GRAPH_TOKEN_ROTATED_AT` with optional `TRACS_GRAPH_TOKEN_MAX_AGE_DAYS`; external-reference adapters read `TRACS_EXTERNAL_API_BASE_URL`, `TRACS_EXTERNAL_API_TOKEN`, `TRACS_EXTERNAL_API_TOKEN_ROTATED_AT`, and optional `TRACS_EXTERNAL_API_TOKEN_MAX_AGE_DAYS`.
 

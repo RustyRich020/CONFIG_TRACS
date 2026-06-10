@@ -28,6 +28,13 @@ connectors:
     display_name: CAPA System Reference
     target: capa_reference
     integration_mode: reference_only
+    source_object: capa_records
+    metadata_path: /metadata/capa
+    preview_path: /records/capa?limit={limit}
+    key_fields:
+      - capa_id
+      - status
+      - owner
 
   manual_csv_upload:
     type: csv

@@ -88,11 +88,12 @@ This prototype now includes the first practical build phases for TRACS:
 - Validates external-reference connector credentials with backend environment and token rotation checks.
 - Adds a traceability path explorer that shows event-to-object relationship paths and coverage.
 - Adds notification delivery dry-run adapters for email, Teams, and SharePoint export folders with persisted delivery evidence.
+- Discovers external-reference metadata and bounded preview rows through a credential-aware backend adapter.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
 
-The CSV/manual upload adapter performs real metadata discovery and bounded row preview from the included sample file. Snowflake and SharePoint Excel metadata discovery is now credential-aware on the backend. Without server-side tokens it returns warning evidence and required environment variables instead of failing or exposing secrets.
+The CSV/manual upload adapter performs real metadata discovery and bounded row preview from the included sample file. Snowflake, SharePoint Excel, and external-reference metadata discovery are credential-aware on the backend. Without server-side tokens they return warning evidence and required environment variables instead of failing or exposing secrets.
 
 Credential environment variables:
 
@@ -156,7 +157,7 @@ npm run build
 - `server/recordStore.mjs`: storage boundary for versioned backend records and the database schema blueprint.
 - `server/canonicalService.mjs`: sample-backed canonical object, quality event, traceability, and report catalog service.
 - `server/adapterContracts.mjs`: backend adapter dry-run contract implementation.
-- `server/credentialMetadataAdapters.mjs`: credential-aware Snowflake and Microsoft Graph metadata discovery adapters.
+- `server/credentialMetadataAdapters.mjs`: credential-aware Snowflake, Microsoft Graph, and external-reference metadata discovery adapters.
 - `server/csvAdapter.mjs`: CSV/manual upload adapter for metadata discovery and bounded source preview rows.
 - `server/assetRegistry.mjs`: read-only local scanner for MYROBOTS template and schema assets.
 - `public/config/industries/industries.yaml`: industry profile definitions.
@@ -170,7 +171,7 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add live external-reference metadata discovery and bounded preview.
-2. Add traceability graph filtering across object families and persisted evidence packets.
-3. Add storage adapter implementation for SQLite or Postgres.
-4. Add live notification delivery connectors after tenant-specific email, Teams, and SharePoint targets are approved.
+1. Add traceability graph filtering across object families and persisted evidence packets.
+2. Add storage adapter implementation for SQLite or Postgres.
+3. Add live notification delivery connectors after tenant-specific email, Teams, and SharePoint targets are approved.
+4. Add source-specific external-reference mapping templates for CAPA, supplier, and document systems.

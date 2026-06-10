@@ -54,6 +54,10 @@ export type ConnectorDefinition = {
   sheet?: string
   target?: string
   integration_mode?: string
+  metadata_path?: string
+  preview_path?: string
+  source_object?: string
+  key_fields?: string[]
   objects?: ConnectorObject[]
 }
 

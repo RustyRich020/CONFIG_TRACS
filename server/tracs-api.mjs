@@ -11,8 +11,10 @@ import {
   listTraceabilityLinks,
 } from './canonicalService.mjs'
 import {
+  discoverExternalReferenceMetadata,
   discoverSharePointExcelMetadata,
   discoverSnowflakeMetadata,
+  previewExternalReferenceRows,
   validateConnectorCredentials,
 } from './credentialMetadataAdapters.mjs'
 import { discoverCsvMetadata, previewCsvRows } from './csvAdapter.mjs'
@@ -400,16 +402,26 @@ async function handleRequest(req, res) {
         metadata = await discoverSnowflakeMetadata(connectorId, body.connector)
       } else if (connectorType === 'sharepoint_excel') {
         metadata = await discoverSharePointExcelMetadata(connectorId, body.connector)
+      } else if (connectorType === 'external_reference' || connectorType === 'rest_api') {
+        metadata = await discoverExternalReferenceMetadata(connectorId, body.connector)
       } else {
         jsonResponse(res, 422, {
           error: `Live metadata discovery is not implemented for ${connectorType ?? 'unknown'} connectors.`,
         })
         return
       }
+      const metadataStatus =
+        metadata.credentialMode === 'external_reference_token' &&
+        metadata.requiredEnvironment?.length > 0 &&
+        metadata.rowCount === 0
+          ? 'warning'
+          : metadata.columns.length > 0
+            ? 'pass'
+            : 'warning'
       const record = await recordStore.saveRecord({
         kind: 'connector_run',
         label: `${body.connector.display_name} metadata discovery`,
-        status: metadata.columns.length > 0 ? 'pass' : 'warning',
+        status: metadataStatus,
         summary: metadata.evidence,
         payload: {
           connectorId,
@@ -425,17 +437,25 @@ async function handleRequest(req, res) {
     if (req.method === 'POST' && previewMatch) {
       const connectorId = decodeURIComponent(previewMatch[1])
       const body = await parseBody(req)
-      if (body.connector?.type !== 'csv') {
+      let preview
+      if (body.connector?.type === 'csv') {
+        preview = await previewCsvRows(
+          connectorId,
+          body.connector,
+          body.limit ?? url.searchParams.get('limit'),
+        )
+      } else if (body.connector?.type === 'external_reference' || body.connector?.type === 'rest_api') {
+        preview = await previewExternalReferenceRows(
+          connectorId,
+          body.connector,
+          body.limit ?? url.searchParams.get('limit'),
+        )
+      } else {
         jsonResponse(res, 422, {
-          error: 'Live row preview is implemented for csv connectors in this phase.',
+          error: `Live row preview is not implemented for ${body.connector?.type ?? 'unknown'} connectors.`,
         })
         return
       }
-      const preview = await previewCsvRows(
-        connectorId,
-        body.connector,
-        body.limit ?? url.searchParams.get('limit'),
-      )
       const record = await recordStore.saveRecord({
         kind: 'connector_run',
         label: `${body.connector.display_name} row preview`,

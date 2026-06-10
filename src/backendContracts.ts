@@ -74,7 +74,7 @@ export const adapterContracts: AdapterContract[] = [
     id: 'external_reference_adapter_v1',
     connectorType: 'external_reference',
     displayName: 'External Reference Adapter',
-    operations: ['health_check', 'discover_metadata', 'validate_mapping'],
+    operations: ['health_check', 'discover_metadata', 'preview_rows', 'validate_mapping'],
     authMode: 'api_key_or_oauth',
     requestShape: {
       connectorId: 'Configured connector manifest key.',
@@ -89,6 +89,7 @@ export const adapterContracts: AdapterContract[] = [
     evidenceRequired: [
       'Endpoint reachable',
       'Reference entity discovered',
+      'Bounded reference preview returned',
       'Rate-limit policy captured',
       'Mapping keys validated',
     ],

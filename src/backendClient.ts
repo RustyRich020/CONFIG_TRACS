@@ -672,6 +672,32 @@ export class LocalBackendClient {
     connector: AppConfig['connectors']['connectors'][string],
   ): Promise<ConnectorSourceMetadata> {
     if (connector.type !== 'csv') {
+      if (connector.type === 'external_reference' || connector.type === 'rest_api') {
+        return {
+          connectorId,
+          adapterType: connector.type,
+          discoveredAt: new Date().toISOString(),
+          credentialMode: 'external_reference_token',
+          requiredEnvironment: ['TRACS_EXTERNAL_API_BASE_URL', 'TRACS_EXTERNAL_API_TOKEN'],
+          sourcePath: connector.metadata_path ?? connector.source_object ?? connector.display_name,
+          sourceObjects: [
+            connector.source_object,
+            connector.metadata_path,
+            connector.preview_path,
+            connector.display_name,
+          ].filter((value): value is string => Boolean(value)),
+          targetObjects: [connector.target].filter((target): target is string => Boolean(target)),
+          rowCount: 0,
+          columns: (connector.key_fields ?? []).map((name) => ({
+            name,
+            inferredType: 'text',
+            nonEmptyCount: 0,
+            sampleValues: [],
+          })),
+          evidence:
+            'External reference metadata discovery requires the TRACS API so server-only endpoint and token references are not exposed to the browser.',
+        }
+      }
       return {
         connectorId,
         adapterType: connector.type,
@@ -714,6 +740,20 @@ export class LocalBackendClient {
     limit = 5,
   ): Promise<ConnectorPreviewResult> {
     if (connector.type !== 'csv') {
+      if (connector.type === 'external_reference' || connector.type === 'rest_api') {
+        return {
+          connectorId,
+          adapterType: connector.type,
+          previewedAt: new Date().toISOString(),
+          sourcePath: connector.preview_path ?? connector.source_object ?? connector.display_name,
+          columns: connector.key_fields ?? [],
+          rowCount: 0,
+          returnedRows: 0,
+          rows: [],
+          evidence:
+            'External reference row preview requires the TRACS API so server-only endpoint and token references are not exposed to the browser.',
+        }
+      }
       return {
         connectorId,
         adapterType: connector.type,

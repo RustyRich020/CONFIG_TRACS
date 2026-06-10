@@ -4551,29 +4551,43 @@ function ConnectorHub({
               ) : (
                 <div className="empty-state compact">Discover source metadata to preview live adapter output.</div>
               )}
-              {selectedSourcePreview && selectedSourcePreview.rows.length > 0 ? (
+              {selectedSourcePreview ? (
                 <div className="preview-table">
                   <h4>Preview Rows</h4>
-                  <div className="preview-scroll">
-                    <table>
-                      <thead>
-                        <tr>
-                          {selectedSourcePreview.columns.slice(0, 5).map((column) => (
-                            <th key={column}>{column}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selectedSourcePreview.rows.map((row, index) => (
-                          <tr key={`${selectedSourcePreview.connectorId}-${index}`}>
+                  <div className="source-discovery-summary">
+                    <Metadata label="Returned" value={String(selectedSourcePreview.returnedRows)} />
+                    <Metadata label="Available rows" value={String(selectedSourcePreview.rowCount)} />
+                    <Metadata label="Columns" value={String(selectedSourcePreview.columns.length)} />
+                  </div>
+                  <p>{selectedSourcePreview.evidence}</p>
+                  {selectedSourcePreview.rows.length > 0 ? (
+                    <div className="preview-scroll">
+                      <table>
+                        <thead>
+                          <tr>
                             {selectedSourcePreview.columns.slice(0, 5).map((column) => (
-                              <td key={column}>{row[column] ?? ''}</td>
+                              <th key={column}>{column}</th>
                             ))}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {selectedSourcePreview.rows.map((row, index) => (
+                            <tr key={`${selectedSourcePreview.connectorId}-${index}`}>
+                              {selectedSourcePreview.columns.slice(0, 5).map((column) => (
+                                <td key={column}>{row[column] ?? ''}</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="source-column-list">
+                      {selectedSourcePreview.columns.slice(0, 8).map((column) => (
+                        <span className="chip" key={column}>{column}</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ) : null}
               {selectedConnectorRuns.length > 0 ? (

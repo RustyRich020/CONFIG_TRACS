@@ -74,6 +74,98 @@ function rotationCheck({ maxAgeDays, rotatedAtEnv, tokenName }) {
   }
 }
 
+function externalRequiredEnvironment() {
+  return ['TRACS_EXTERNAL_API_BASE_URL', 'TRACS_EXTERNAL_API_TOKEN']
+}
+
+function externalCredentialMissing() {
+  return externalRequiredEnvironment().some((name) => !process.env[name])
+}
+
+function externalSourceObjects(connector) {
+  return [
+    connector.source_object,
+    connector.metadata_path,
+    connector.preview_path,
+    connector.display_name,
+  ].filter(Boolean)
+}
+
+function externalTargetObjects(connector) {
+  return [connector.target].filter(Boolean)
+}
+
+function externalUrl(path, limit) {
+  const baseUrl = process.env.TRACS_EXTERNAL_API_BASE_URL
+  if (!baseUrl) return null
+  const normalizedPath = String(path || '/metadata').replace('{limit}', String(limit ?? 25))
+  return new URL(normalizedPath, `${baseUrl.replace(/\/$/, '')}/`).toString()
+}
+
+async function externalJson(path, limit) {
+  const url = externalUrl(path, limit)
+  const token = process.env.TRACS_EXTERNAL_API_TOKEN
+  if (!url || !token) return null
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/json',
+    },
+  })
+  if (!response.ok) {
+    throw new Error(`External reference API returned ${response.status}.`)
+  }
+  return response.json()
+}
+
+function rowsFromExternalPayload(payload) {
+  if (Array.isArray(payload)) return payload
+  if (Array.isArray(payload?.rows)) return payload.rows
+  if (Array.isArray(payload?.records)) return payload.records
+  if (Array.isArray(payload?.items)) return payload.items
+  if (payload && typeof payload === 'object') return [payload]
+  return []
+}
+
+function columnsFromExternalRows(rows, configuredKeys = []) {
+  const names = Array.from(
+    new Set([
+      ...configuredKeys,
+      ...rows.flatMap((row) => Object.keys(row ?? {})),
+    ]),
+  )
+  return names.map((name) => {
+    const values = rows.map((row) => row?.[name]).filter((value) => value !== undefined && value !== null)
+    return {
+      name,
+      inferredType:
+        values.some((value) => typeof value === 'number')
+          ? 'number'
+          : values.some((value) => String(value).match(/^\d{4}-\d{2}-\d{2}/))
+            ? 'date'
+            : 'text',
+      nonEmptyCount: values.length,
+      sampleValues: Array.from(new Set(values.map((value) => String(value)))).slice(0, 3),
+    }
+  })
+}
+
+function externalWarningMetadata(connectorId, connector, evidence) {
+  return {
+    connectorId,
+    adapterType: connector.type,
+    discoveredAt: new Date().toISOString(),
+    credentialMode: 'external_reference_token',
+    requiredEnvironment: externalRequiredEnvironment(),
+    sourcePath: connector.metadata_path ?? connector.source_object ?? connector.display_name,
+    sourceObjects: externalSourceObjects(connector),
+    targetObjects: externalTargetObjects(connector),
+    rowCount: 0,
+    columns: columnsFromExternalRows([], connector.key_fields ?? []),
+    evidence,
+  }
+}
+
 function credentialValidationProfile(connector) {
   if (connector.type === 'snowflake') {
     return {
@@ -188,6 +280,85 @@ export function validateConnectorCredentials(connectorId, connector) {
       missingEnvironment.length > 0
         ? `${connector.display_name} credential validation blocked by missing server environment.`
         : `${connector.display_name} credential validation completed with ${status} status.`,
+  }
+}
+
+export async function discoverExternalReferenceMetadata(connectorId, connector) {
+  if (externalCredentialMissing()) {
+    return externalWarningMetadata(
+      connectorId,
+      connector,
+      'External reference metadata discovery is credential-aware but no external API base URL or token is configured. Manifest keys were returned as pending discovery evidence.',
+    )
+  }
+
+  const payload = await externalJson(
+    connector.metadata_path ?? process.env.TRACS_EXTERNAL_API_METADATA_PATH ?? '/metadata',
+  )
+  const rows = rowsFromExternalPayload(payload)
+  const columns = Array.isArray(payload?.columns)
+    ? payload.columns.map((column) => ({
+        name: column.name ?? column,
+        inferredType: column.type ?? 'text',
+        nonEmptyCount: column.nonEmptyCount ?? rows.length,
+        sampleValues: column.sampleValues ?? [],
+      }))
+    : columnsFromExternalRows(rows, connector.key_fields ?? [])
+
+  return {
+    connectorId,
+    adapterType: connector.type,
+    discoveredAt: new Date().toISOString(),
+    credentialMode: 'external_reference_token',
+    sourcePath: connector.metadata_path ?? connector.source_object ?? connector.display_name,
+    sourceObjects: externalSourceObjects(connector),
+    targetObjects: externalTargetObjects(connector),
+    rowCount: Number(payload?.rowCount ?? payload?.total ?? rows.length),
+    columns,
+    evidence: `${columns.length} external reference field(s) discovered from ${connector.metadata_path ?? 'metadata endpoint'}.`,
+  }
+}
+
+export async function previewExternalReferenceRows(connectorId, connector, limit = 5) {
+  const boundedLimit = Math.min(Math.max(Number(limit) || 5, 1), 50)
+  if (externalCredentialMissing()) {
+    return {
+      connectorId,
+      adapterType: connector.type,
+      previewedAt: new Date().toISOString(),
+      sourcePath: connector.preview_path ?? connector.source_object ?? connector.display_name,
+      columns: connector.key_fields ?? [],
+      rowCount: 0,
+      returnedRows: 0,
+      rows: [],
+      evidence:
+        'External reference row preview is credential-aware but no external API base URL or token is configured. Configure server environment references and rerun preview.',
+    }
+  }
+
+  const payload = await externalJson(
+    connector.preview_path ?? process.env.TRACS_EXTERNAL_API_PREVIEW_PATH ?? '/records',
+    boundedLimit,
+  )
+  const rows = rowsFromExternalPayload(payload)
+    .slice(0, boundedLimit)
+    .map((row) =>
+      Object.fromEntries(
+        Object.entries(row ?? {}).map(([key, value]) => [key, value === null || value === undefined ? '' : String(value)]),
+      ),
+    )
+  const columns = Array.from(new Set(rows.flatMap((row) => Object.keys(row))))
+
+  return {
+    connectorId,
+    adapterType: connector.type,
+    previewedAt: new Date().toISOString(),
+    sourcePath: connector.preview_path ?? connector.source_object ?? connector.display_name,
+    columns,
+    rowCount: Number(payload?.rowCount ?? payload?.total ?? rows.length),
+    returnedRows: rows.length,
+    rows,
+    evidence: `${rows.length} bounded external reference preview row(s) returned from ${connector.preview_path ?? 'preview endpoint'}.`,
   }
 }
 
