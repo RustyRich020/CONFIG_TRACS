@@ -64,6 +64,8 @@ Controlled templates are persisted as `controlled_template` records. Promotion c
 
 The Template Library editor uses `PUT /api/templates/{recordId}` to save lifecycle, classification, tag, and provenance overrides as new controlled-template versions. The latest template record is selected by `templateId`, so history remains append-only while the UI shows the current controlled state.
 
+The Evidence workspace saves readiness evidence packets through the generic `POST /api/records` record boundary with kind `readiness_evidence_packet`. Packets include canonical load records, report freshness results, and open readiness exceptions, and the same payload can be downloaded as JSON for governance review.
+
 The API persistence layer now routes through `server/recordStore.mjs`, which keeps the current file-backed behavior but exposes a database-ready schema contract. `GET /api/storage/schema` returns the `tracs_records` and `tracs_record_links` blueprint that future SQLite or Postgres adapters should implement.
 
 The canonical workflow routes are sample-backed in v1. `server/canonicalService.mjs` maps the quality event CSV into stable canonical object IDs, derives event-to-product, event-to-lot/serial, return, and CAPA traceability links, and exposes a starter BI report catalog. These routes are intentionally typed so future Snowflake, SharePoint, and CSV adapter outputs can replace the sample source without changing the frontend contract.

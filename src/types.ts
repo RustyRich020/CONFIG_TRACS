@@ -162,6 +162,7 @@ export type SavedVersionKind =
   | 'controlled_template'
   | 'canonical_object'
   | 'canonical_load'
+  | 'readiness_evidence_packet'
 
 export type SavedVersion = {
   id: string
@@ -185,6 +186,7 @@ export type BackendRecordKind =
   | 'traceability_link'
   | 'report_catalog_item'
   | 'canonical_load'
+  | 'readiness_evidence_packet'
 
 export type BackendRecord<TPayload = unknown> = {
   id: string
@@ -413,4 +415,37 @@ export type CanonicalLoadResult = {
   qualityEventCount: number
   evidence: string
   record?: BackendRecord
+}
+
+export type ReadinessEvidenceException = {
+  id: string
+  area: string
+  status: StatusLevel
+  summary: string
+  evidence: string
+  remediation: string
+  source: string
+}
+
+export type ReadinessEvidencePacket = {
+  packetId: string
+  generatedAt: string
+  environment: string
+  status: StatusLevel
+  summary: {
+    readiness: Record<StatusLevel, number>
+    canonicalLoads: number
+    reportCatalogItems: number
+    openExceptions: number
+  }
+  canonicalLoads: Array<BackendRecord<CanonicalLoadResult>>
+  reportFreshness: {
+    total: number
+    pass: number
+    warning: number
+    blocking: number
+    items: ReportCatalogItem[]
+  }
+  openExceptions: ReadinessEvidenceException[]
+  evidence: string
 }

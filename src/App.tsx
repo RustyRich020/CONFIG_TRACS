@@ -53,6 +53,7 @@ import type {
   AuditEvent,
   BackendHealth,
   BackendRecord,
+  CanonicalLoadResult,
   CanonicalObject,
   ControlledTemplatePayload,
   ControlledTemplateStatus,
@@ -65,6 +66,9 @@ import type {
   MappingValidationResult,
   QualityEvent,
   ReportCatalogItem,
+  ReadinessCheck,
+  ReadinessEvidenceException,
+  ReadinessEvidencePacket,
   RecordStoreSchema,
   SavedVersion,
   StatusLevel,
@@ -82,9 +86,10 @@ const navItems = [
   { label: 'Object Explorer', icon: Boxes },
   { label: 'Traceability', icon: Route },
   { label: 'Reports', icon: Gauge },
+  { label: 'Evidence', icon: ClipboardCheck },
   { label: 'Versions', icon: History },
   { label: 'Backend', icon: ServerCog },
-  { label: 'Readiness', icon: ClipboardCheck },
+  { label: 'Readiness', icon: SlidersHorizontal },
   { label: 'Audit', icon: ScrollText },
   { label: 'Contract', icon: FileCog },
 ]
@@ -188,6 +193,90 @@ function severityStatus(severity: string): StatusLevel {
   if (severity === 'critical') return 'blocking'
   if (severity === 'high' || severity === 'medium') return 'warning'
   return 'pass'
+}
+
+function mostSevereStatus(statuses: StatusLevel[]): StatusLevel {
+  if (statuses.includes('blocking')) return 'blocking'
+  if (statuses.includes('warning')) return 'warning'
+  return 'pass'
+}
+
+function readinessException(check: ReadinessCheck): ReadinessEvidenceException | null {
+  if (check.status === 'pass') return null
+  return {
+    id: check.id,
+    area: 'readiness',
+    status: check.status,
+    summary: check.label,
+    evidence: check.evidence,
+    remediation: check.remediation,
+    source: 'readiness_checks',
+  }
+}
+
+function reportFreshnessException(report: ReportCatalogItem): ReadinessEvidenceException | null {
+  if (report.refreshStatus === 'pass') return null
+  return {
+    id: `report:${report.id}:freshness`,
+    area: 'report_freshness',
+    status: report.refreshStatus,
+    summary: `${report.title} freshness is ${report.refreshStatus}.`,
+    evidence: report.freshnessEvidence,
+    remediation: `Refresh ${report.semanticModel} or update the catalog SLA if the report is intentionally paused.`,
+    source: report.id,
+  }
+}
+
+function createReadinessEvidencePacket({
+  backendRecords,
+  environment,
+  readinessChecks,
+  readinessSummary,
+  reports,
+}: {
+  backendRecords: BackendRecord[]
+  environment: string
+  readinessChecks: ReadinessCheck[]
+  readinessSummary: Record<StatusLevel, number>
+  reports: ReportCatalogItem[]
+}): ReadinessEvidencePacket {
+  const canonicalLoads = backendRecords.filter(
+    (record): record is BackendRecord<CanonicalLoadResult> => record.kind === 'canonical_load',
+  )
+  const openExceptions = [
+    ...readinessChecks.map(readinessException),
+    ...reports.map(reportFreshnessException),
+  ].filter((item): item is ReadinessEvidenceException => Boolean(item))
+  const reportFreshness = {
+    total: reports.length,
+    pass: reports.filter((report) => report.refreshStatus === 'pass').length,
+    warning: reports.filter((report) => report.refreshStatus === 'warning').length,
+    blocking: reports.filter((report) => report.refreshStatus === 'blocking').length,
+    items: reports,
+  }
+  const status = mostSevereStatus([
+    ...readinessChecks.map((check) => check.status),
+    ...reports.map((report) => report.refreshStatus),
+    canonicalLoads.length > 0 ? 'pass' : 'warning',
+  ])
+  const generatedAt = new Date().toISOString()
+
+  return {
+    packetId: `readiness_evidence:${environment}:${generatedAt}`,
+    generatedAt,
+    environment,
+    status,
+    summary: {
+      readiness: readinessSummary,
+      canonicalLoads: canonicalLoads.length,
+      reportCatalogItems: reports.length,
+      openExceptions: openExceptions.length,
+    },
+    canonicalLoads,
+    reportFreshness,
+    openExceptions,
+    evidence: `${canonicalLoads.length} canonical load record(s), ${reports.length} report freshness item(s), and ${openExceptions.length} open exception(s) packaged for readiness review.`,
+  }
 }
 
 function App() {
@@ -674,6 +763,42 @@ function App() {
     )
   }
 
+  async function persistReadinessEvidencePacket({ download }: { download: boolean }) {
+    if (!config) return
+    const packet = createReadinessEvidencePacket({
+      backendRecords,
+      environment: config.environment.environment.name,
+      readinessChecks,
+      readinessSummary,
+      reports: reportCatalog,
+    })
+    const saved = await backendClient.saveRecord({
+      kind: 'readiness_evidence_packet',
+      label: `${config.environment.environment.name} readiness evidence packet`,
+      status: packet.status,
+      summary: packet.evidence,
+      payload: packet,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'readiness_evidence_packet',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    if (download) {
+      downloadJson('tracs-readiness-evidence-packet.json', packet)
+    }
+    record(
+      'evidence',
+      download ? 'save_export' : 'save',
+      `Readiness evidence packet saved as backend record v${saved.version}.`,
+    )
+  }
+
   if (error) {
     return (
       <main className="error-shell">
@@ -769,6 +894,8 @@ function App() {
                           ? 'Traceability'
                           : activeView === 'Reports'
                             ? 'Report Catalog'
+                            : activeView === 'Evidence'
+                              ? 'Evidence Packet'
                             : activeView === 'Versions'
                               ? 'Saved Versions'
                               : activeView === 'Backend'
@@ -792,6 +919,8 @@ function App() {
                           ? 'Inspect event-to-product, lot/serial, return, and CAPA relationships.'
                           : activeView === 'Reports'
                             ? 'Launch governed BI reports with owner, freshness, semantic model, and source dependencies.'
+                            : activeView === 'Evidence'
+                              ? 'Package canonical loads, report freshness, and open exceptions into a versioned readiness evidence file.'
                             : activeView === 'Versions'
                               ? 'Review saved connector, mapping, and contract versions persisted in this browser.'
                               : activeView === 'Backend'
@@ -889,6 +1018,19 @@ function App() {
           />
         ) : activeView === 'Reports' ? (
           <ReportCatalogView reports={reportCatalog} />
+        ) : activeView === 'Evidence' ? (
+          <EvidencePacketWorkspace
+            backendRecords={backendRecords}
+            evidenceRecords={backendRecords.filter(
+              (record) => record.kind === 'readiness_evidence_packet',
+            )}
+            environment={config.environment.environment.name}
+            onDownloadPacket={() => persistReadinessEvidencePacket({ download: true })}
+            onSavePacket={() => persistReadinessEvidencePacket({ download: false })}
+            readinessChecks={readinessChecks}
+            readinessSummary={readinessSummary}
+            reports={reportCatalog}
+          />
         ) : activeView === 'Versions' ? (
           <SavedVersionsView savedVersions={savedVersions} />
         ) : activeView === 'Backend' ? (
@@ -928,6 +1070,178 @@ function App() {
         )}
       </main>
     </div>
+  )
+}
+
+function EvidencePacketWorkspace({
+  backendRecords,
+  environment,
+  evidenceRecords,
+  onDownloadPacket,
+  onSavePacket,
+  readinessChecks,
+  readinessSummary,
+  reports,
+}: {
+  backendRecords: BackendRecord[]
+  environment: string
+  evidenceRecords: BackendRecord[]
+  onDownloadPacket: () => void
+  onSavePacket: () => void
+  readinessChecks: ReadinessCheck[]
+  readinessSummary: Record<StatusLevel, number>
+  reports: ReportCatalogItem[]
+}) {
+  const packet = createReadinessEvidencePacket({
+    backendRecords,
+    environment,
+    readinessChecks,
+    readinessSummary,
+    reports,
+  })
+  const latestPacket = evidenceRecords[0] as BackendRecord<ReadinessEvidencePacket> | undefined
+  const canonicalLoads = packet.canonicalLoads
+  const latestCanonicalLoad = canonicalLoads[0]
+
+  return (
+    <>
+      <section className="connector-toolbar panel">
+        <div>
+          <h2>Readiness Evidence Packet</h2>
+          <p>
+            Package canonical-load records, report freshness, and readiness exceptions into a versioned evidence artifact.
+          </p>
+        </div>
+        <div className="toolbar-actions">
+          <button className="secondary-action" onClick={onSavePacket} type="button">
+            <ServerCog size={15} />
+            Save Packet
+          </button>
+          <button className="primary-action" onClick={onDownloadPacket} type="button">
+            <Download size={16} />
+            Save & Export
+          </button>
+        </div>
+      </section>
+
+      <section className="evidence-grid">
+        <section className="panel evidence-status-panel">
+          <PanelHeader
+            icon={ClipboardCheck}
+            title="Packet Status"
+            subtitle="Current evidence score before saving a new packet version."
+          />
+          <div className="latest-contract">
+            <StatusChip status={packet.status} label={packet.status} />
+            <h3>{environment.toUpperCase()} readiness packet</h3>
+            <p>{packet.evidence}</p>
+            <div className="metadata-grid">
+              <Metadata label="Canonical loads" value={String(packet.summary.canonicalLoads)} />
+              <Metadata label="Report items" value={String(packet.summary.reportCatalogItems)} />
+              <Metadata label="Open exceptions" value={String(packet.summary.openExceptions)} />
+              <Metadata label="Generated" value={new Date(packet.generatedAt).toLocaleString()} />
+            </div>
+          </div>
+        </section>
+
+        <section className="panel evidence-status-panel">
+          <PanelHeader
+            icon={Gauge}
+            title="Report Freshness"
+            subtitle="BI/report catalog freshness evidence included in the packet."
+          />
+          <div className="metadata-grid">
+            <Metadata label="Fresh" value={String(packet.reportFreshness.pass)} />
+            <Metadata label="Warning" value={String(packet.reportFreshness.warning)} />
+            <Metadata label="Blocking" value={String(packet.reportFreshness.blocking)} />
+            <Metadata label="Total" value={String(packet.reportFreshness.total)} />
+          </div>
+          <div className="evidence-list">
+            {reports.slice(0, 4).map((report) => (
+              <div className="evidence-list-item" key={report.id}>
+                <StatusChip status={report.refreshStatus} label={report.refreshStatus} />
+                <div>
+                  <strong>{report.title}</strong>
+                  <span>{report.freshnessEvidence}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      </section>
+
+      <section className="evidence-grid">
+        <section className="panel">
+          <PanelHeader
+            icon={Database}
+            title="Canonical Load Evidence"
+            subtitle="Persisted canonical-load records prove source-to-canonical movement."
+          />
+          {latestCanonicalLoad ? (
+            <div className="latest-contract">
+              <StatusChip status={latestCanonicalLoad.status} label={`v${latestCanonicalLoad.version}`} />
+              <h3>{latestCanonicalLoad.label}</h3>
+              <p>{latestCanonicalLoad.summary}</p>
+              <div className="metadata-grid">
+                <Metadata label="Loaded" value={new Date(latestCanonicalLoad.createdAt).toLocaleString()} />
+                <Metadata label="Objects" value={String(latestCanonicalLoad.payload.objectCount)} />
+                <Metadata label="Trace links" value={String(latestCanonicalLoad.payload.linkCount)} />
+                <Metadata label="Quality events" value={String(latestCanonicalLoad.payload.qualityEventCount)} />
+              </div>
+            </div>
+          ) : (
+            <div className="empty-state">Run Mapping Studio Load Canonical to create canonical-load evidence.</div>
+          )}
+        </section>
+
+        <section className="panel">
+          <PanelHeader
+            icon={TriangleAlert}
+            title="Open Exceptions"
+            subtitle="Warnings and blocking items that still need remediation or acceptance."
+          />
+          {packet.openExceptions.length > 0 ? (
+            <div className="evidence-list">
+              {packet.openExceptions.slice(0, 8).map((exception) => (
+                <div className="evidence-list-item" key={exception.id}>
+                  <StatusChip status={exception.status} label={exception.status} />
+                  <div>
+                    <strong>{exception.summary}</strong>
+                    <span>{exception.evidence}</span>
+                    <small>{exception.remediation}</small>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state">No open readiness or report freshness exceptions.</div>
+          )}
+        </section>
+      </section>
+
+      <section className="panel">
+        <PanelHeader
+          icon={History}
+          title="Saved Evidence Packets"
+          subtitle="Backend records created from this readiness evidence export."
+        />
+        {latestPacket ? (
+          <div className="latest-contract">
+            <StatusChip status={latestPacket.status} label={`v${latestPacket.version}`} />
+            <h3>{latestPacket.label}</h3>
+            <p>{latestPacket.summary}</p>
+            <div className="metadata-grid">
+              <Metadata label="Saved" value={new Date(latestPacket.createdAt).toLocaleString()} />
+              <Metadata label="Packet status" value={latestPacket.payload.status} />
+              <Metadata label="Open exceptions" value={String(latestPacket.payload.summary.openExceptions)} />
+              <Metadata label="Canonical loads" value={String(latestPacket.payload.summary.canonicalLoads)} />
+            </div>
+          </div>
+        ) : (
+          <div className="empty-state">No readiness evidence packet has been saved yet.</div>
+        )}
+      </section>
+    </>
   )
 }
 

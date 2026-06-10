@@ -313,6 +313,59 @@
   gap: 16px;
 }
 
+.evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.evidence-status-panel {
+  min-height: 100%;
+}
+
+.evidence-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.evidence-list-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #e3eaea;
+  border-radius: 8px;
+  background: #fbfcfc;
+}
+
+.evidence-list-item strong,
+.evidence-list-item span,
+.evidence-list-item small {
+  display: block;
+}
+
+.evidence-list-item strong {
+  color: #1d2d2d;
+  font-size: 13px;
+}
+
+.evidence-list-item span {
+  margin-top: 3px;
+  color: #647474;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.evidence-list-item small {
+  margin-top: 5px;
+  color: #7a6350;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .contract-history-panel {
   margin-top: 16px;
 }
@@ -1977,6 +2030,7 @@
   .backend-grid,
   .backend-grid.lower,
   .contract-grid,
+  .evidence-grid,
   .storage-schema-grid,
   .workflow-grid,
   .traceability-grid,
