@@ -1308,6 +1308,30 @@
   gap: 7px;
 }
 
+.credential-validation-panel {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #edf2f1;
+}
+
+.credential-validation-panel h4 {
+  margin: 0 0 8px;
+  color: #1e3030;
+  font-size: 13px;
+}
+
+.credential-validation-summary {
+  padding: 12px;
+}
+
+.credential-check-list {
+  margin-top: 12px;
+}
+
+.credential-history {
+  margin: 12px 0 0;
+}
+
 .preview-table {
   margin-top: 16px;
   padding-top: 14px;

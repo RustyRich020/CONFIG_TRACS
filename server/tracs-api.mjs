@@ -13,6 +13,7 @@ import {
 import {
   discoverSharePointExcelMetadata,
   discoverSnowflakeMetadata,
+  validateConnectorCredentials,
 } from './credentialMetadataAdapters.mjs'
 import { discoverCsvMetadata, previewCsvRows } from './csvAdapter.mjs'
 import { createFileRecordStore } from './recordStore.mjs'
@@ -446,6 +447,25 @@ async function handleRequest(req, res) {
         },
       })
       jsonResponse(res, 200, { ...preview, record })
+      return
+    }
+
+    const credentialValidationMatch = url.pathname.match(/^\/api\/connectors\/([^/]+)\/credential-validation$/)
+    if (req.method === 'POST' && credentialValidationMatch) {
+      const connectorId = decodeURIComponent(credentialValidationMatch[1])
+      const body = await parseBody(req)
+      const result = validateConnectorCredentials(connectorId, body.connector)
+      const record = await recordStore.saveRecord({
+        kind: 'credential_validation',
+        label: `${body.connector.display_name} credential validation`,
+        status: result.status,
+        summary: result.evidence,
+        payload: {
+          connectorId,
+          result,
+        },
+      })
+      jsonResponse(res, 200, { ...result, record })
       return
     }
 

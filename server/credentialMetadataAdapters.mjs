@@ -28,6 +28,158 @@ function snowflakeAccountUrl() {
   return `https://${account}.snowflakecomputing.com`
 }
 
+function envPresent(name) {
+  if (name.includes(' or ')) {
+    return name
+      .split(' or ')
+      .some((part) => Boolean(process.env[part.trim()]))
+  }
+  return Boolean(process.env[name])
+}
+
+function ageDaysFromIso(value) {
+  const parsed = Date.parse(value)
+  if (!Number.isFinite(parsed)) return null
+  return Math.max(0, Math.round(((Date.now() - parsed) / 864e5) * 10) / 10)
+}
+
+function rotationCheck({ maxAgeDays, rotatedAtEnv, tokenName }) {
+  const checkedAt = new Date().toISOString()
+  const rotatedAt = process.env[rotatedAtEnv]
+  if (!rotatedAt) {
+    return {
+      checkedAt,
+      maxAgeDays,
+      status: 'warning',
+      evidence: `${rotatedAtEnv} is not configured, so ${tokenName} token age cannot be verified.`,
+    }
+  }
+  const ageDays = ageDaysFromIso(rotatedAt)
+  if (ageDays === null) {
+    return {
+      checkedAt,
+      rotatedAt,
+      maxAgeDays,
+      status: 'blocking',
+      evidence: `${rotatedAtEnv} is not a valid ISO date/time.`,
+    }
+  }
+  return {
+    checkedAt,
+    rotatedAt,
+    maxAgeDays,
+    ageDays,
+    status: ageDays <= maxAgeDays ? 'pass' : 'warning',
+    evidence: `${tokenName} token age is ${ageDays} day(s); max rotation age is ${maxAgeDays} day(s).`,
+  }
+}
+
+function credentialValidationProfile(connector) {
+  if (connector.type === 'snowflake') {
+    return {
+      credentialMode: 'snowflake_sql_api_token',
+      requiredEnvironment: [
+        'TRACS_SNOWFLAKE_ACCOUNT_URL or TRACS_SNOWFLAKE_ACCOUNT',
+        'TRACS_SNOWFLAKE_TOKEN',
+      ],
+      rotation: {
+        rotatedAtEnv: 'TRACS_SNOWFLAKE_TOKEN_ROTATED_AT',
+        maxAgeDays: Number(process.env.TRACS_SNOWFLAKE_TOKEN_MAX_AGE_DAYS ?? 90),
+        tokenName: 'Snowflake SQL API',
+      },
+    }
+  }
+  if (connector.type === 'sharepoint_excel') {
+    return {
+      credentialMode: 'microsoft_graph_token',
+      requiredEnvironment: ['TRACS_GRAPH_TOKEN'],
+      rotation: {
+        rotatedAtEnv: 'TRACS_GRAPH_TOKEN_ROTATED_AT',
+        maxAgeDays: Number(process.env.TRACS_GRAPH_TOKEN_MAX_AGE_DAYS ?? 90),
+        tokenName: 'Microsoft Graph',
+      },
+    }
+  }
+  return {
+    credentialMode: 'not_required',
+    requiredEnvironment: [],
+    rotation: {
+      rotatedAtEnv: '',
+      maxAgeDays: 0,
+      tokenName: connector.type,
+    },
+  }
+}
+
+export function validateConnectorCredentials(connectorId, connector) {
+  const profile = credentialValidationProfile(connector)
+  const presentEnvironment = profile.requiredEnvironment.filter(envPresent)
+  const missingEnvironment = profile.requiredEnvironment.filter((name) => !envPresent(name))
+  const rotation =
+    profile.requiredEnvironment.length > 0
+      ? rotationCheck(profile.rotation)
+      : {
+          checkedAt: new Date().toISOString(),
+          maxAgeDays: 0,
+          status: 'pass',
+          evidence: `${connector.type} connector does not require server token rotation evidence.`,
+        }
+  const credentialStatus =
+    missingEnvironment.length > 0 ? 'blocking' : profile.requiredEnvironment.length > 0 ? 'pass' : 'pass'
+  const status =
+    credentialStatus === 'blocking' || rotation.status === 'blocking'
+      ? 'blocking'
+      : rotation.status === 'warning'
+        ? 'warning'
+        : 'pass'
+  const checks = [
+    {
+      id: `${connectorId}:credential_presence`,
+      label: 'Credential presence',
+      status: credentialStatus,
+      severity: credentialStatus === 'blocking' ? 'critical' : 'low',
+      evidence:
+        missingEnvironment.length > 0
+          ? `Missing server environment: ${missingEnvironment.join(', ')}.`
+          : profile.requiredEnvironment.length > 0
+            ? `Required credential references are configured for ${connector.display_name}.`
+            : `${connector.display_name} does not require server credentials.`,
+      remediation:
+        missingEnvironment.length > 0
+          ? 'Configure the required server environment variables outside the frontend and rerun validation.'
+          : 'No credential presence remediation required.',
+    },
+    {
+      id: `${connectorId}:token_rotation`,
+      label: 'Token rotation evidence',
+      status: rotation.status,
+      severity: rotation.status === 'blocking' ? 'critical' : rotation.status === 'warning' ? 'medium' : 'low',
+      evidence: rotation.evidence,
+      remediation:
+        rotation.status === 'pass'
+          ? 'No rotation remediation required.'
+          : 'Set or update the token rotated-at environment variable using an ISO date/time after rotating the token.',
+    },
+  ]
+
+  return {
+    connectorId,
+    connectorType: connector.type,
+    validatedAt: new Date().toISOString(),
+    status,
+    credentialMode: profile.credentialMode,
+    requiredEnvironment: profile.requiredEnvironment,
+    presentEnvironment,
+    missingEnvironment,
+    rotation,
+    checks,
+    evidence:
+      missingEnvironment.length > 0
+        ? `${connector.display_name} credential validation blocked by missing server environment.`
+        : `${connector.display_name} credential validation completed with ${status} status.`,
+  }
+}
+
 async function executeSnowflakeMetadataQuery({ connector, statement }) {
   const accountUrl = snowflakeAccountUrl()
   const token = process.env.TRACS_SNOWFLAKE_TOKEN

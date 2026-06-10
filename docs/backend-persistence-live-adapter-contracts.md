@@ -56,6 +56,8 @@ The CSV/manual upload connector reads the configured sample CSV, infers source c
 
 Snowflake and SharePoint Excel metadata discovery are now credential-aware backend adapters. `POST /api/connectors/{connectorId}/metadata` routes Snowflake manifests through the Snowflake SQL API when `TRACS_SNOWFLAKE_ACCOUNT_URL` or `TRACS_SNOWFLAKE_ACCOUNT` plus `TRACS_SNOWFLAKE_TOKEN` are configured. SharePoint Excel manifests route through Microsoft Graph when `TRACS_GRAPH_TOKEN` is configured. When credentials are missing, the API persists warning `connector_run` evidence with the required environment variables and manifest source objects instead of returning a hard failure or exposing secrets.
 
+Credential validation uses `POST /api/connectors/{connectorId}/credential-validation` and persists `credential_validation` records. The route checks required server environment references and token rotation evidence without returning token values. Snowflake rotation evidence reads `TRACS_SNOWFLAKE_TOKEN_ROTATED_AT` with optional `TRACS_SNOWFLAKE_TOKEN_MAX_AGE_DAYS`; Microsoft Graph reads `TRACS_GRAPH_TOKEN_ROTATED_AT` with optional `TRACS_GRAPH_TOKEN_MAX_AGE_DAYS`.
+
 Mapping Studio validation runs are persisted as `mapping_validation` records. The frontend still performs the current schema-to-manifest validation, then sends the reviewed mapping, inferred schema, validation result, and summary to the API for versioned storage.
 
 Integration contracts are persisted as `integration_contract` records. The Contract workspace saves the same generated payload that can be downloaded for governance review, including readiness status, backend evidence, adapter contracts, and recent backend records.

@@ -61,6 +61,7 @@ import type {
   ConnectorPreviewResult,
   ConnectorSourceMetadata,
   ConnectorTestResult,
+  CredentialValidationResult,
   CsvSchemaInference,
   DeploymentState,
   ExtractionJobPayload,
@@ -384,6 +385,7 @@ function App() {
   const [sourceMetadata, setSourceMetadata] = useState<Record<string, ConnectorSourceMetadata>>({})
   const [sourcePreviews, setSourcePreviews] = useState<Record<string, ConnectorPreviewResult>>({})
   const [connectorRuns, setConnectorRuns] = useState<Record<string, BackendRecord[]>>({})
+  const [credentialValidations, setCredentialValidations] = useState<Record<string, CredentialValidationResult>>({})
   const [mappingRuns, setMappingRuns] = useState<Record<string, BackendRecord[]>>({})
   const [canonicalLoadConnectorId, setCanonicalLoadConnectorId] = useState<string>('complaints_snowflake')
   const [contractRecords, setContractRecords] = useState<BackendRecord[]>([])
@@ -738,6 +740,31 @@ function App() {
     )
   }
 
+  async function validateConnectorCredentials(connectorId: string) {
+    if (!config) return
+    const connector = config.connectors.connectors[connectorId]
+    const result = await backendClient.validateConnectorCredentials(connectorId, connector)
+    setCredentialValidations((current) => ({ ...current, [connectorId]: result }))
+    const runs = await backendClient.listConnectorRuns(connectorId)
+    setConnectorRuns((current) => ({ ...current, [connectorId]: runs }))
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'credential_validation',
+        label: `${connector.display_name} credential validation`,
+        status: result.status,
+        summary: result.evidence,
+        payload: result.record ?? result,
+      }),
+    )
+    setSelectedConnectorId(connectorId)
+    record(
+      'credential',
+      'validate',
+      `${connector.display_name} credential validation completed with ${result.status} status.`,
+    )
+  }
+
   function runConnectorTest(connectorId: string) {
     if (!config) return
     const connector = config.connectors.connectors[connectorId]
@@ -1067,6 +1094,23 @@ function App() {
   const selectedConnectorRuns = selectedConnectorId
     ? connectorRuns[selectedConnectorId] ?? []
     : []
+  const selectedCredentialValidation = selectedConnectorId
+    ? credentialValidations[selectedConnectorId] ??
+      (backendRecords.find(
+        (record): record is BackendRecord<{ connectorId: string; result: CredentialValidationResult }> => {
+          const payload = record.payload as { connectorId?: string }
+          return record.kind === 'credential_validation' && payload.connectorId === selectedConnectorId
+        },
+      )?.payload.result)
+    : undefined
+  const selectedCredentialValidationRecords = selectedConnectorId
+    ? backendRecords.filter(
+        (record): record is BackendRecord<{ connectorId: string; result: CredentialValidationResult }> => {
+          const payload = record.payload as { connectorId?: string }
+          return record.kind === 'credential_validation' && payload.connectorId === selectedConnectorId
+        },
+      )
+    : []
 
   return (
     <div className="app-shell">
@@ -1195,11 +1239,14 @@ function App() {
             onRunAll={runAllConnectorTests}
             onRunOne={runConnectorTest}
             onDiscoverSource={discoverConnectorSource}
+            onValidateCredentials={validateConnectorCredentials}
             onSelect={setSelectedConnectorId}
             selectedConnector={selectedConnector}
             selectedConnectorId={selectedConnectorId}
             selectedConnectorResult={selectedConnectorResult}
             selectedConnectorRuns={selectedConnectorRuns}
+            selectedCredentialValidation={selectedCredentialValidation}
+            selectedCredentialValidationRecords={selectedCredentialValidationRecords}
             selectedSourceMetadata={selectedSourceMetadata}
             selectedSourcePreview={selectedSourcePreview}
           />
@@ -3363,11 +3410,14 @@ function ConnectorHub({
   onDiscoverSource,
   onRunAll,
   onRunOne,
+  onValidateCredentials,
   onSelect,
   selectedConnector,
   selectedConnectorId,
   selectedConnectorResult,
   selectedConnectorRuns,
+  selectedCredentialValidation,
+  selectedCredentialValidationRecords,
   selectedSourceMetadata,
   selectedSourcePreview,
 }: {
@@ -3376,11 +3426,14 @@ function ConnectorHub({
   onDiscoverSource: (connectorId: string) => void
   onRunAll: () => void
   onRunOne: (connectorId: string) => void
+  onValidateCredentials: (connectorId: string) => void
   onSelect: (connectorId: string) => void
   selectedConnector?: AppConfig['connectors']['connectors'][string]
   selectedConnectorId: string | null
   selectedConnectorResult?: ConnectorTestResult
   selectedConnectorRuns: BackendRecord[]
+  selectedCredentialValidation?: CredentialValidationResult
+  selectedCredentialValidationRecords: BackendRecord<{ connectorId: string; result: CredentialValidationResult }>[]
   selectedSourceMetadata?: ConnectorSourceMetadata
   selectedSourcePreview?: ConnectorPreviewResult
 }) {
@@ -3461,6 +3514,14 @@ function ConnectorHub({
                   >
                     <Search size={15} />
                     Discover Source
+                  </button>
+                  <button
+                    className="secondary-action"
+                    onClick={() => onValidateCredentials(selectedConnectorId)}
+                    type="button"
+                  >
+                    <ShieldCheck size={15} />
+                    Validate Credentials
                   </button>
                   <button
                     className="secondary-action"
@@ -3584,6 +3645,77 @@ function ConnectorHub({
                   ))}
                 </div>
               ) : null}
+              <div className="credential-validation-panel">
+                <h4>Credential Validation</h4>
+                {selectedCredentialValidation ? (
+                  <>
+                    <div className="latest-contract credential-validation-summary">
+                      <StatusChip
+                        status={selectedCredentialValidation.status}
+                        label={selectedCredentialValidation.status}
+                      />
+                      <h3>{selectedCredentialValidation.credentialMode}</h3>
+                      <p>{selectedCredentialValidation.evidence}</p>
+                      <div className="metadata-grid">
+                        <Metadata
+                          label="Required env"
+                          value={
+                            selectedCredentialValidation.requiredEnvironment.join(', ') ||
+                            'No server token required'
+                          }
+                        />
+                        <Metadata
+                          label="Missing env"
+                          value={selectedCredentialValidation.missingEnvironment.join(', ') || 'None'}
+                        />
+                        <Metadata label="Rotation" value={selectedCredentialValidation.rotation.status} />
+                        <Metadata
+                          label="Token age"
+                          value={
+                            selectedCredentialValidation.rotation.ageDays === undefined
+                              ? 'Unknown'
+                              : `${selectedCredentialValidation.rotation.ageDays} days`
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div className="check-list credential-check-list">
+                      {selectedCredentialValidation.checks.map((check) => {
+                        const Icon = statusIcon[check.status]
+                        return (
+                          <div className={`check-row ${check.status}`} key={check.id}>
+                            <Icon size={17} />
+                            <div>
+                              <strong>{check.label}</strong>
+                              <span>{check.evidence}</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <div className="empty-state compact">
+                    Validate credentials to check server token presence and rotation evidence.
+                  </div>
+                )}
+                {selectedCredentialValidationRecords.length > 0 ? (
+                  <div className="connector-run-history credential-history">
+                    <h4>Credential Validation History</h4>
+                    {selectedCredentialValidationRecords.slice(0, 3).map((run) => (
+                      <div className="connector-run-row" key={run.id}>
+                        <div>
+                          <strong>{run.label}</strong>
+                          <span>
+                            v{run.version} / {new Date(run.createdAt).toLocaleString()}
+                          </span>
+                        </div>
+                        <StatusChip status={run.status} label={run.status} />
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             </div>
           ) : (
             <div className="empty-state">Select a connector to inspect metadata.</div>

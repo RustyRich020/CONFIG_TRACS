@@ -14,6 +14,7 @@ import type {
   ControlledTemplateStatus,
   ConnectorPreviewResult,
   ConnectorSourceMetadata,
+  CredentialValidationResult,
   CsvSchemaInference,
   DeploymentState,
   MappingManifest,
@@ -707,6 +708,81 @@ export class LocalBackendClient {
     }
   }
 
+  async validateConnectorCredentials(
+    connectorId: string,
+    connector: AppConfig['connectors']['connectors'][string],
+  ): Promise<CredentialValidationResult> {
+    const requiredEnvironment =
+      connector.type === 'snowflake'
+        ? ['TRACS_SNOWFLAKE_ACCOUNT_URL or TRACS_SNOWFLAKE_ACCOUNT', 'TRACS_SNOWFLAKE_TOKEN']
+        : connector.type === 'sharepoint_excel'
+          ? ['TRACS_GRAPH_TOKEN']
+          : []
+    const status: StatusLevel = requiredEnvironment.length > 0 ? 'warning' : 'pass'
+    const result: CredentialValidationResult = {
+      connectorId,
+      connectorType: connector.type,
+      validatedAt: new Date().toISOString(),
+      status,
+      credentialMode: requiredEnvironment.length > 0 ? 'server_only' : 'not_required',
+      requiredEnvironment,
+      presentEnvironment: [],
+      missingEnvironment: requiredEnvironment,
+      rotation: {
+        checkedAt: new Date().toISOString(),
+        maxAgeDays: requiredEnvironment.length > 0 ? 90 : 0,
+        status,
+        evidence:
+          requiredEnvironment.length > 0
+            ? 'Credential validation requires the TRACS API because browser code cannot inspect server token environment variables.'
+            : `${connector.type} connector does not require server token rotation evidence.`,
+      },
+      checks: [
+        {
+          id: `${connectorId}:credential_presence`,
+          label: 'Credential presence',
+          status,
+          evidence:
+            requiredEnvironment.length > 0
+              ? 'Credential presence could not be verified from browser-local mode.'
+              : `${connector.display_name} does not require server credentials.`,
+          remediation:
+            requiredEnvironment.length > 0
+              ? 'Run the TRACS API and configure server-side token environment variables.'
+              : 'No credential presence remediation required.',
+        },
+        {
+          id: `${connectorId}:token_rotation`,
+          label: 'Token rotation evidence',
+          status,
+          evidence:
+            requiredEnvironment.length > 0
+              ? 'Token rotation evidence is only available through the TRACS API server.'
+              : `${connector.type} connector does not require server token rotation evidence.`,
+          remediation:
+            requiredEnvironment.length > 0
+              ? 'Set rotated-at token evidence variables on the server and rerun validation.'
+              : 'No rotation remediation required.',
+        },
+      ],
+      evidence:
+        requiredEnvironment.length > 0
+          ? `${connector.display_name} credential validation is pending API-backed server checks.`
+          : `${connector.display_name} credential validation passed; no server token is required.`,
+    }
+    const record = await this.saveRecord({
+      kind: 'credential_validation',
+      label: `${connector.display_name} credential validation`,
+      status: result.status,
+      summary: result.evidence,
+      payload: {
+        connectorId,
+        result,
+      },
+    })
+    return { ...result, record }
+  }
+
   async listConnectorRuns(connectorId: string): Promise<BackendRecord[]> {
     return this.listRecords().then((records) =>
       records.filter(
@@ -1077,6 +1153,23 @@ class ApiBackendClient {
       )
     } catch {
       return this.localFallback.previewConnectorRows(connectorId, connector, limit)
+    }
+  }
+
+  async validateConnectorCredentials(
+    connectorId: string,
+    connector: AppConfig['connectors']['connectors'][string],
+  ): Promise<CredentialValidationResult> {
+    try {
+      return await this.request<CredentialValidationResult>(
+        `/api/connectors/${encodeURIComponent(connectorId)}/credential-validation`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ connector }),
+        },
+      )
+    } catch {
+      return this.localFallback.validateConnectorCredentials(connectorId, connector)
     }
   }
 

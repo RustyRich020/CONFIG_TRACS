@@ -166,6 +166,7 @@ export type SavedVersionKind =
   | 'report_catalog_item'
   | 'extraction_job'
   | 'extraction_run'
+  | 'credential_validation'
 
 export type SavedVersion = {
   id: string
@@ -192,6 +193,7 @@ export type BackendRecordKind =
   | 'readiness_evidence_packet'
   | 'extraction_job'
   | 'extraction_run'
+  | 'credential_validation'
 
 export type BackendRecord<TPayload = unknown> = {
   id: string
@@ -290,6 +292,28 @@ export type ConnectorPreviewResult = {
   rowCount: number
   returnedRows: number
   rows: Record<string, string>[]
+  evidence: string
+  record?: BackendRecord
+}
+
+export type CredentialValidationResult = {
+  connectorId: string
+  connectorType: string
+  validatedAt: string
+  status: StatusLevel
+  credentialMode: string
+  requiredEnvironment: string[]
+  presentEnvironment: string[]
+  missingEnvironment: string[]
+  rotation: {
+    checkedAt: string
+    rotatedAt?: string
+    maxAgeDays: number
+    ageDays?: number
+    status: StatusLevel
+    evidence: string
+  }
+  checks: ReadinessCheck[]
   evidence: string
   record?: BackendRecord
 }
