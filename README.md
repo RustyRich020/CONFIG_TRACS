@@ -91,6 +91,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Discovers external-reference metadata and bounded preview rows through a credential-aware backend adapter.
 - Filters traceability graphs by object family, status, and saved evidence packet coverage.
 - Adds a selectable SQLite record store adapter behind the existing API persistence contract.
+- Adds an optional Postgres record store adapter and migration checklist for shared production persistence.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
@@ -151,6 +152,22 @@ npm run api:sqlite
 
 SQLite records are written to `data/*.sqlite`, which is intentionally ignored by Git. The API route contracts remain the same for JSON and SQLite stores.
 
+To run the API with Postgres persistence for shared or production environments:
+
+```bash
+$env:TRACS_RECORD_STORE='postgres'
+$env:TRACS_POSTGRES_URL='postgres://user:password@host:5432/database?sslmode=require'
+npm run api:postgres
+```
+
+Optional Postgres controls:
+
+- `TRACS_POSTGRES_POOL_MAX`: connection pool cap, default `5`
+- `TRACS_POSTGRES_MAX_RECORDS`: maximum records returned by list routes, default `5000`
+- `TRACS_POSTGRES_SSL`: set to `false` only for trusted local Postgres targets
+
+Postgres initializes the `tracs_records` and `tracs_record_links` tables on API startup. The connection string belongs in the backend host secret store, not in frontend configuration. `GET /api/storage/postgres-migration-checklist` returns the production migration checklist used by the API.
+
 ## Build
 
 ```bash
@@ -165,8 +182,8 @@ npm run build
 - `src/backendClient.ts`: backend adapter that uses the TRACS API when configured and browser-local fallback otherwise.
 - `src/backendContracts.ts`: frontend live adapter contract registry.
 - `src/App.tsx`: admin shell UI and interactions.
-- `server/tracs-api.mjs`: file-backed API service for deployment snapshots, backend records, and adapter dry runs.
-- `server/recordStore.mjs`: storage boundary for JSON and SQLite versioned backend records plus the database schema blueprint.
+- `server/tracs-api.mjs`: API service for deployment snapshots, backend records, storage schemas, and adapter dry runs.
+- `server/recordStore.mjs`: storage boundary for JSON, SQLite, and Postgres versioned backend records plus the database schema blueprint.
 - `server/canonicalService.mjs`: sample-backed canonical object, quality event, traceability, and report catalog service.
 - `server/adapterContracts.mjs`: backend adapter dry-run contract implementation.
 - `server/credentialMetadataAdapters.mjs`: credential-aware Snowflake, Microsoft Graph, and external-reference metadata discovery adapters.
@@ -183,7 +200,7 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add Postgres storage adapter contract and migration checklist.
-2. Add live notification delivery connectors after tenant-specific email, Teams, and SharePoint targets are approved.
-3. Add source-specific external-reference mapping templates for CAPA, supplier, and document systems.
-4. Add traceability graph export packages for evidence packets.
+1. Add live notification delivery connectors after tenant-specific email, Teams, and SharePoint targets are approved.
+2. Add source-specific external-reference mapping templates for CAPA, supplier, and document systems.
+3. Add traceability graph export packages for evidence packets.
+4. Add a guarded JSON/SQLite-to-Postgres import utility after a target database is selected.

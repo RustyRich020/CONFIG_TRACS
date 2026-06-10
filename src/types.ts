@@ -225,7 +225,10 @@ export type BackendHealth = {
     mode: string
     schemaVersion: string
     dataFile?: string
+    databaseFile?: string
     maxRecords?: number
+    poolMax?: number
+    ssl?: string
   }
 }
 
@@ -241,6 +244,25 @@ export type RecordStoreSchema = {
     }>
   }>
   indexes: string[]
+}
+
+export type PostgresMigrationChecklist = {
+  adapter: string
+  targetUse?: string
+  requiredEnvironment?: Array<{
+    name: string
+    value: string
+    purpose: string
+  }>
+  optionalEnvironment?: Array<{
+    name: string
+    value: string
+    purpose: string
+  }>
+  gates?: string[]
+  rollback?: string[]
+  status?: string
+  evidence?: string
 }
 
 export type AdapterOperation = 'health_check' | 'discover_metadata' | 'preview_rows' | 'validate_mapping'

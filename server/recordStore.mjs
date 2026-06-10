@@ -6,6 +6,54 @@ import { dirname } from 'node:path'
 
 const require = createRequire(import.meta.url)
 
+export const postgresMigrationChecklist = {
+  adapter: 'postgres',
+  targetUse: 'Production-grade shared persistence for multi-user TRACS deployments.',
+  requiredEnvironment: [
+    {
+      name: 'TRACS_RECORD_STORE',
+      value: 'postgres',
+      purpose: 'Selects the Postgres record store adapter.',
+    },
+    {
+      name: 'TRACS_POSTGRES_URL',
+      value: 'postgres://user:password@host:5432/database?sslmode=require',
+      purpose: 'Preferred single connection string for hosted Postgres or Supabase.',
+    },
+  ],
+  optionalEnvironment: [
+    {
+      name: 'TRACS_POSTGRES_SSL',
+      value: 'require | false',
+      purpose: 'Defaults to require unless the URL explicitly disables SSL.',
+    },
+    {
+      name: 'TRACS_POSTGRES_POOL_MAX',
+      value: '5',
+      purpose: 'Caps API connection pool size for small app deployments.',
+    },
+    {
+      name: 'TRACS_POSTGRES_SCHEMA',
+      value: 'public',
+      purpose: 'Reserved for managed-schema deployments; v1 uses public.',
+    },
+  ],
+  gates: [
+    'Create or select a managed Postgres database with automated backups enabled.',
+    'Create a least-privilege TRACS application role that can create and maintain the TRACS persistence tables.',
+    'Set TRACS_RECORD_STORE=postgres and TRACS_POSTGRES_URL in the backend host secret store, not in frontend config.',
+    'Start the API once and confirm GET /api/health returns store.mode=postgres.',
+    'Run a POST /api/records smoke test and confirm the record appears through GET /api/records.',
+    'Export existing JSON or SQLite records before migration, then import through POST /api/records or a controlled migration script.',
+    'Keep JSON or SQLite read-only for one release window as rollback evidence.',
+  ],
+  rollback: [
+    'Unset TRACS_RECORD_STORE or set it to file_json to return to JSON file persistence.',
+    'Set TRACS_RECORD_STORE=sqlite to return to local SQLite persistence.',
+    'Do not delete the Postgres database until record counts and recent evidence packets are reconciled.',
+  ],
+}
+
 export const recordStoreSchema = {
   schemaVersion: 'record_store_v1',
   tables: [
@@ -105,16 +153,19 @@ function summarizeStatus(records) {
 }
 
 function parseRecordRow(row) {
+  const payload = typeof row.payload_json === 'string' ? JSON.parse(row.payload_json) : row.payload_json
+  const createdAt = row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at
+  const updatedAt = row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at
   return {
     id: row.id,
     kind: row.kind,
     version: row.version,
     status: row.status,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    createdAt,
+    updatedAt,
     label: row.label,
     summary: row.summary,
-    payload: JSON.parse(row.payload_json),
+    payload,
   }
 }
 
@@ -332,6 +383,192 @@ export function createSqliteRecordStore({ databaseFile, maxRecords = 1000 }) {
   return {
     databaseFile,
     schema: recordStoreSchema,
+    readRecords,
+    saveRecord,
+    listByKind,
+    latestByKind,
+    getRecord,
+    health,
+  }
+}
+
+export function createPostgresRecordStore({
+  connectionString = process.env.TRACS_POSTGRES_URL ?? process.env.DATABASE_URL,
+  maxRecords = Number(process.env.TRACS_POSTGRES_MAX_RECORDS ?? 5000),
+  poolMax = Number(process.env.TRACS_POSTGRES_POOL_MAX ?? 5),
+  ssl = process.env.TRACS_POSTGRES_SSL === 'false' ? false : { rejectUnauthorized: false },
+} = {}) {
+  const { Pool } = require('pg')
+  const pool = new Pool({
+    connectionString,
+    max: poolMax,
+    ssl,
+  })
+
+  let initialized
+
+  async function initialize() {
+    if (!initialized) {
+      initialized = pool.query(`
+        create table if not exists tracs_records (
+          id text primary key,
+          kind text not null,
+          label text not null,
+          version integer not null,
+          status text not null,
+          summary text not null,
+          payload_json jsonb not null,
+          created_at timestamptz not null,
+          updated_at timestamptz not null
+        );
+        create unique index if not exists idx_tracs_records_kind_label_version_unique
+          on tracs_records(kind, label, version);
+        create index if not exists idx_tracs_records_kind_created_at
+          on tracs_records(kind, created_at desc);
+        create index if not exists idx_tracs_records_kind_label_version
+          on tracs_records(kind, label, version desc);
+        create index if not exists idx_tracs_records_status_created_at
+          on tracs_records(status, created_at desc);
+        create table if not exists tracs_record_links (
+          id text primary key,
+          source_record_id text not null,
+          target_record_id text not null,
+          relationship_type text not null,
+          created_at timestamptz not null
+        );
+        create index if not exists idx_tracs_record_links_source
+          on tracs_record_links(source_record_id, relationship_type);
+        create index if not exists idx_tracs_record_links_target
+          on tracs_record_links(target_record_id, relationship_type);
+      `)
+    }
+    return initialized
+  }
+
+  async function readRecords() {
+    await initialize()
+    const result = await pool.query(
+      `
+        select id, kind, label, version, status, summary, payload_json, created_at, updated_at
+        from tracs_records
+        order by created_at desc
+        limit $1
+      `,
+      [maxRecords],
+    )
+    return result.rows.map(parseRecordRow)
+  }
+
+  async function saveRecord({ kind, label, status, summary, payload }) {
+    await initialize()
+    const client = await pool.connect()
+    try {
+      await client.query('begin')
+      await client.query('select pg_advisory_xact_lock(hashtext($1)::bigint)', [`${kind}:${label}`])
+      const versionResult = await client.query(
+        `
+          select coalesce(max(version), 0) + 1 as next_version
+          from tracs_records
+          where kind = $1 and label = $2
+        `,
+        [kind, label],
+      )
+      const now = new Date().toISOString()
+      const insertResult = await client.query(
+        `
+          insert into tracs_records (
+            id, kind, label, version, status, summary, payload_json, created_at, updated_at
+          ) values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)
+          returning id, kind, label, version, status, summary, payload_json, created_at, updated_at
+        `,
+        [
+          randomUUID(),
+          kind,
+          label,
+          versionResult.rows[0].next_version,
+          status,
+          summary,
+          JSON.stringify(payload),
+          now,
+          now,
+        ],
+      )
+      await client.query('commit')
+      return parseRecordRow(insertResult.rows[0])
+    } catch (error) {
+      await client.query('rollback')
+      throw error
+    } finally {
+      client.release()
+    }
+  }
+
+  async function listByKind(kind) {
+    await initialize()
+    const result = await pool.query(
+      `
+        select id, kind, label, version, status, summary, payload_json, created_at, updated_at
+        from tracs_records
+        where kind = $1
+        order by created_at desc
+        limit $2
+      `,
+      [kind, maxRecords],
+    )
+    return result.rows.map(parseRecordRow)
+  }
+
+  async function latestByKind(kind) {
+    await initialize()
+    const result = await pool.query(
+      `
+        select distinct on (label)
+          id, kind, label, version, status, summary, payload_json, created_at, updated_at
+        from tracs_records
+        where kind = $1
+        order by label, version desc, created_at desc
+        limit $2
+      `,
+      [kind, maxRecords],
+    )
+    return result.rows.map(parseRecordRow)
+  }
+
+  async function getRecord(recordId) {
+    await initialize()
+    const result = await pool.query(
+      `
+        select id, kind, label, version, status, summary, payload_json, created_at, updated_at
+        from tracs_records
+        where id = $1
+      `,
+      [recordId],
+    )
+    return result.rows[0] ? parseRecordRow(result.rows[0]) : undefined
+  }
+
+  async function health(startedAt) {
+    const records = await readRecords()
+    return {
+      mode: 'api',
+      status: summarizeStatus(records),
+      checkedAt: new Date().toISOString(),
+      records: records.length,
+      latencyMs: Math.max(1, Math.round(performance.now() - startedAt)),
+      store: {
+        mode: 'postgres',
+        schemaVersion: recordStoreSchema.schemaVersion,
+        maxRecords,
+        poolMax,
+        ssl: ssl ? 'enabled' : 'disabled',
+      },
+      evidence: 'Postgres record store is active through the configured TRACS_POSTGRES_URL or DATABASE_URL.',
+    }
+  }
+
+  return {
+    schema: recordStoreSchema,
+    migrationChecklist: postgresMigrationChecklist,
     readRecords,
     saveRecord,
     listByKind,

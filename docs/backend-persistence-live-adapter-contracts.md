@@ -27,6 +27,7 @@ GET  /api/health
 GET  /api/records
 POST /api/records
 GET  /api/storage/schema
+GET  /api/storage/postgres-migration-checklist
 GET  /api/adapter-contracts
 GET  /api/assets/registry
 GET  /api/templates
@@ -76,7 +77,7 @@ The Evidence workspace saves readiness evidence packets through the generic `POS
 
 Report approval and evidence packet notification exports are JSON handoff contracts generated in the frontend. They include route stage, recipients, due dates, status, evidence summaries, and source dependencies without sending email or Teams messages directly. `POST /api/notifications/delivery-dry-run` runs the email, Teams, and SharePoint folder delivery adapters in dry-run mode and persists `notification_delivery` records with per-channel evidence. Email dry-runs check `TRACS_NOTIFICATION_EMAIL_TARGET`, Teams dry-runs check `TRACS_NOTIFICATION_TEAMS_WEBHOOK_URL`, and SharePoint folder dry-runs check `TRACS_NOTIFICATION_SHAREPOINT_FOLDER`; no external messages or files are sent by this phase.
 
-The API persistence layer now routes through `server/recordStore.mjs`, which supports the default JSON file store and an opt-in SQLite store. Set `TRACS_RECORD_STORE=sqlite` and optionally `TRACS_SQLITE_FILE=data/tracs-records.sqlite` before `npm run api:sqlite` to persist versioned records in SQLite while keeping the same API routes. `GET /api/storage/schema` returns the `tracs_records` and `tracs_record_links` blueprint that the SQLite adapter implements and future Postgres adapters should match.
+The API persistence layer now routes through `server/recordStore.mjs`, which supports the default JSON file store, an opt-in SQLite store, and an opt-in Postgres store. Set `TRACS_RECORD_STORE=sqlite` and optionally `TRACS_SQLITE_FILE=data/tracs-records.sqlite` before `npm run api:sqlite` to persist versioned records in SQLite while keeping the same API routes. Set `TRACS_RECORD_STORE=postgres` and `TRACS_POSTGRES_URL` before `npm run api:postgres` to use production-grade shared persistence. `GET /api/storage/schema` returns the `tracs_records` and `tracs_record_links` blueprint that both database adapters implement. `GET /api/storage/postgres-migration-checklist` returns the environment, validation, rollback, and migration gates for promoting JSON or SQLite records into Postgres.
 
 The canonical workflow routes are sample-backed in v1. `server/canonicalService.mjs` maps the quality event CSV into stable canonical object IDs, derives event-to-product, event-to-lot/serial, return, and CAPA traceability links, and exposes a starter BI report catalog. These routes are intentionally typed so future Snowflake, SharePoint, and CSV adapter outputs can replace the sample source without changing the frontend contract.
 
@@ -269,41 +270,70 @@ type ConnectorPreviewResult = {
 
 ## Backend Storage
 
-Current development storage is `data/backend-records.json`.
+Current development storage is `data/backend-records.json`. Local/small deployment storage can use SQLite through `TRACS_RECORD_STORE=sqlite`. Production/shared deployment storage should use Postgres through `TRACS_RECORD_STORE=postgres`.
 
-Recommended database tables:
+Implemented database contract:
 
 ```sql
-SAVED_VERSION (
-  ID varchar primary key,
-  KIND varchar not null,
-  LABEL varchar not null,
-  STATUS varchar not null,
-  CREATED_AT timestamp not null,
-  CREATED_BY varchar not null,
-  SUMMARY varchar,
-  PAYLOAD variant not null
+create table if not exists tracs_records (
+  id text primary key,
+  kind text not null,
+  label text not null,
+  version integer not null,
+  status text not null,
+  summary text not null,
+  payload_json jsonb not null,
+  created_at timestamptz not null,
+  updated_at timestamptz not null
 );
 
-CONNECTOR_RUN (
-  ID varchar primary key,
-  CONNECTOR_ID varchar not null,
-  RUN_TYPE varchar not null,
-  STATUS varchar not null,
-  TESTED_AT timestamp not null,
-  TESTED_BY varchar not null,
-  RESULT_PAYLOAD variant not null
+create unique index if not exists idx_tracs_records_kind_label_version_unique
+  on tracs_records(kind, label, version);
+
+create index if not exists idx_tracs_records_kind_created_at
+  on tracs_records(kind, created_at desc);
+
+create index if not exists idx_tracs_records_kind_label_version
+  on tracs_records(kind, label, version desc);
+
+create index if not exists idx_tracs_records_status_created_at
+  on tracs_records(status, created_at desc);
+
+create table if not exists tracs_record_links (
+  id text primary key,
+  source_record_id text not null,
+  target_record_id text not null,
+  relationship_type text not null,
+  created_at timestamptz not null
 );
 
-MAPPING_RUN (
-  ID varchar primary key,
-  MAPPING_ID varchar not null,
-  STATUS varchar not null,
-  VALIDATED_AT timestamp not null,
-  VALIDATED_BY varchar not null,
-  RESULT_PAYLOAD variant not null
-);
+create index if not exists idx_tracs_record_links_source
+  on tracs_record_links(source_record_id, relationship_type);
+
+create index if not exists idx_tracs_record_links_target
+  on tracs_record_links(target_record_id, relationship_type);
 ```
+
+Postgres adapter environment:
+
+```bash
+TRACS_RECORD_STORE=postgres
+TRACS_POSTGRES_URL=postgres://user:password@host:5432/database?sslmode=require
+TRACS_POSTGRES_POOL_MAX=5
+TRACS_POSTGRES_MAX_RECORDS=5000
+TRACS_POSTGRES_SSL=require
+```
+
+Migration checklist:
+
+1. Create a managed Postgres database with automated backups.
+2. Create a least-privilege TRACS application role and store the connection string in the backend secret store.
+3. Start the API with `TRACS_RECORD_STORE=postgres` and confirm `/api/health` returns `store.mode=postgres`.
+4. Save a controlled smoke record through `POST /api/records`, then confirm it appears through `GET /api/records`.
+5. Export JSON or SQLite records before import; do not move secrets or frontend environment values into the record payloads.
+6. Import records through the same `/api/records` boundary or a reviewed migration script that preserves `kind`, `label`, `status`, `summary`, and payload evidence.
+7. Keep JSON or SQLite storage read-only for one release window as rollback evidence.
+8. Reconcile record counts, recent evidence packets, report sign-offs, and extraction-run records before deleting legacy storage.
 
 ## GitHub Implementation Plan
 

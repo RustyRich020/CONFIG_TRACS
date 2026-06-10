@@ -19,15 +19,22 @@ import {
 } from './credentialMetadataAdapters.mjs'
 import { discoverCsvMetadata, previewCsvRows } from './csvAdapter.mjs'
 import { runNotificationDeliveryDryRun } from './notificationDeliveryAdapters.mjs'
-import { createFileRecordStore, createSqliteRecordStore } from './recordStore.mjs'
+import {
+  createFileRecordStore,
+  createPostgresRecordStore,
+  createSqliteRecordStore,
+  postgresMigrationChecklist,
+} from './recordStore.mjs'
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const dataFile = resolve(rootDir, 'data', 'backend-records.json')
 const sqliteFile = resolve(rootDir, process.env.TRACS_SQLITE_FILE ?? 'data/tracs-records.sqlite')
 const recordStore =
-  process.env.TRACS_RECORD_STORE === 'sqlite'
-    ? createSqliteRecordStore({ databaseFile: sqliteFile })
-    : createFileRecordStore({ dataFile })
+  process.env.TRACS_RECORD_STORE === 'postgres'
+    ? createPostgresRecordStore()
+    : process.env.TRACS_RECORD_STORE === 'sqlite'
+      ? createSqliteRecordStore({ databaseFile: sqliteFile })
+      : createFileRecordStore({ dataFile })
 const port = Number(process.env.TRACS_API_PORT ?? 8787)
 const host = process.env.TRACS_API_HOST ?? '127.0.0.1'
 
@@ -265,6 +272,11 @@ async function handleRequest(req, res) {
 
     if (req.method === 'GET' && url.pathname === '/api/storage/schema') {
       jsonResponse(res, 200, recordStore.schema)
+      return
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/storage/postgres-migration-checklist') {
+      jsonResponse(res, 200, recordStore.migrationChecklist ?? postgresMigrationChecklist)
       return
     }
 

@@ -22,6 +22,7 @@ import type {
   LocalAsset,
   NotificationDeliveryPayload,
   NotificationDeliveryResult,
+  PostgresMigrationChecklist,
   QualityEvent,
   ReportCatalogItem,
   RecordStoreSchema,
@@ -534,6 +535,42 @@ export class LocalBackendClient {
         },
       ],
       indexes: ['not applicable in browser-local fallback'],
+    }
+  }
+
+  async loadPostgresMigrationChecklist(): Promise<PostgresMigrationChecklist> {
+    return {
+      adapter: 'postgres',
+      targetUse: 'Production-grade shared persistence for multi-user TRACS deployments.',
+      requiredEnvironment: [
+        {
+          name: 'TRACS_RECORD_STORE',
+          value: 'postgres',
+          purpose: 'Selects the Postgres record store adapter.',
+        },
+        {
+          name: 'TRACS_POSTGRES_URL',
+          value: 'postgres://user:password@host:5432/database?sslmode=require',
+          purpose: 'Secret-backed backend connection string.',
+        },
+      ],
+      optionalEnvironment: [
+        {
+          name: 'TRACS_POSTGRES_POOL_MAX',
+          value: '5',
+          purpose: 'Caps the backend API connection pool.',
+        },
+      ],
+      gates: [
+        'Confirm a managed Postgres database exists with automated backups.',
+        'Run the API with TRACS_RECORD_STORE=postgres and confirm /api/health returns store.mode=postgres.',
+        'Save a smoke record through POST /api/records and verify it through GET /api/records.',
+        'Keep JSON or SQLite storage read-only for one release window as rollback evidence.',
+      ],
+      rollback: [
+        'Unset TRACS_RECORD_STORE to return to JSON file persistence.',
+        'Set TRACS_RECORD_STORE=sqlite to return to local SQLite persistence.',
+      ],
     }
   }
 
@@ -1137,6 +1174,14 @@ class ApiBackendClient {
       return await this.request<RecordStoreSchema>('/api/storage/schema')
     } catch {
       return this.localFallback.loadStorageSchema()
+    }
+  }
+
+  async loadPostgresMigrationChecklist(): Promise<PostgresMigrationChecklist> {
+    try {
+      return await this.request<PostgresMigrationChecklist>('/api/storage/postgres-migration-checklist')
+    } catch {
+      return this.localFallback.loadPostgresMigrationChecklist()
     }
   }
 

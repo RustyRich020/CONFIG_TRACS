@@ -71,6 +71,7 @@ import type {
   MappingValidationResult,
   NotificationDeliveryPayload,
   NotificationDeliveryResult,
+  PostgresMigrationChecklist,
   QualityEvent,
   ReportCatalogItem,
   ReadinessCheck,
@@ -555,6 +556,8 @@ function App() {
   const [backendHealth, setBackendHealth] = useState<BackendHealth | null>(null)
   const [backendRecords, setBackendRecords] = useState<BackendRecord[]>([])
   const [storageSchema, setStorageSchema] = useState<RecordStoreSchema | null>(null)
+  const [postgresMigrationChecklist, setPostgresMigrationChecklist] =
+    useState<PostgresMigrationChecklist | null>(null)
   const [adapterDryRuns, setAdapterDryRuns] = useState<Record<string, AdapterDryRunResult>>({})
   const [sourceMetadata, setSourceMetadata] = useState<Record<string, ConnectorSourceMetadata>>({})
   const [sourcePreviews, setSourcePreviews] = useState<Record<string, ConnectorPreviewResult>>({})
@@ -627,18 +630,20 @@ function App() {
   }
 
   async function refreshBackend() {
-    const [health, records, contracts, templates, schema] = await Promise.all([
+    const [health, records, contracts, templates, schema, postgresChecklist] = await Promise.all([
       backendClient.health(),
       backendClient.listRecords(),
       backendClient.listIntegrationContracts(),
       backendClient.listControlledTemplates(),
       backendClient.loadStorageSchema(),
+      backendClient.loadPostgresMigrationChecklist(),
     ])
     setBackendHealth(health)
     setBackendRecords(records)
     setContractRecords(contracts)
     setTemplateRecords(templates)
     setStorageSchema(schema)
+    setPostgresMigrationChecklist(postgresChecklist)
   }
 
   async function refreshAssetRegistry() {
@@ -1618,6 +1623,7 @@ function App() {
             onRunAdapterDryRun={runAdapterDryRun}
             onSaveSnapshot={saveBackendSnapshot}
             storageSchema={storageSchema}
+            postgresMigrationChecklist={postgresMigrationChecklist}
           />
         ) : activeView === 'Contract' ? (
           <ContractWorkspace
@@ -2245,6 +2251,7 @@ function BackendPersistenceView({
   onRefresh,
   onRunAdapterDryRun,
   onSaveSnapshot,
+  postgresMigrationChecklist,
   storageSchema,
 }: {
   adapterContracts: AdapterContract[]
@@ -2255,6 +2262,7 @@ function BackendPersistenceView({
   onRefresh: () => void
   onRunAdapterDryRun: (connectorId: string) => void
   onSaveSnapshot: () => void
+  postgresMigrationChecklist: PostgresMigrationChecklist | null
   storageSchema: RecordStoreSchema | null
 }) {
   const recordCounts = backendRecords.reduce(
@@ -2441,6 +2449,58 @@ function BackendPersistenceView({
           </div>
         ) : (
           <div className="empty-state compact">Refresh backend health to load the storage schema blueprint.</div>
+        )}
+      </section>
+
+      <section className="panel storage-schema-panel">
+        <PanelHeader
+          icon={Database}
+          title="Postgres Migration Checklist"
+          subtitle={
+            postgresMigrationChecklist?.targetUse ??
+            'Production persistence checklist loads from the backend storage contract.'
+          }
+        />
+        {postgresMigrationChecklist ? (
+          <div className="storage-schema-grid">
+            <article className="storage-table-card">
+              <div>
+                <strong>Required Environment</strong>
+                <span>Backend-only settings for activating shared persistence.</span>
+              </div>
+              <div className="storage-column-list">
+                {(postgresMigrationChecklist.requiredEnvironment ?? []).map((entry) => (
+                  <span key={entry.name}>
+                    {entry.name} <em>{entry.value}</em>
+                  </span>
+                ))}
+              </div>
+            </article>
+            <article className="storage-table-card">
+              <div>
+                <strong>Promotion Gates</strong>
+                <span>Checks before JSON or SQLite records are migrated into Postgres.</span>
+              </div>
+              <div className="storage-column-list">
+                {(postgresMigrationChecklist.gates ?? []).slice(0, 6).map((gate) => (
+                  <span key={gate}>{gate}</span>
+                ))}
+              </div>
+            </article>
+            <article className="storage-table-card">
+              <div>
+                <strong>Rollback</strong>
+                <span>Fallback path if shared persistence needs to be disabled.</span>
+              </div>
+              <div className="storage-column-list">
+                {(postgresMigrationChecklist.rollback ?? []).map((step) => (
+                  <span key={step}>{step}</span>
+                ))}
+              </div>
+            </article>
+          </div>
+        ) : (
+          <div className="empty-state compact">Refresh backend health to load the Postgres migration checklist.</div>
         )}
       </section>
     </>
