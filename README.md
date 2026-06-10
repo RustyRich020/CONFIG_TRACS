@@ -89,6 +89,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Adds a traceability path explorer that shows event-to-object relationship paths and coverage.
 - Adds notification delivery dry-run adapters for email, Teams, and SharePoint export folders with persisted delivery evidence.
 - Discovers external-reference metadata and bounded preview rows through a credential-aware backend adapter.
+- Filters traceability graphs by object family, status, and saved evidence packet coverage.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
@@ -171,7 +172,7 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add traceability graph filtering across object families and persisted evidence packets.
-2. Add storage adapter implementation for SQLite or Postgres.
-3. Add live notification delivery connectors after tenant-specific email, Teams, and SharePoint targets are approved.
-4. Add source-specific external-reference mapping templates for CAPA, supplier, and document systems.
+1. Add storage adapter implementation for SQLite or Postgres.
+2. Add live notification delivery connectors after tenant-specific email, Teams, and SharePoint targets are approved.
+3. Add source-specific external-reference mapping templates for CAPA, supplier, and document systems.
+4. Add traceability graph export packages for evidence packets.

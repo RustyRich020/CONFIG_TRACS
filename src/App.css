@@ -1631,6 +1631,99 @@
   line-height: 1.4;
 }
 
+.trace-filter-panel,
+.trace-graph-panel,
+.trace-evidence-panel {
+  margin-top: 16px;
+}
+
+.trace-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+}
+
+.trace-filter-grid label {
+  display: grid;
+  gap: 6px;
+}
+
+.trace-filter-grid span {
+  color: #617171;
+  font-size: 11px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.trace-filter-grid select {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid #dce7e5;
+  border-radius: 8px;
+  color: #1e3030;
+  background: #ffffff;
+  font-size: 12px;
+}
+
+.trace-graph-canvas {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.35fr) minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px;
+  border-bottom: 1px solid #edf2f1;
+}
+
+.trace-graph-edges {
+  display: grid;
+  gap: 10px;
+}
+
+.trace-graph-edge {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.3fr) 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.trace-graph-edge > span {
+  color: #0d5f63;
+  font-size: 11px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.trace-graph-node {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #dfe9e7;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.trace-graph-node.source {
+  border-color: #8cc8c1;
+  background: #f0faf8;
+}
+
+.trace-graph-node strong,
+.trace-graph-node span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.trace-graph-node strong {
+  color: #1e3030;
+  font-size: 12px;
+}
+
+.trace-graph-node span {
+  margin-top: 4px;
+  color: #718080;
+  font-size: 11px;
+}
+
 .trace-path-panel {
   margin-top: 16px;
 }
@@ -2406,6 +2499,9 @@
   }
 
   .trace-path-summary,
+  .trace-filter-grid,
+  .trace-graph-canvas,
+  .trace-graph-edge,
   .trace-path-row {
     grid-template-columns: 1fr;
   }

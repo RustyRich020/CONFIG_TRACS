@@ -1566,6 +1566,11 @@ function App() {
           <ObjectExplorerView objects={canonicalObjects} />
         ) : activeView === 'Traceability' ? (
           <TraceabilityView
+            canonicalObjects={canonicalObjects}
+            evidenceRecords={backendRecords.filter(
+              (record): record is BackendRecord<ReadinessEvidencePacket> =>
+                record.kind === 'readiness_evidence_packet',
+            )}
             events={qualityEvents}
             links={traceabilityLinks}
             onSelectEvent={setSelectedQualityEventId}
@@ -2791,24 +2796,78 @@ function ObjectExplorerView({ objects }: { objects: CanonicalObject[] }) {
 }
 
 function TraceabilityView({
+  canonicalObjects,
+  evidenceRecords,
   events,
   links,
   onSelectEvent,
   selectedEventId,
 }: {
+  canonicalObjects: CanonicalObject[]
+  evidenceRecords: BackendRecord<ReadinessEvidencePacket>[]
   events: QualityEvent[]
   links: TraceabilityLink[]
   onSelectEvent: (eventId: string) => void
   selectedEventId: string | null
 }) {
+  const [familyFilter, setFamilyFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState<StatusLevel | 'all'>('all')
+  const [packetFilter, setPacketFilter] = useState('all')
   const selectedEvent = events.find((event) => event.id === selectedEventId) ?? events[0]
+  const canonicalById = useMemo(
+    () => new Map(canonicalObjects.map((object) => [object.id, object])),
+    [canonicalObjects],
+  )
   const selectedLinks = selectedEvent
     ? links.filter((link) => link.sourceObjectId === selectedEvent.id)
     : []
-  const relationshipSummary = selectedLinks.reduce<Record<string, number>>((summary, link) => {
-    summary[link.targetObjectType] = (summary[link.targetObjectType] ?? 0) + 1
+  const traceEvidencePackets = evidenceRecords.filter((record) =>
+    record.payload.canonicalLoads.some((load) => load.payload.linkCount > 0),
+  )
+  const familyOptions = Array.from(
+    new Set(
+      selectedLinks.map((link) => canonicalById.get(link.targetObjectId)?.family ?? link.targetObjectType),
+    ),
+  ).sort()
+  const filteredLinks = selectedLinks.filter((link) => {
+    const family = canonicalById.get(link.targetObjectId)?.family ?? link.targetObjectType
+    const familyMatches = familyFilter === 'all' || family === familyFilter
+    const statusMatches = statusFilter === 'all' || link.status === statusFilter
+    const packetMatches =
+      packetFilter === 'all' ||
+      traceEvidencePackets.some(
+        (record) =>
+          record.id === packetFilter &&
+          record.payload.canonicalLoads.some((load) => load.payload.linkCount > 0),
+      )
+    return familyMatches && statusMatches && packetMatches
+  })
+  const relationshipSummary = filteredLinks.reduce<Record<string, number>>((summary, link) => {
+    const family = canonicalById.get(link.targetObjectId)?.family ?? link.targetObjectType
+    summary[family] = (summary[family] ?? 0) + 1
     return summary
   }, {})
+  const graphNodes = selectedEvent
+    ? [
+        {
+          id: selectedEvent.id,
+          label: selectedEvent.canonical.event_id,
+          family: selectedEvent.family,
+          type: selectedEvent.objectType,
+          status: selectedEvent.status,
+        },
+        ...filteredLinks.map((link) => {
+          const object = canonicalById.get(link.targetObjectId)
+          return {
+            id: link.targetObjectId,
+            label: link.targetLabel,
+            family: object?.family ?? link.targetObjectType,
+            type: link.targetObjectType,
+            status: object?.status ?? link.status,
+          }
+        }),
+      ]
+    : []
 
   return (
     <>
@@ -2831,6 +2890,50 @@ function TraceabilityView({
             </option>
           ))}
         </select>
+      </section>
+
+      <section className="panel trace-filter-panel">
+        <PanelHeader
+          icon={Search}
+          title="Traceability Filters"
+          subtitle="Filter paths and graph nodes by object family, link status, and saved evidence packet coverage."
+        />
+        <div className="trace-filter-grid">
+          <label>
+            <span>Object family</span>
+            <select value={familyFilter} onChange={(event) => setFamilyFilter(event.target.value)}>
+              <option value="all">All families</option>
+              {familyOptions.map((family) => (
+                <option key={family} value={family}>
+                  {titleize(family)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Link status</span>
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as StatusLevel | 'all')}
+            >
+              <option value="all">All statuses</option>
+              <option value="pass">Pass</option>
+              <option value="warning">Warning</option>
+              <option value="blocking">Blocking</option>
+            </select>
+          </label>
+          <label>
+            <span>Evidence packet</span>
+            <select value={packetFilter} onChange={(event) => setPacketFilter(event.target.value)}>
+              <option value="all">All packets</option>
+              {traceEvidencePackets.map((record) => (
+                <option key={record.id} value={record.id}>
+                  v{record.version} / {new Date(record.createdAt).toLocaleDateString()}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </section>
 
       <section className="traceability-grid">
@@ -2862,10 +2965,10 @@ function TraceabilityView({
           <PanelHeader
             icon={Route}
             title="Linked Objects"
-            subtitle={`${selectedLinks.length} relationship(s) derived from canonical fields.`}
+            subtitle={`${filteredLinks.length} of ${selectedLinks.length} relationship(s) shown after filters.`}
           />
           <div className="trace-node-list">
-            {selectedLinks.map((link) => (
+            {filteredLinks.map((link) => (
               <div className="trace-link-card" key={link.id}>
                 <div className="trace-line" />
                 <div className="trace-node">
@@ -2876,8 +2979,48 @@ function TraceabilityView({
                 <StatusChip status={link.status} label={link.status} />
               </div>
             ))}
+            {filteredLinks.length === 0 ? (
+              <div className="empty-state compact">No linked objects match the active filters.</div>
+            ) : null}
           </div>
         </section>
+      </section>
+
+      <section className="panel trace-graph-panel">
+        <PanelHeader
+          icon={GitBranch}
+          title="Filtered Traceability Graph"
+          subtitle="Graph-style node and edge inventory derived from the selected event and active filters."
+        />
+        <div className="trace-graph-canvas">
+          <div className="trace-graph-node source">
+            <strong>{selectedEvent?.canonical.event_id ?? 'No event'}</strong>
+            <span>quality_event / quality</span>
+          </div>
+          <div className="trace-graph-edges">
+            {filteredLinks.map((link) => {
+              const object = canonicalById.get(link.targetObjectId)
+              return (
+                <div className="trace-graph-edge" key={link.id}>
+                  <span>{titleize(link.relationshipType)}</span>
+                  <div className="trace-line" />
+                  <div className="trace-graph-node">
+                    <strong>{link.targetLabel}</strong>
+                    <span>{titleize(object?.family ?? link.targetObjectType)} / {titleize(link.targetObjectType)}</span>
+                  </div>
+                </div>
+              )
+            })}
+            {filteredLinks.length === 0 ? (
+              <div className="empty-state compact">No graph edges match the active filters.</div>
+            ) : null}
+          </div>
+        </div>
+        <div className="trace-path-summary">
+          <Metadata label="Graph nodes" value={String(graphNodes.length)} />
+          <Metadata label="Graph edges" value={String(filteredLinks.length)} />
+          <Metadata label="Evidence packets" value={String(traceEvidencePackets.length)} />
+        </div>
       </section>
 
       <section className="panel trace-path-panel">
@@ -2887,7 +3030,7 @@ function TraceabilityView({
           subtitle="Readable event-to-object paths for audit, impact analysis, and cross-system evidence review."
         />
         <div className="trace-path-summary">
-          <Metadata label="Paths" value={String(selectedLinks.length)} />
+          <Metadata label="Paths" value={String(filteredLinks.length)} />
           <Metadata label="Target types" value={String(Object.keys(relationshipSummary).length)} />
           <Metadata
             label="Coverage"
@@ -2899,7 +3042,7 @@ function TraceabilityView({
           />
         </div>
         <div className="trace-path-list">
-          {selectedLinks.map((link, index) => (
+          {filteredLinks.map((link, index) => (
             <div className="trace-path-row" key={link.id}>
               <div className="trace-step source">
                 <strong>{selectedEvent?.canonical.event_id}</strong>
@@ -2919,10 +3062,40 @@ function TraceabilityView({
               <p>{link.evidence}</p>
             </div>
           ))}
-          {selectedLinks.length === 0 ? (
+          {filteredLinks.length === 0 ? (
             <div className="empty-state compact">No traceability paths are available for this event.</div>
           ) : null}
         </div>
+      </section>
+
+      <section className="panel trace-evidence-panel">
+        <PanelHeader
+          icon={ClipboardCheck}
+          title="Persisted Evidence Packet Links"
+          subtitle="Saved readiness packets that include canonical-load evidence with traceability links."
+        />
+        {traceEvidencePackets.length > 0 ? (
+          <div className="mapping-run-history">
+            {traceEvidencePackets.slice(0, 5).map((record) => (
+              <div className="mapping-run-row" key={record.id}>
+                <div>
+                  <strong>{record.label}</strong>
+                  <span>
+                    v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.summary.canonicalLoads} canonical load(s)
+                  </span>
+                  <small>
+                    {record.payload.canonicalLoads
+                      .map((load) => `${load.payload.sourceConnector}: ${load.payload.linkCount} link(s)`)
+                      .join(' / ')}
+                  </small>
+                </div>
+                <StatusChip status={record.status} label={record.status} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state">No saved evidence packets include traceability-link evidence yet.</div>
+        )}
       </section>
     </>
   )
