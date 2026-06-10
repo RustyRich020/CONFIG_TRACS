@@ -906,7 +906,15 @@ function App() {
     )
   }
 
-  async function saveExtractionJob() {
+  async function saveExtractionJob(policy?: {
+    status: ExtractionJobPayload['status']
+    scheduleMode: ExtractionJobPayload['scheduleMode']
+    scheduleCadence: ExtractionJobPayload['scheduleCadence']
+    nextRunAt: string
+    maxRetries: number
+    retryDelayMinutes: number
+    retryOnWarnings: boolean
+  }) {
     if (!config) return
     const mapping = config.mappings.quality_event
     const connector =
@@ -920,8 +928,15 @@ function App() {
     const payload: ExtractionJobPayload = {
       jobId: `extraction_job:${profile.sourceConnector}:${profile.targetObject}`,
       name: `${connector.display_name} ${profile.targetObject} extraction`,
-      status: 'active',
-      scheduleMode: 'manual',
+      status: policy?.status ?? 'active',
+      scheduleMode: policy?.scheduleMode ?? 'manual',
+      scheduleCadence: policy?.scheduleCadence ?? 'on_demand',
+      nextRunAt: policy?.nextRunAt ?? '',
+      retryPolicy: {
+        maxRetries: policy?.maxRetries ?? 1,
+        retryDelayMinutes: policy?.retryDelayMinutes ?? 15,
+        retryOnWarnings: policy?.retryOnWarnings ?? true,
+      },
       mappingId: profile.mappingId,
       connectorId: profile.sourceConnector,
       connectorType: profile.connectorType,
@@ -929,7 +944,7 @@ function App() {
       targetObject: profile.targetObject,
       createdAt: now,
       updatedAt: now,
-      evidence: `${connector.display_name} extraction job routes ${profile.sourceObject} into ${profile.targetObject}.`,
+      evidence: `${connector.display_name} extraction job routes ${profile.sourceObject} into ${profile.targetObject} with ${policy?.scheduleCadence ?? 'on_demand'} cadence and ${policy?.maxRetries ?? 1} retry attempt(s).`,
     }
     const saved = await backendClient.saveRecord({
       kind: 'extraction_job',
@@ -952,6 +967,13 @@ function App() {
   }
 
   async function runExtractionJob(job: BackendRecord<ExtractionJobPayload>) {
+    const previousRuns = backendRecords.filter(
+      (record): record is BackendRecord<ExtractionRunPayload> => {
+        const payload = record.payload as { jobId?: string }
+        return record.kind === 'extraction_run' && payload.jobId === job.payload.jobId
+      },
+    )
+    const attempt = previousRuns.length + 1
     const request = {
       mappingId: job.payload.mappingId,
       sourceConnector: job.payload.connectorId,
@@ -963,6 +985,9 @@ function App() {
     const result = await backendClient.loadCanonicalFromMapping(request)
     const finishedAt = new Date().toISOString()
     const status: StatusLevel = result.record?.status ?? (result.warnings.length > 0 ? 'warning' : 'pass')
+    const retryEligible =
+      attempt <= job.payload.retryPolicy.maxRetries &&
+      (status === 'blocking' || (status === 'warning' && job.payload.retryPolicy.retryOnWarnings))
     const payload: ExtractionRunPayload = {
       runId: `extraction_run:${job.payload.jobId}:${finishedAt}`,
       jobId: job.payload.jobId,
@@ -971,7 +996,11 @@ function App() {
       status,
       request,
       result,
-      evidence: `${job.payload.name} completed. ${result.evidence}`,
+      attempt,
+      maxRetries: job.payload.retryPolicy.maxRetries,
+      retryDelayMinutes: job.payload.retryPolicy.retryDelayMinutes,
+      retryEligible,
+      evidence: `${job.payload.name} attempt ${attempt} completed. ${result.evidence}${retryEligible ? ` Retry is eligible after ${job.payload.retryPolicy.retryDelayMinutes} minute(s).` : ''}`,
       warnings: result.warnings,
     }
     const saved = await backendClient.saveRecord({
@@ -2158,6 +2187,152 @@ function BackendPersistenceView({
   )
 }
 
+function ExtractionJobForm({
+  activeConnectorName,
+  extractionJobs,
+  onCreateExtractionJob,
+  onRunExtractionJob,
+  onSelectJob,
+  selectedJob,
+}: {
+  activeConnectorName: string
+  extractionJobs: BackendRecord<ExtractionJobPayload>[]
+  onCreateExtractionJob: (policy: {
+    status: ExtractionJobPayload['status']
+    scheduleMode: ExtractionJobPayload['scheduleMode']
+    scheduleCadence: ExtractionJobPayload['scheduleCadence']
+    nextRunAt: string
+    maxRetries: number
+    retryDelayMinutes: number
+    retryOnWarnings: boolean
+  }) => void
+  onRunExtractionJob: (job: BackendRecord<ExtractionJobPayload>) => void
+  onSelectJob: (jobId: string) => void
+  selectedJob?: BackendRecord<ExtractionJobPayload>
+}) {
+  const [jobStatus, setJobStatus] = useState<ExtractionJobPayload['status']>(selectedJob?.payload.status ?? 'active')
+  const [scheduleMode, setScheduleMode] = useState<ExtractionJobPayload['scheduleMode']>(
+    selectedJob?.payload.scheduleMode ?? 'manual',
+  )
+  const [scheduleCadence, setScheduleCadence] = useState<ExtractionJobPayload['scheduleCadence']>(
+    selectedJob?.payload.scheduleCadence ?? 'on_demand',
+  )
+  const [nextRunAt, setNextRunAt] = useState(selectedJob?.payload.nextRunAt ?? '')
+  const [maxRetries, setMaxRetries] = useState(String(selectedJob?.payload.retryPolicy?.maxRetries ?? 1))
+  const [retryDelayMinutes, setRetryDelayMinutes] = useState(
+    String(selectedJob?.payload.retryPolicy?.retryDelayMinutes ?? 15),
+  )
+  const [retryOnWarnings, setRetryOnWarnings] = useState(
+    selectedJob?.payload.retryPolicy?.retryOnWarnings ?? true,
+  )
+
+  return (
+    <div className="template-editor-form extraction-job-form">
+      <label>
+        <span>Saved job</span>
+        <select
+          value={selectedJob?.id ?? ''}
+          onChange={(event) => onSelectJob(event.target.value)}
+        >
+          {extractionJobs.length > 0 ? (
+            extractionJobs.map((job) => (
+              <option key={job.id} value={job.id}>
+                {job.payload.name}
+              </option>
+            ))
+          ) : (
+            <option value="">No saved extraction jobs</option>
+          )}
+        </select>
+      </label>
+      <label>
+        <span>Active connector profile</span>
+        <input readOnly value={activeConnectorName} />
+      </label>
+      <label>
+        <span>Job status</span>
+        <select value={jobStatus} onChange={(event) => setJobStatus(event.target.value as ExtractionJobPayload['status'])}>
+          <option value="active">Active</option>
+          <option value="paused">Paused</option>
+          <option value="draft">Draft</option>
+        </select>
+      </label>
+      <label>
+        <span>Schedule mode</span>
+        <select
+          value={scheduleMode}
+          onChange={(event) => setScheduleMode(event.target.value as ExtractionJobPayload['scheduleMode'])}
+        >
+          <option value="manual">Manual</option>
+          <option value="scheduled_stub">Scheduled stub</option>
+          <option value="disabled">Disabled</option>
+        </select>
+      </label>
+      <label>
+        <span>Cadence</span>
+        <select
+          value={scheduleCadence}
+          onChange={(event) => setScheduleCadence(event.target.value as ExtractionJobPayload['scheduleCadence'])}
+        >
+          <option value="on_demand">On demand</option>
+          <option value="hourly">Hourly</option>
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+        </select>
+      </label>
+      <label>
+        <span>Next run</span>
+        <input value={nextRunAt} onChange={(event) => setNextRunAt(event.target.value)} />
+      </label>
+      <label>
+        <span>Max retries</span>
+        <input value={maxRetries} onChange={(event) => setMaxRetries(event.target.value)} />
+      </label>
+      <label>
+        <span>Retry delay minutes</span>
+        <input value={retryDelayMinutes} onChange={(event) => setRetryDelayMinutes(event.target.value)} />
+      </label>
+      <label className="extraction-retry-toggle">
+        <span>Retry warnings</span>
+        <input
+          checked={retryOnWarnings}
+          onChange={(event) => setRetryOnWarnings(event.target.checked)}
+          type="checkbox"
+        />
+      </label>
+      <div className="extraction-job-actions">
+        <button
+          className="secondary-action"
+          onClick={() =>
+            onCreateExtractionJob({
+              status: jobStatus,
+              scheduleMode,
+              scheduleCadence,
+              nextRunAt,
+              maxRetries: Number(maxRetries) || 0,
+              retryDelayMinutes: Number(retryDelayMinutes) || 0,
+              retryOnWarnings,
+            })
+          }
+          type="button"
+        >
+          <ServerCog size={15} />
+          Save Extraction Job
+        </button>
+        <button
+          className="primary-action"
+          disabled={!selectedJob}
+          onClick={() => selectedJob && onRunExtractionJob(selectedJob)}
+          type="button"
+        >
+          <Database size={16} />
+          Run Job
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function QualityEventsView({
   events,
   onSelect,
@@ -2799,7 +2974,15 @@ function MappingStudio({
   mappingResult: MappingValidationResult | null
   mappingRuns: BackendRecord[]
   onCsvTextChange: (value: string) => void
-  onCreateExtractionJob: () => void
+  onCreateExtractionJob: (policy: {
+    status: ExtractionJobPayload['status']
+    scheduleMode: ExtractionJobPayload['scheduleMode']
+    scheduleCadence: ExtractionJobPayload['scheduleCadence']
+    nextRunAt: string
+    maxRetries: number
+    retryDelayMinutes: number
+    retryOnWarnings: boolean
+  }) => void
   onLoadConnectorChange: (value: string) => void
   onLoadCanonical: () => void
   onRunExtractionJob: (job: BackendRecord<ExtractionJobPayload>) => void
@@ -2994,50 +3177,18 @@ function MappingStudio({
           subtitle="Save reusable connector-backed jobs, then run them into canonical load and traceability records."
         />
         <div className="extraction-job-grid">
-          <div className="template-editor-form extraction-job-form">
-            <label>
-              <span>Saved job</span>
-              <select
-                value={selectedJob?.id ?? ''}
-                onChange={(event) => setSelectedJobId(event.target.value)}
-              >
-                {extractionJobs.length > 0 ? (
-                  extractionJobs.map((job) => (
-                    <option key={job.id} value={job.id}>
-                      {job.payload.name}
-                    </option>
-                  ))
-                ) : (
-                  <option value="">No saved extraction jobs</option>
-                )}
-              </select>
-            </label>
-            <label>
-              <span>Active connector profile</span>
-              <input
-                readOnly
-                value={
-                  connectorEntries.find(([connectorId]) => connectorId === canonicalLoadConnectorId)?.[1]
-                    .display_name ?? canonicalLoadConnectorId
-                }
-              />
-            </label>
-            <div className="extraction-job-actions">
-              <button className="secondary-action" onClick={onCreateExtractionJob} type="button">
-                <ServerCog size={15} />
-                Save Extraction Job
-              </button>
-              <button
-                className="primary-action"
-                disabled={!selectedJob}
-                onClick={() => selectedJob && onRunExtractionJob(selectedJob)}
-                type="button"
-              >
-                <Database size={16} />
-                Run Job
-              </button>
-            </div>
-          </div>
+          <ExtractionJobForm
+            activeConnectorName={
+              connectorEntries.find(([connectorId]) => connectorId === canonicalLoadConnectorId)?.[1]
+                .display_name ?? canonicalLoadConnectorId
+            }
+            extractionJobs={extractionJobs}
+            key={selectedJob?.id ?? canonicalLoadConnectorId}
+            onCreateExtractionJob={onCreateExtractionJob}
+            onRunExtractionJob={onRunExtractionJob}
+            onSelectJob={setSelectedJobId}
+            selectedJob={selectedJob}
+          />
           <div className="latest-contract">
             {selectedJob ? (
               <>
@@ -3048,6 +3199,9 @@ function MappingStudio({
                   <Metadata label="Connector" value={selectedJob.payload.connectorId} />
                   <Metadata label="Source object" value={selectedJob.payload.sourceObject} />
                   <Metadata label="Target object" value={selectedJob.payload.targetObject} />
+                  <Metadata label="Cadence" value={titleize(selectedJob.payload.scheduleCadence)} />
+                  <Metadata label="Next run" value={selectedJob.payload.nextRunAt || 'Manual only'} />
+                  <Metadata label="Retry policy" value={`${selectedJob.payload.retryPolicy.maxRetries} retries / ${selectedJob.payload.retryPolicy.retryDelayMinutes} min`} />
                   <Metadata label="Runs" value={String(selectedJobRuns.length)} />
                 </div>
               </>
@@ -3064,8 +3218,13 @@ function MappingStudio({
                 <div>
                   <strong>{run.payload.jobId}</strong>
                   <span>
-                    v{run.version} / {new Date(run.createdAt).toLocaleString()} / {run.payload.result.objectCount} object(s), {run.payload.result.linkCount} link(s)
+                    v{run.version} / attempt {run.payload.attempt} of {run.payload.maxRetries + 1} / {new Date(run.createdAt).toLocaleString()} / {run.payload.result.objectCount} object(s), {run.payload.result.linkCount} link(s)
                   </span>
+                  <small>
+                    {run.payload.retryEligible
+                      ? `Retry eligible after ${run.payload.retryDelayMinutes} minute(s).`
+                      : 'Retry not required or policy exhausted.'}
+                  </small>
                   {run.payload.warnings.length > 0 ? <small>{run.payload.warnings.join(' ')}</small> : null}
                 </div>
                 <StatusChip status={run.status} label={run.status} />

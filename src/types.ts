@@ -478,7 +478,14 @@ export type ExtractionJobPayload = {
   jobId: string
   name: string
   status: 'draft' | 'active' | 'paused'
-  scheduleMode: 'manual' | 'scheduled_stub'
+  scheduleMode: 'manual' | 'scheduled_stub' | 'disabled'
+  scheduleCadence: 'on_demand' | 'hourly' | 'daily' | 'weekly'
+  nextRunAt: string
+  retryPolicy: {
+    maxRetries: number
+    retryDelayMinutes: number
+    retryOnWarnings: boolean
+  }
   mappingId: string
   connectorId: string
   connectorType: string
@@ -497,6 +504,10 @@ export type ExtractionRunPayload = {
   status: StatusLevel
   request: CanonicalLoadRequest
   result: CanonicalLoadResult
+  attempt: number
+  maxRetries: number
+  retryDelayMinutes: number
+  retryEligible: boolean
   evidence: string
   warnings: string[]
 }

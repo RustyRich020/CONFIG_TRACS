@@ -503,6 +503,18 @@
   grid-column: 1 / -1;
 }
 
+.extraction-retry-toggle {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 42px;
+}
+
+.extraction-retry-toggle input {
+  width: auto;
+  min-height: auto;
+}
+
 .extraction-run-history {
   margin: 0 16px 16px;
 }

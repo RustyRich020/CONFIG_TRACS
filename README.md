@@ -30,6 +30,7 @@ This prototype now includes the first practical build phases for TRACS:
 24. Credential Validation Tests + Token Rotation Checks v1
 25. Report Catalog Approval History + Reviewer Sign-Off v1
 26. Approval Audit History + Reviewer Routing for Readiness Evidence Packets v1
+27. Extraction Job Scheduling Controls + Run Retry Policy v1
 
 ## What It Proves
 
@@ -79,6 +80,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Validates deployed adapter credential presence and token-rotation evidence without exposing secret values to the frontend.
 - Captures report catalog reviewer sign-off, rationale, status, and approval history as versioned report records.
 - Routes readiness evidence packets to reviewer stages and appends approval audit history to saved packet records.
+- Adds extraction job scheduling controls, cadence metadata, retry policy, and run retry eligibility evidence.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
@@ -152,7 +154,7 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add extraction job scheduling controls and run retry policy.
-2. Add credential provider configuration templates for Snowflake, Graph, and external references.
-3. Add report catalog reviewer routing and approval notifications.
-4. Add evidence packet approval notification exports.
+1. Add credential provider configuration templates for Snowflake, Graph, and external references.
+2. Add report catalog reviewer routing and approval notifications.
+3. Add evidence packet approval notification exports.
+4. Add extraction job calendar view and run queue dashboard.
