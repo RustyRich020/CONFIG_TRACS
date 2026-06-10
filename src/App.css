@@ -290,6 +290,30 @@
   flex-shrink: 0;
 }
 
+.load-source-control {
+  display: grid;
+  gap: 4px;
+  min-width: 240px;
+}
+
+.load-source-control span {
+  color: #687979;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.load-source-control select {
+  min-height: 40px;
+  padding: 0 34px 0 11px;
+  border: 1px solid #d7e1df;
+  border-radius: 8px;
+  color: #1e3030;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .connector-grid {
   display: grid;
   grid-template-columns: minmax(310px, 0.9fr) minmax(420px, 1.2fr) minmax(320px, 0.9fr);

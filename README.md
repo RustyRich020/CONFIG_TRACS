@@ -22,6 +22,7 @@ This prototype now includes the first practical build phases for TRACS:
 16. Report Catalog Config + Freshness Checks
 17. Template Detail Editing + Controlled Template Overrides v1
 18. Readiness Evidence Packet Export v1
+19. Connector-Profiled Canonical Loads v1
 
 ## What It Proves
 
@@ -63,6 +64,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Loads BI/report catalog metadata from YAML config and computes freshness status from refresh SLA thresholds.
 - Edits controlled template lifecycle status, classification, tags, and provenance as new versioned template records.
 - Packages canonical load records, report freshness, and open exceptions into versioned readiness evidence packet records.
+- Loads canonical records through selectable Snowflake, SharePoint Excel, and CSV connector profiles with source-object evidence.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
@@ -130,7 +132,7 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add live connector-backed canonical load for Snowflake and SharePoint Excel sources.
-2. Build credential-backed Snowflake and SharePoint metadata discovery.
-3. Add config-driven report/catalog editing and publish gates.
-4. Add evidence packet approval workflow and exception disposition tracking.
+1. Build credential-backed Snowflake and SharePoint metadata discovery.
+2. Add config-driven report/catalog editing and publish gates.
+3. Add evidence packet approval workflow and exception disposition tracking.
+4. Add connector-backed extraction jobs that replace the current sample-backed load profile.

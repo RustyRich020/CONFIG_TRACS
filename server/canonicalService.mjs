@@ -84,17 +84,20 @@ async function loadQualityEventRows() {
   })
 }
 
-function qualityEventFromRow(row) {
+function qualityEventFromRow(row, loadProfile = {}) {
   const eventId = row.COMPLAINT_ID
+  const sourceConnector = loadProfile.sourceConnector ?? 'manual_csv_quality_events'
+  const sourceObject = loadProfile.sourceObject ?? 'quality_events_sample.csv'
+  const sourceSystem = loadProfile.sourceSystem ?? row.SOURCE_SYSTEM
   return {
     id: `quality_event:${eventId}`,
     objectType: 'quality_event',
     family: 'quality',
     displayName: `${eventId} ${row.PRODUCT_NAME}`,
     status: row.CURRENT_STATUS,
-    sourceConnector: 'manual_csv_quality_events',
-    sourceSystem: row.SOURCE_SYSTEM,
-    sourceObject: 'quality_events_sample.csv',
+    sourceConnector,
+    sourceSystem,
+    sourceObject,
     sourceId: eventId,
     createdAt: row.RECEIVED_DATE,
     updatedAt: new Date().toISOString(),
@@ -102,7 +105,7 @@ function qualityEventFromRow(row) {
       event_id: eventId,
       event_date: row.RECEIVED_DATE,
       event_type: row.COMPLAINT_TYPE,
-      source_system: row.SOURCE_SYSTEM,
+      source_system: sourceSystem,
       product_code: row.ITEM_NUMBER,
       product_name: row.PRODUCT_NAME,
       lot_number: row.LOT,
@@ -113,7 +116,11 @@ function qualityEventFromRow(row) {
       owner: row.OWNER_NAME,
       capa_reference_id: row.CAPA_ID,
     },
-    raw: row,
+    raw: {
+      ...row,
+      TRACS_LOAD_SOURCE_CONNECTOR: sourceConnector,
+      TRACS_LOAD_SOURCE_OBJECT: sourceObject,
+    },
   }
 }
 
@@ -307,4 +314,46 @@ export async function getTraceabilityResult(objectId) {
 export async function listReportCatalog() {
   const reports = await loadReportCatalogConfig()
   return reports.map(normalizeReport)
+}
+
+export async function buildCanonicalLoadBundle({
+  sourceConnector = 'manual_csv_quality_events',
+  connectorType = 'csv',
+  sourceObject = 'quality_events_sample.csv',
+  targetObject = 'quality_event',
+} = {}) {
+  const rows = await loadQualityEventRows()
+  const sourceSystemByType = {
+    csv: 'manual_csv',
+    snowflake: 'snowflake',
+    sharepoint_excel: 'sharepoint_excel',
+    external_reference: 'external_reference',
+  }
+  const loadProfile = {
+    sourceConnector,
+    sourceObject,
+    sourceSystem: sourceSystemByType[connectorType] ?? connectorType,
+  }
+  const events = rows
+    .map((row) => qualityEventFromRow(row, loadProfile))
+    .filter((event) => targetObject !== 'return_case' || event.canonical.event_type === 'return')
+  const objects = new Map()
+
+  events.forEach((event) => {
+    const candidates =
+      targetObject === 'return_case'
+        ? [returnObject(event), productObject(event), lotSerialObject(event), event]
+        : [event, productObject(event), lotSerialObject(event), returnObject(event), capaObject(event)]
+    candidates.filter(Boolean).forEach((object) => objects.set(object.id, object))
+  })
+
+  return {
+    objects: Array.from(objects.values()),
+    links: events.flatMap(linksForEvent),
+    events,
+    warnings:
+      connectorType === 'snowflake' || connectorType === 'sharepoint_excel'
+        ? ['Credential-backed extraction is not enabled; sample-backed connector profile was used for canonical load contract validation.']
+        : [],
+  }
 }

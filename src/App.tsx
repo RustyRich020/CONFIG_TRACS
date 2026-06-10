@@ -279,6 +279,27 @@ function createReadinessEvidencePacket({
   }
 }
 
+function canonicalLoadProfileForConnector(
+  connectorId: string,
+  connector: AppConfig['connectors']['connectors'][string],
+  mapping: AppConfig['mappings'][string],
+) {
+  const mappedObject = connector.objects?.find((object) => object.target === mapping.object)
+  const firstObject = connector.objects?.[0]
+  return {
+    mappingId: mapping.object,
+    sourceConnector: connectorId,
+    connectorType: connector.type,
+    sourceObject:
+      mappedObject?.source ??
+      firstObject?.source ??
+      connector.sheet ??
+      connector.workbook ??
+      mapping.source_object,
+    targetObject: mappedObject?.target ?? firstObject?.target ?? connector.target ?? mapping.object,
+  }
+}
+
 function App() {
   const [config, setConfig] = useState<AppConfig | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -302,6 +323,7 @@ function App() {
   const [sourcePreviews, setSourcePreviews] = useState<Record<string, ConnectorPreviewResult>>({})
   const [connectorRuns, setConnectorRuns] = useState<Record<string, BackendRecord[]>>({})
   const [mappingRuns, setMappingRuns] = useState<Record<string, BackendRecord[]>>({})
+  const [canonicalLoadConnectorId, setCanonicalLoadConnectorId] = useState<string>('complaints_snowflake')
   const [contractRecords, setContractRecords] = useState<BackendRecord[]>([])
   const [templateRecords, setTemplateRecords] = useState<BackendRecord<ControlledTemplatePayload>[]>([])
   const [assetRegistry, setAssetRegistry] = useState<AssetRegistry | null>(null)
@@ -327,6 +349,7 @@ function App() {
           ),
         ])
         setSelectedConnectorId(Object.keys(loaded.connectors.connectors)[0] ?? null)
+        setCanonicalLoadConnectorId(loaded.mappings.quality_event.source_connector)
         fetch('/samples/quality_events_sample.csv')
           .then((response) => response.text())
           .then((sample) => {
@@ -742,16 +765,23 @@ function App() {
   }
 
   async function loadCanonicalFromMapping() {
-    const savedLoad = await backendClient.loadCanonicalFromMapping({
-      mappingId: 'quality_event',
-      sourceConnector: config?.mappings.quality_event.source_connector ?? 'manual_csv_quality_events',
-    })
+    if (!config) return
+    const mapping = config.mappings.quality_event
+    const connector =
+      config.connectors.connectors[canonicalLoadConnectorId] ??
+      config.connectors.connectors[mapping.source_connector]
+    const connectorId = config.connectors.connectors[canonicalLoadConnectorId]
+      ? canonicalLoadConnectorId
+      : mapping.source_connector
+    const savedLoad = await backendClient.loadCanonicalFromMapping(
+      canonicalLoadProfileForConnector(connectorId, connector, mapping),
+    )
     await Promise.all([refreshBackend(), refreshWorkflowSurface()])
     saveVersion(
       createSavedVersion({
         kind: 'canonical_load',
         label: 'quality_event canonical load',
-        status: 'pass',
+        status: savedLoad.record?.status ?? (savedLoad.warnings.length > 0 ? 'warning' : 'pass'),
         summary: savedLoad.evidence,
         payload: savedLoad,
       }),
@@ -990,13 +1020,19 @@ function App() {
           />
         ) : activeView === 'Mapping' ? (
           <MappingStudio
+            canonicalLoadConnectorId={canonicalLoadConnectorId}
+            connectorEntries={connectorEntries}
             csvSchema={csvSchema}
             csvText={csvText}
-            latestCanonicalLoad={backendRecords.find((record) => record.kind === 'canonical_load')}
+            latestCanonicalLoad={backendRecords.find(
+              (record): record is BackendRecord<CanonicalLoadResult> =>
+                record.kind === 'canonical_load',
+            )}
             mapping={config.mappings.quality_event}
             mappingResult={mappingResult}
             mappingRuns={mappingRuns.quality_event ?? []}
             onCsvTextChange={setCsvText}
+            onLoadConnectorChange={setCanonicalLoadConnectorId}
             onLoadCanonical={loadCanonicalFromMapping}
             onValidate={runMappingValidation}
           />
@@ -1993,6 +2029,8 @@ function SavedVersionsView({ savedVersions }: { savedVersions: SavedVersion[] })
 }
 
 function MappingStudio({
+  canonicalLoadConnectorId,
+  connectorEntries,
   csvSchema,
   csvText,
   latestCanonicalLoad,
@@ -2000,16 +2038,20 @@ function MappingStudio({
   mappingResult,
   mappingRuns,
   onCsvTextChange,
+  onLoadConnectorChange,
   onLoadCanonical,
   onValidate,
 }: {
+  canonicalLoadConnectorId: string
+  connectorEntries: Array<[string, AppConfig['connectors']['connectors'][string]]>
   csvSchema: CsvSchemaInference | null
   csvText: string
-  latestCanonicalLoad?: BackendRecord
+  latestCanonicalLoad?: BackendRecord<CanonicalLoadResult>
   mapping: AppConfig['mappings'][string]
   mappingResult: MappingValidationResult | null
   mappingRuns: BackendRecord[]
   onCsvTextChange: (value: string) => void
+  onLoadConnectorChange: (value: string) => void
   onLoadCanonical: () => void
   onValidate: () => void
 }) {
@@ -2023,10 +2065,27 @@ function MappingStudio({
         <div>
           <h2>Mapping Studio</h2>
           <p>
-            Validate the configured quality_event manifest against inferred CSV schema before building live source adapters.
+            Validate the configured quality_event manifest and load canonical records from configured connector profiles.
           </p>
         </div>
         <div className="toolbar-actions">
+          <label className="load-source-control">
+            <span>Load source</span>
+            <select
+              value={canonicalLoadConnectorId}
+              onChange={(event) => onLoadConnectorChange(event.target.value)}
+            >
+              {connectorEntries
+                .filter(([, connector]) =>
+                  ['snowflake', 'sharepoint_excel', 'csv'].includes(connector.type),
+                )
+                .map(([connectorId, connector]) => (
+                  <option key={connectorId} value={connectorId}>
+                    {connector.display_name}
+                  </option>
+                ))}
+            </select>
+          </label>
           <button className="secondary-action" onClick={onLoadCanonical} type="button">
             <Database size={15} />
             Load Canonical
@@ -2159,6 +2218,9 @@ function MappingStudio({
                   <span>
                     v{latestCanonicalLoad.version} / {new Date(latestCanonicalLoad.createdAt).toLocaleString()} / {latestCanonicalLoad.summary}
                   </span>
+                  {latestCanonicalLoad.payload.warnings.length > 0 ? (
+                    <small>{latestCanonicalLoad.payload.warnings.join(' ')}</small>
+                  ) : null}
                 </div>
                 <StatusChip status={latestCanonicalLoad.status} label={latestCanonicalLoad.status} />
               </div>

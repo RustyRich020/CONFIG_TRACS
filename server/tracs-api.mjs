@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { adapterContracts, runAdapterDryRun } from './adapterContracts.mjs'
 import { scanAssetRegistry } from './assetRegistry.mjs'
 import {
+  buildCanonicalLoadBundle,
   listCanonicalObjects,
   listQualityEvents,
   listReportCatalog,
@@ -94,12 +95,19 @@ async function traceabilityResultForRead(objectId) {
   }
 }
 
-async function persistCanonicalLoad({ mappingId = 'quality_event', sourceConnector = 'manual_csv_quality_events' } = {}) {
-  const [objects, links, events] = await Promise.all([
-    listCanonicalObjects(),
-    listTraceabilityLinks(),
-    listQualityEvents(),
-  ])
+async function persistCanonicalLoad({
+  mappingId = 'quality_event',
+  sourceConnector = 'manual_csv_quality_events',
+  connectorType = 'csv',
+  sourceObject = 'quality_events_sample.csv',
+  targetObject = 'quality_event',
+} = {}) {
+  const { objects, links, events, warnings } = await buildCanonicalLoadBundle({
+    sourceConnector,
+    connectorType,
+    sourceObject,
+    targetObject,
+  })
   const loadedAt = new Date().toISOString()
   const loadId = `canonical_load:${mappingId}:${loadedAt}`
 
@@ -135,18 +143,21 @@ async function persistCanonicalLoad({ mappingId = 'quality_event', sourceConnect
     loadId,
     loadedAt,
     sourceConnector,
-    sourceObject: 'quality_events_sample.csv',
+    connectorType,
+    sourceObject,
+    targetObject,
     mappingId,
     objectCount: objects.length,
     linkCount: links.length,
     qualityEventCount: events.length,
-    evidence: `${objects.length} canonical object(s), ${links.length} traceability link(s), and ${events.length} quality event(s) loaded from mapped CSV source.`,
+    evidence: `${objects.length} canonical object(s), ${links.length} traceability link(s), and ${events.length} quality event(s) loaded from ${sourceConnector}/${sourceObject}.`,
+    warnings,
   }
 
   const record = await recordStore.saveRecord({
     kind: 'canonical_load',
     label: `${mappingId} canonical load`,
-    status: 'pass',
+    status: warnings.length > 0 ? 'warning' : 'pass',
     summary: result.evidence,
     payload: result,
   })

@@ -7,6 +7,7 @@ import type {
   BackendHealth,
   BackendRecord,
   BackendRecordKind,
+  CanonicalLoadRequest,
   CanonicalLoadResult,
   CanonicalObject,
   ControlledTemplatePayload,
@@ -406,9 +407,34 @@ export class LocalBackendClient {
   async loadCanonicalFromMapping({
     mappingId = 'quality_event',
     sourceConnector = 'manual_csv_quality_events',
-  } = {}): Promise<CanonicalLoadResult> {
+    connectorType = 'csv',
+    sourceObject = 'quality_events_sample.csv',
+    targetObject = 'quality_event',
+  }: CanonicalLoadRequest = {}): Promise<CanonicalLoadResult> {
     const { rows } = await loadCsvFixture()
-    const events = rows.map(qualityEventFromRow)
+    const events = rows
+      .map((row) =>
+        qualityEventFromRow({
+          ...row,
+          SOURCE_SYSTEM: connectorType === 'csv' ? row.SOURCE_SYSTEM : connectorType,
+        }),
+      )
+      .map((event) => ({
+        ...event,
+        sourceConnector,
+        sourceSystem: connectorType === 'csv' ? event.sourceSystem : connectorType,
+        sourceObject,
+        raw: {
+          ...event.raw,
+          TRACS_LOAD_SOURCE_CONNECTOR: sourceConnector,
+          TRACS_LOAD_SOURCE_OBJECT: sourceObject,
+        },
+        canonical: {
+          ...event.canonical,
+          source_system: connectorType === 'csv' ? event.canonical.source_system : connectorType,
+        },
+      }))
+      .filter((event) => targetObject !== 'return_case' || event.canonical.event_type === 'return')
     const objects = new Map<string, CanonicalObject>()
     events.flatMap(derivedObjectsForEvent).forEach((object) => objects.set(object.id, object))
     const links = events.flatMap(traceabilityLinksForEvent)
@@ -447,18 +473,24 @@ export class LocalBackendClient {
       loadId,
       loadedAt,
       sourceConnector,
-      sourceObject: 'quality_events_sample.csv',
+      connectorType,
+      sourceObject,
+      targetObject,
       mappingId,
       objectCount: objects.size,
       linkCount: links.length,
       qualityEventCount: events.length,
-      evidence: `${objects.size} canonical object(s), ${links.length} traceability link(s), and ${events.length} quality event(s) loaded from mapped CSV source.`,
+      evidence: `${objects.size} canonical object(s), ${links.length} traceability link(s), and ${events.length} quality event(s) loaded from ${sourceConnector}/${sourceObject}.`,
+      warnings:
+        connectorType === 'snowflake' || connectorType === 'sharepoint_excel'
+          ? ['Credential-backed extraction is not enabled; sample-backed connector profile was used for canonical load contract validation.']
+          : [],
     }
 
     const record = await this.saveRecord({
       kind: 'canonical_load',
       label: `${mappingId} canonical load`,
-      status: 'pass',
+      status: result.warnings.length > 0 ? 'warning' : 'pass',
       summary: result.evidence,
       payload: result,
     })
@@ -929,14 +961,23 @@ class ApiBackendClient {
   async loadCanonicalFromMapping({
     mappingId = 'quality_event',
     sourceConnector = 'manual_csv_quality_events',
-  } = {}): Promise<CanonicalLoadResult> {
+    connectorType = 'csv',
+    sourceObject = 'quality_events_sample.csv',
+    targetObject = 'quality_event',
+  }: CanonicalLoadRequest = {}): Promise<CanonicalLoadResult> {
     try {
       return await this.request<CanonicalLoadResult>('/api/canonical-loads', {
         method: 'POST',
-        body: JSON.stringify({ mappingId, sourceConnector }),
+        body: JSON.stringify({ mappingId, sourceConnector, connectorType, sourceObject, targetObject }),
       })
     } catch {
-      return this.localFallback.loadCanonicalFromMapping({ mappingId, sourceConnector })
+      return this.localFallback.loadCanonicalFromMapping({
+        mappingId,
+        sourceConnector,
+        connectorType,
+        sourceObject,
+        targetObject,
+      })
     }
   }
 

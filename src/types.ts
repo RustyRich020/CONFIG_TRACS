@@ -408,13 +408,24 @@ export type CanonicalLoadResult = {
   loadId: string
   loadedAt: string
   sourceConnector: string
+  connectorType: string
   sourceObject: string
+  targetObject: string
   mappingId: string
   objectCount: number
   linkCount: number
   qualityEventCount: number
   evidence: string
+  warnings: string[]
   record?: BackendRecord
+}
+
+export type CanonicalLoadRequest = {
+  mappingId?: string
+  sourceConnector?: string
+  connectorType?: string
+  sourceObject?: string
+  targetObject?: string
 }
 
 export type ReadinessEvidenceException = {
