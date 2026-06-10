@@ -627,6 +627,28 @@ function App() {
     )
   }
 
+  async function loadCanonicalFromMapping() {
+    const savedLoad = await backendClient.loadCanonicalFromMapping({
+      mappingId: 'quality_event',
+      sourceConnector: config?.mappings.quality_event.source_connector ?? 'manual_csv_quality_events',
+    })
+    await Promise.all([refreshBackend(), refreshWorkflowSurface()])
+    saveVersion(
+      createSavedVersion({
+        kind: 'canonical_load',
+        label: 'quality_event canonical load',
+        status: 'pass',
+        summary: savedLoad.evidence,
+        payload: savedLoad,
+      }),
+    )
+    record(
+      'canonical',
+      'load',
+      `${savedLoad.objectCount} canonical object(s) and ${savedLoad.linkCount} traceability link(s) loaded.`,
+    )
+  }
+
   if (error) {
     return (
       <main className="error-shell">
@@ -815,10 +837,12 @@ function App() {
           <MappingStudio
             csvSchema={csvSchema}
             csvText={csvText}
+            latestCanonicalLoad={backendRecords.find((record) => record.kind === 'canonical_load')}
             mapping={config.mappings.quality_event}
             mappingResult={mappingResult}
             mappingRuns={mappingRuns.quality_event ?? []}
             onCsvTextChange={setCsvText}
+            onLoadCanonical={loadCanonicalFromMapping}
             onValidate={runMappingValidation}
           />
         ) : activeView === 'Quality Events' ? (
@@ -1629,18 +1653,22 @@ function SavedVersionsView({ savedVersions }: { savedVersions: SavedVersion[] })
 function MappingStudio({
   csvSchema,
   csvText,
+  latestCanonicalLoad,
   mapping,
   mappingResult,
   mappingRuns,
   onCsvTextChange,
+  onLoadCanonical,
   onValidate,
 }: {
   csvSchema: CsvSchemaInference | null
   csvText: string
+  latestCanonicalLoad?: BackendRecord
   mapping: AppConfig['mappings'][string]
   mappingResult: MappingValidationResult | null
   mappingRuns: BackendRecord[]
   onCsvTextChange: (value: string) => void
+  onLoadCanonical: () => void
   onValidate: () => void
 }) {
   const summary = mappingResult
@@ -1656,10 +1684,16 @@ function MappingStudio({
             Validate the configured quality_event manifest against inferred CSV schema before building live source adapters.
           </p>
         </div>
-        <button className="primary-action" onClick={onValidate} type="button">
-          <ClipboardCheck size={16} />
-          Validate Mapping
-        </button>
+        <div className="toolbar-actions">
+          <button className="secondary-action" onClick={onLoadCanonical} type="button">
+            <Database size={15} />
+            Load Canonical
+          </button>
+          <button className="primary-action" onClick={onValidate} type="button">
+            <ClipboardCheck size={16} />
+            Validate Mapping
+          </button>
+        </div>
       </section>
 
       <section className="mapping-grid">
@@ -1772,6 +1806,20 @@ function MappingStudio({
                   <StatusChip status={run.status} label={run.status} />
                 </div>
               ))}
+            </div>
+          ) : null}
+          {latestCanonicalLoad ? (
+            <div className="mapping-run-history">
+              <h4>Latest Canonical Load</h4>
+              <div className="mapping-run-row">
+                <div>
+                  <strong>{latestCanonicalLoad.label}</strong>
+                  <span>
+                    v{latestCanonicalLoad.version} / {new Date(latestCanonicalLoad.createdAt).toLocaleString()} / {latestCanonicalLoad.summary}
+                  </span>
+                </div>
+                <StatusChip status={latestCanonicalLoad.status} label={latestCanonicalLoad.status} />
+              </div>
             </div>
           ) : null}
         </section>

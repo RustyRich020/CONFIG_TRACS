@@ -4,8 +4,6 @@ import { fileURLToPath } from 'node:url'
 import { adapterContracts, runAdapterDryRun } from './adapterContracts.mjs'
 import { scanAssetRegistry } from './assetRegistry.mjs'
 import {
-  getCanonicalObject,
-  getTraceabilityResult,
   listCanonicalObjects,
   listQualityEvents,
   listReportCatalog,
@@ -57,6 +55,103 @@ async function listIntegrationContracts() {
 
 async function listControlledTemplates() {
   return recordStore.listByKind('controlled_template')
+}
+
+async function persistedCanonicalObjects() {
+  const records = await recordStore.latestByKind('canonical_object')
+  return records.map((record) => record.payload)
+}
+
+async function persistedTraceabilityLinks() {
+  const records = await recordStore.latestByKind('traceability_link')
+  return records.map((record) => record.payload)
+}
+
+async function canonicalObjectsForRead() {
+  const persisted = await persistedCanonicalObjects()
+  return persisted.length > 0 ? persisted : listCanonicalObjects()
+}
+
+async function traceabilityLinksForRead() {
+  const persisted = await persistedTraceabilityLinks()
+  return persisted.length > 0 ? persisted : listTraceabilityLinks()
+}
+
+async function canonicalObjectForRead(objectId) {
+  const objects = await canonicalObjectsForRead()
+  return objects.find((object) => object.id === objectId)
+}
+
+async function traceabilityResultForRead(objectId) {
+  const object = await canonicalObjectForRead(objectId)
+  if (!object) return null
+  const links = await traceabilityLinksForRead()
+  return {
+    object,
+    links: links.filter(
+      (link) => link.sourceObjectId === objectId || link.targetObjectId === objectId,
+    ),
+  }
+}
+
+async function persistCanonicalLoad({ mappingId = 'quality_event', sourceConnector = 'manual_csv_quality_events' } = {}) {
+  const [objects, links, events] = await Promise.all([
+    listCanonicalObjects(),
+    listTraceabilityLinks(),
+    listQualityEvents(),
+  ])
+  const loadedAt = new Date().toISOString()
+  const loadId = `canonical_load:${mappingId}:${loadedAt}`
+
+  for (const object of objects) {
+    await recordStore.saveRecord({
+      kind: 'canonical_object',
+      label: object.id,
+      status: object.status === 'active' || object.status === 'referenced' ? 'pass' : 'warning',
+      summary: `${object.objectType} canonical object loaded from ${object.sourceConnector}.`,
+      payload: {
+        ...object,
+        loadedAt,
+        loadId,
+      },
+    })
+  }
+
+  for (const link of links) {
+    await recordStore.saveRecord({
+      kind: 'traceability_link',
+      label: link.id,
+      status: link.status,
+      summary: `${link.relationshipType} traceability link loaded.`,
+      payload: {
+        ...link,
+        loadedAt,
+        loadId,
+      },
+    })
+  }
+
+  const result = {
+    loadId,
+    loadedAt,
+    sourceConnector,
+    sourceObject: 'quality_events_sample.csv',
+    mappingId,
+    objectCount: objects.length,
+    linkCount: links.length,
+    qualityEventCount: events.length,
+    evidence: `${objects.length} canonical object(s), ${links.length} traceability link(s), and ${events.length} quality event(s) loaded from mapped CSV source.`,
+  }
+
+  const record = await recordStore.saveRecord({
+    kind: 'canonical_load',
+    label: `${mappingId} canonical load`,
+    status: 'pass',
+    summary: result.evidence,
+    payload: result,
+  })
+
+  return { ...result, record }
 }
 
 function slug(value) {
@@ -161,17 +256,24 @@ async function handleRequest(req, res) {
     }
 
     if (req.method === 'GET' && url.pathname === '/api/objects') {
-      jsonResponse(res, 200, await listCanonicalObjects())
+      jsonResponse(res, 200, await canonicalObjectsForRead())
       return
     }
 
     if (req.method === 'GET' && url.pathname === '/api/quality-events') {
-      jsonResponse(res, 200, await listQualityEvents())
+      const objects = await canonicalObjectsForRead()
+      const events = objects.filter((object) => object.objectType === 'quality_event')
+      jsonResponse(res, 200, events.length > 0 ? events : await listQualityEvents())
       return
     }
 
     if (req.method === 'GET' && url.pathname === '/api/traceability-links') {
-      jsonResponse(res, 200, await listTraceabilityLinks())
+      jsonResponse(res, 200, await traceabilityLinksForRead())
+      return
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/canonical-loads') {
+      jsonResponse(res, 201, await persistCanonicalLoad(await parseBody(req)))
       return
     }
 
@@ -182,7 +284,7 @@ async function handleRequest(req, res) {
 
     const objectTraceabilityMatch = url.pathname.match(/^\/api\/objects\/(.+)\/traceability$/)
     if (req.method === 'GET' && objectTraceabilityMatch) {
-      const result = await getTraceabilityResult(decodeURIComponent(objectTraceabilityMatch[1]))
+      const result = await traceabilityResultForRead(decodeURIComponent(objectTraceabilityMatch[1]))
       if (!result) {
         jsonResponse(res, 404, { error: 'Canonical object not found' })
         return
@@ -193,7 +295,7 @@ async function handleRequest(req, res) {
 
     const objectMatch = url.pathname.match(/^\/api\/objects\/(.+)$/)
     if (req.method === 'GET' && objectMatch) {
-      const object = await getCanonicalObject(decodeURIComponent(objectMatch[1]))
+      const object = await canonicalObjectForRead(decodeURIComponent(objectMatch[1]))
       if (!object) {
         jsonResponse(res, 404, { error: 'Canonical object not found' })
         return

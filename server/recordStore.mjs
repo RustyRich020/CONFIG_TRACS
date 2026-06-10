@@ -139,6 +139,16 @@ export function createFileRecordStore({ dataFile, maxRecords = 250 }) {
     return records.filter((record) => record.kind === kind)
   }
 
+  async function latestByKind(kind) {
+    const records = await listByKind(kind)
+    const latest = new Map()
+    records.forEach((record) => {
+      const existing = latest.get(record.label)
+      if (!existing || record.version > existing.version) latest.set(record.label, record)
+    })
+    return Array.from(latest.values())
+  }
+
   async function getRecord(recordId) {
     const records = await readRecords()
     return records.find((record) => record.id === recordId)
@@ -168,6 +178,7 @@ export function createFileRecordStore({ dataFile, maxRecords = 250 }) {
     readRecords,
     saveRecord,
     listByKind,
+    latestByKind,
     getRecord,
     health,
   }

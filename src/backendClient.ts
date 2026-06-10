@@ -6,6 +6,7 @@ import type {
   BackendHealth,
   BackendRecord,
   BackendRecordKind,
+  CanonicalLoadResult,
   CanonicalObject,
   ControlledTemplatePayload,
   ControlledTemplateStatus,
@@ -48,6 +49,15 @@ function summarizeStatus(records: BackendRecord[]): StatusLevel {
 function nextVersion(records: BackendRecord[], kind: BackendRecordKind, label: string) {
   const matching = records.filter((record) => record.kind === kind && record.label === label)
   return matching.length > 0 ? Math.max(...matching.map((record) => record.version)) + 1 : 1
+}
+
+function latestPayloads<TPayload>(records: BackendRecord[]): TPayload[] {
+  const latest = new Map<string, BackendRecord>()
+  records.forEach((record) => {
+    const existing = latest.get(record.label)
+    if (!existing || record.version > existing.version) latest.set(record.label, record)
+  })
+  return Array.from(latest.values()).map((record) => record.payload as TPayload)
 }
 
 function titleForKind(kind: LocalAsset['kind']) {
@@ -348,20 +358,100 @@ export class LocalBackendClient {
   }
 
   async listQualityEvents(): Promise<QualityEvent[]> {
+    const persisted = await this.listCanonicalObjects()
+    const persistedEvents = persisted.filter(
+      (object): object is QualityEvent => object.objectType === 'quality_event',
+    )
+    if (persistedEvents.length > 0) return persistedEvents
     const { rows } = await loadCsvFixture()
     return rows.map(qualityEventFromRow)
   }
 
   async listCanonicalObjects(): Promise<CanonicalObject[]> {
-    const events = await this.listQualityEvents()
+    const records = await this.listRecords()
+    const persisted = latestPayloads<CanonicalObject>(
+      records.filter((record) => record.kind === 'canonical_object'),
+    )
+    if (persisted.length > 0) return persisted
+    const { rows } = await loadCsvFixture()
+    const events = rows.map(qualityEventFromRow)
     const objects = new Map<string, CanonicalObject>()
     events.flatMap(derivedObjectsForEvent).forEach((object) => objects.set(object.id, object))
     return Array.from(objects.values())
   }
 
   async listTraceabilityLinks(): Promise<TraceabilityLink[]> {
-    const events = await this.listQualityEvents()
+    const records = await this.listRecords()
+    const persisted = latestPayloads<TraceabilityLink>(
+      records.filter((record) => record.kind === 'traceability_link'),
+    )
+    if (persisted.length > 0) return persisted
+    const { rows } = await loadCsvFixture()
+    const events = rows.map(qualityEventFromRow)
     return events.flatMap(traceabilityLinksForEvent)
+  }
+
+  async loadCanonicalFromMapping({
+    mappingId = 'quality_event',
+    sourceConnector = 'manual_csv_quality_events',
+  } = {}): Promise<CanonicalLoadResult> {
+    const { rows } = await loadCsvFixture()
+    const events = rows.map(qualityEventFromRow)
+    const objects = new Map<string, CanonicalObject>()
+    events.flatMap(derivedObjectsForEvent).forEach((object) => objects.set(object.id, object))
+    const links = events.flatMap(traceabilityLinksForEvent)
+    const loadedAt = new Date().toISOString()
+    const loadId = `canonical_load:${mappingId}:${loadedAt}`
+
+    for (const object of objects.values()) {
+      await this.saveRecord({
+        kind: 'canonical_object',
+        label: object.id,
+        status: object.status === 'active' || object.status === 'referenced' ? 'pass' : 'warning',
+        summary: `${object.objectType} canonical object loaded from ${object.sourceConnector}.`,
+        payload: {
+          ...object,
+          loadedAt,
+          loadId,
+        },
+      })
+    }
+
+    for (const link of links) {
+      await this.saveRecord({
+        kind: 'traceability_link',
+        label: link.id,
+        status: link.status,
+        summary: `${link.relationshipType} traceability link loaded.`,
+        payload: {
+          ...link,
+          loadedAt,
+          loadId,
+        },
+      })
+    }
+
+    const result: CanonicalLoadResult = {
+      loadId,
+      loadedAt,
+      sourceConnector,
+      sourceObject: 'quality_events_sample.csv',
+      mappingId,
+      objectCount: objects.size,
+      linkCount: links.length,
+      qualityEventCount: events.length,
+      evidence: `${objects.size} canonical object(s), ${links.length} traceability link(s), and ${events.length} quality event(s) loaded from mapped CSV source.`,
+    }
+
+    const record = await this.saveRecord({
+      kind: 'canonical_load',
+      label: `${mappingId} canonical load`,
+      status: 'pass',
+      summary: result.evidence,
+      payload: result,
+    })
+
+    return { ...result, record }
   }
 
   async getObjectTraceability(objectId: string): Promise<TraceabilityResult | null> {
@@ -821,6 +911,20 @@ class ApiBackendClient {
       return await this.request<ReportCatalogItem[]>('/api/reports')
     } catch {
       return this.localFallback.listReports()
+    }
+  }
+
+  async loadCanonicalFromMapping({
+    mappingId = 'quality_event',
+    sourceConnector = 'manual_csv_quality_events',
+  } = {}): Promise<CanonicalLoadResult> {
+    try {
+      return await this.request<CanonicalLoadResult>('/api/canonical-loads', {
+        method: 'POST',
+        body: JSON.stringify({ mappingId, sourceConnector }),
+      })
+    } catch {
+      return this.localFallback.loadCanonicalFromMapping({ mappingId, sourceConnector })
     }
   }
 

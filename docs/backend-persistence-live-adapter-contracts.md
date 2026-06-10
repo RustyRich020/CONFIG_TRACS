@@ -37,6 +37,7 @@ GET  /api/objects/{objectId}
 GET  /api/objects/{objectId}/traceability
 GET  /api/quality-events
 GET  /api/traceability-links
+POST /api/canonical-loads
 GET  /api/reports
 POST /api/connectors/{connectorId}/metadata
 POST /api/connectors/{connectorId}/preview
@@ -64,6 +65,8 @@ Controlled templates are persisted as `controlled_template` records. Promotion c
 The API persistence layer now routes through `server/recordStore.mjs`, which keeps the current file-backed behavior but exposes a database-ready schema contract. `GET /api/storage/schema` returns the `tracs_records` and `tracs_record_links` blueprint that future SQLite or Postgres adapters should implement.
 
 The canonical workflow routes are sample-backed in v1. `server/canonicalService.mjs` maps the quality event CSV into stable canonical object IDs, derives event-to-product, event-to-lot/serial, return, and CAPA traceability links, and exposes a starter BI report catalog. These routes are intentionally typed so future Snowflake, SharePoint, and CSV adapter outputs can replace the sample source without changing the frontend contract.
+
+The canonical load route persists the mapped CSV-derived canonical objects and traceability links as latest-version backend records. After `POST /api/canonical-loads`, object and traceability routes prefer persisted records and only fall back to sample derivation when no canonical load has been run.
 
 ### Planned Saved Versions
 

@@ -161,6 +161,7 @@ export type SavedVersionKind =
   | 'adapter_dry_run'
   | 'controlled_template'
   | 'canonical_object'
+  | 'canonical_load'
 
 export type SavedVersion = {
   id: string
@@ -183,6 +184,7 @@ export type BackendRecordKind =
   | 'canonical_object'
   | 'traceability_link'
   | 'report_catalog_item'
+  | 'canonical_load'
 
 export type BackendRecord<TPayload = unknown> = {
   id: string
@@ -396,4 +398,17 @@ export type ReportCatalogItem = {
   url: string
   sourceDependencies: string[]
   domains: string[]
+}
+
+export type CanonicalLoadResult = {
+  loadId: string
+  loadedAt: string
+  sourceConnector: string
+  sourceObject: string
+  mappingId: string
+  objectCount: number
+  linkCount: number
+  qualityEventCount: number
+  evidence: string
+  record?: BackendRecord
 }

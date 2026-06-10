@@ -18,6 +18,7 @@ This prototype now includes the first practical build phases for TRACS:
 12. Controlled Template Promotion + Template Records v1
 13. Backend Record Store Abstraction + Database Schema Blueprint v1
 14. Canonical Workflow Surface v1
+15. Live Canonical Load + Connector-Backed Objects v1
 
 ## What It Proves
 
@@ -54,6 +55,8 @@ This prototype now includes the first practical build phases for TRACS:
 - Exposes the record store schema in the Backend workspace for database implementation planning.
 - Exposes sample-backed canonical objects, quality events, traceability links, and report catalog items through typed API routes.
 - Adds Quality Events, Object Explorer, Traceability, and Report Catalog workspaces to the shell.
+- Loads mapped CSV quality-event rows into persisted canonical object and traceability-link records.
+- Updates workflow screens to prefer persisted canonical records while keeping sample fallback before first load.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
@@ -118,9 +121,9 @@ npm run build
 
 ## Next Phase
 
-Use the canonical workflow surface to move from sample-backed records to live connector-backed records:
+Use the canonical load path to move deeper into live connector-backed records:
 
-1. Persist canonical objects and traceability links through `server/recordStore.mjs`.
-2. Add live connector-backed canonical load for Snowflake, SharePoint Excel, and CSV sources.
+1. Add live connector-backed canonical load for Snowflake and SharePoint Excel sources.
+2. Move the report catalog into config files and add freshness checks.
 3. Add template detail editing for category/domain/tag overrides.
-4. Add report catalog config files and freshness checks.
+4. Add readiness evidence packet export for canonical loads and open exceptions.
