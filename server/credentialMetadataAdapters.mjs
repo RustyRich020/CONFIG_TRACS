@@ -100,6 +100,17 @@ function credentialValidationProfile(connector) {
       },
     }
   }
+  if (connector.type === 'external_reference' || connector.type === 'rest_api') {
+    return {
+      credentialMode: 'external_reference_token',
+      requiredEnvironment: ['TRACS_EXTERNAL_API_BASE_URL', 'TRACS_EXTERNAL_API_TOKEN'],
+      rotation: {
+        rotatedAtEnv: 'TRACS_EXTERNAL_API_TOKEN_ROTATED_AT',
+        maxAgeDays: Number(process.env.TRACS_EXTERNAL_API_TOKEN_MAX_AGE_DAYS ?? 90),
+        tokenName: 'External reference API',
+      },
+    }
+  }
   return {
     credentialMode: 'not_required',
     requiredEnvironment: [],

@@ -717,7 +717,9 @@ export class LocalBackendClient {
         ? ['TRACS_SNOWFLAKE_ACCOUNT_URL or TRACS_SNOWFLAKE_ACCOUNT', 'TRACS_SNOWFLAKE_TOKEN']
         : connector.type === 'sharepoint_excel'
           ? ['TRACS_GRAPH_TOKEN']
-          : []
+          : connector.type === 'external_reference' || connector.type === 'rest_api'
+            ? ['TRACS_EXTERNAL_API_BASE_URL', 'TRACS_EXTERNAL_API_TOKEN']
+            : []
     const status: StatusLevel = requiredEnvironment.length > 0 ? 'warning' : 'pass'
     const result: CredentialValidationResult = {
       connectorId,

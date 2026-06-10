@@ -1631,6 +1631,81 @@
   line-height: 1.4;
 }
 
+.trace-path-panel {
+  margin-top: 16px;
+}
+
+.trace-path-summary {
+  display: grid;
+  grid-template-columns: 120px 140px minmax(0, 1fr);
+  gap: 10px;
+  padding: 14px;
+  border-bottom: 1px solid #edf2f1;
+}
+
+.trace-path-list {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.trace-path-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto minmax(130px, 0.65fr) auto minmax(150px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e0e8e7;
+  border-radius: 8px;
+  background: #f8fbfa;
+}
+
+.trace-path-row > svg {
+  color: #8cc8c1;
+}
+
+.trace-path-row p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #718080;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.trace-step {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #dfe9e7;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.trace-step.source {
+  border-color: #8cc8c1;
+  background: #f0faf8;
+}
+
+.trace-step.target {
+  border-color: #cddedb;
+}
+
+.trace-step strong,
+.trace-step span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.trace-step strong {
+  color: #1e3030;
+  font-size: 12px;
+}
+
+.trace-step span {
+  margin-top: 3px;
+  color: #718080;
+  font-size: 11px;
+}
+
 .report-card {
   padding: 16px;
 }
@@ -1694,6 +1769,75 @@
   grid-template-columns: minmax(420px, 1.1fr) minmax(340px, 0.9fr);
   gap: 16px;
   margin-top: 16px;
+}
+
+.extraction-ops-grid {
+  display: grid;
+  grid-template-columns: minmax(340px, 1fr) minmax(340px, 1fr);
+  gap: 14px;
+  padding: 14px;
+  border-bottom: 1px solid #edf2f1;
+}
+
+.queue-list,
+.calendar-list {
+  display: grid;
+  gap: 8px;
+  padding: 0 12px 12px;
+}
+
+.queue-row,
+.calendar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #e0e8e7;
+  border-radius: 8px;
+  background: #ffffff;
+  text-align: left;
+}
+
+.queue-row {
+  cursor: pointer;
+}
+
+.queue-row:hover {
+  border-color: #8cc8c1;
+  background: #f2fbf9;
+}
+
+.queue-row strong,
+.queue-row span,
+.calendar-row strong,
+.calendar-row span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.queue-row strong,
+.calendar-row strong {
+  color: #1e3030;
+  font-size: 12px;
+}
+
+.queue-row span,
+.calendar-row span {
+  margin-top: 3px;
+  color: #718080;
+  font-size: 11px;
+}
+
+.calendar-row {
+  grid-template-columns: 120px minmax(0, 1fr);
+}
+
+.calendar-date {
+  padding: 8px;
+  border-radius: 8px;
+  background: #f0faf8;
 }
 
 .mapping-run-history {
@@ -2252,11 +2396,17 @@
   .traceability-grid,
   .report-grid,
   .report-editor-grid,
+  .extraction-ops-grid,
   .extraction-job-grid,
   .template-editor-grid,
   .mapping-grid,
   .asset-library-grid,
   .template-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .trace-path-summary,
+  .trace-path-row {
     grid-template-columns: 1fr;
   }
 }

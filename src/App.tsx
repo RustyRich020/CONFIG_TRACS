@@ -1,6 +1,8 @@
 import {
   Activity,
+  Bell,
   Boxes,
+  CalendarDays,
   CheckCircle2,
   ClipboardCheck,
   Database,
@@ -295,6 +297,113 @@ function reportApprovalStatusLevel(status: NonNullable<ReportCatalogItem['approv
 
 function reportApprovalLabel(status?: ReportCatalogItem['approvalStatus']) {
   return status ? titleize(status) : 'Not signed'
+}
+
+function reportRouteLabel(stage?: ReportCatalogItem['reviewerRouteStage']) {
+  return stage ? titleize(stage) : 'Owner Review'
+}
+
+function createReportApprovalNotification(report: ReportCatalogItem) {
+  const generatedAt = new Date().toISOString()
+  const recipients = report.routedReviewers?.length
+    ? report.routedReviewers
+    : [report.approvalReviewer, report.owner].filter((recipient): recipient is string => Boolean(recipient))
+  return {
+    notificationId: `report_notice:${report.id}:${generatedAt}`,
+    generatedAt,
+    type: 'report_catalog_approval',
+    reportId: report.id,
+    title: report.title,
+    owner: report.owner,
+    workspace: report.workspace,
+    semanticModel: report.semanticModel,
+    routeStage: report.reviewerRouteStage ?? 'owner_review',
+    recipients,
+    dueAt: report.routeDueAt ?? '',
+    approvalStatus: report.approvalStatus ?? 'pending',
+    publishStatus: report.publishStatus ?? 'draft',
+    freshnessStatus: report.refreshStatus,
+    summary: `${report.title} is routed for ${reportRouteLabel(report.reviewerRouteStage)} with ${reportApprovalLabel(report.approvalStatus)} approval state.`,
+    evidence: [
+      report.freshnessEvidence,
+      report.publishGateEvidence ?? 'Publish gate has not been run.',
+      report.approvalRationale || 'No reviewer rationale recorded.',
+    ],
+    sourceDependencies: report.sourceDependencies,
+  }
+}
+
+function createEvidenceApprovalNotification(packet: ReadinessEvidencePacket, approval: ReadinessEvidenceApproval) {
+  const generatedAt = new Date().toISOString()
+  return {
+    notificationId: `evidence_notice:${packet.packetId}:${generatedAt}`,
+    generatedAt,
+    type: 'readiness_evidence_approval',
+    packetId: packet.packetId,
+    environment: packet.environment,
+    status: packet.status,
+    approvalStatus: approval.status,
+    routeStage: approval.routeStage ?? 'quality_review',
+    recipients: approval.routedReviewers ?? [],
+    dueAt: approval.routeDueAt ?? '',
+    reviewer: approval.reviewer,
+    nextReviewAt: approval.nextReviewAt,
+    summary: `${packet.environment.toUpperCase()} evidence packet is routed for ${titleize(approval.routeStage ?? 'quality_review')} with ${evidenceApprovalLabel(approval.status)} state.`,
+    evidence: packet.evidence,
+    openExceptions: packet.openExceptions.map((exception) => ({
+      id: exception.id,
+      status: exception.status,
+      summary: exception.summary,
+      remediation: exception.remediation,
+    })),
+    dispositions: approval.dispositions,
+  }
+}
+
+function extractionQueueStatus(job: ExtractionJobPayload, runs: BackendRecord<ExtractionRunPayload>[]) {
+  const latestRun = runs
+    .filter((run) => run.payload.jobId === job.jobId)
+    .sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt))[0]
+  const nextRunMs = Date.parse(job.nextRunAt)
+  const isScheduled = job.status === 'active' && job.scheduleMode === 'scheduled_stub' && Number.isFinite(nextRunMs)
+  const isDue = isScheduled && nextRunMs <= Date.now()
+  if (latestRun?.payload.retryEligible) return 'retry eligible'
+  if (isDue) return 'due now'
+  if (isScheduled) return 'scheduled'
+  if (job.status === 'paused') return 'paused'
+  return 'manual'
+}
+
+function createExtractionQueueExport(
+  jobs: BackendRecord<ExtractionJobPayload>[],
+  runs: BackendRecord<ExtractionRunPayload>[],
+) {
+  const generatedAt = new Date().toISOString()
+  return {
+    exportId: `extraction_queue:${generatedAt}`,
+    generatedAt,
+    type: 'extraction_job_queue',
+    jobs: jobs.map((job) => {
+      const jobRuns = runs.filter((run) => run.payload.jobId === job.payload.jobId)
+      const latestRun = jobRuns
+        .slice()
+        .sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt))[0]
+      return {
+        jobId: job.payload.jobId,
+        name: job.payload.name,
+        connectorId: job.payload.connectorId,
+        status: job.payload.status,
+        scheduleMode: job.payload.scheduleMode,
+        scheduleCadence: job.payload.scheduleCadence,
+        nextRunAt: job.payload.nextRunAt,
+        queueStatus: extractionQueueStatus(job.payload, runs),
+        runCount: jobRuns.length,
+        latestRunStatus: latestRun?.payload.status ?? 'not_run',
+        retryEligible: latestRun?.payload.retryEligible ?? false,
+        evidence: job.payload.evidence,
+      }
+    }),
+  }
 }
 
 function defaultEvidenceApproval(): ReadinessEvidenceApproval {
@@ -1094,6 +1203,7 @@ function App() {
     const signedAt = new Date().toISOString()
     const approvalStatus = normalizedReport.approvalStatus ?? 'pending'
     const approvalEvidence = `${reportApprovalLabel(approvalStatus)} by ${normalizedReport.approvalReviewer || 'unassigned reviewer'}.`
+    const notification = createReportApprovalNotification(normalizedReport)
     const payload: ReportCatalogItem = {
       ...normalizedReport,
       publishStatus:
@@ -1103,6 +1213,20 @@ function App() {
       publishedAt: action === 'publish' && gate.status === 'pass' ? signedAt : normalizedReport.publishedAt,
       approvalStatus,
       approvalSignedAt: action === 'signoff' ? signedAt : normalizedReport.approvalSignedAt,
+      notificationHistory:
+        action === 'signoff'
+          ? [
+              ...(normalizedReport.notificationHistory ?? []),
+              {
+                notificationId: notification.notificationId,
+                sentAt: signedAt,
+                routeStage: normalizedReport.reviewerRouteStage ?? 'owner_review',
+                recipients: notification.recipients,
+                summary: notification.summary,
+                evidence: notification.evidence.join(' '),
+              },
+            ]
+          : normalizedReport.notificationHistory,
       approvalHistory:
         action === 'signoff'
           ? [
@@ -1608,6 +1732,16 @@ function EvidencePacketWorkspace({
           </p>
         </div>
         <div className="toolbar-actions">
+          <button
+            className="secondary-action"
+            onClick={() =>
+              downloadJson('tracs-evidence-approval-notifications.json', createEvidenceApprovalNotification(packet, approvalForSave()))
+            }
+            type="button"
+          >
+            <Bell size={15} />
+            Export Notices
+          </button>
           <button className="secondary-action" onClick={() => onSavePacket(approvalForSave())} type="button">
             <ServerCog size={15} />
             Save Packet
@@ -2568,6 +2702,10 @@ function TraceabilityView({
   const selectedLinks = selectedEvent
     ? links.filter((link) => link.sourceObjectId === selectedEvent.id)
     : []
+  const relationshipSummary = selectedLinks.reduce<Record<string, number>>((summary, link) => {
+    summary[link.targetObjectType] = (summary[link.targetObjectType] ?? 0) + 1
+    return summary
+  }, {})
 
   return (
     <>
@@ -2638,6 +2776,51 @@ function TraceabilityView({
           </div>
         </section>
       </section>
+
+      <section className="panel trace-path-panel">
+        <PanelHeader
+          icon={Route}
+          title="Path Explorer"
+          subtitle="Readable event-to-object paths for audit, impact analysis, and cross-system evidence review."
+        />
+        <div className="trace-path-summary">
+          <Metadata label="Paths" value={String(selectedLinks.length)} />
+          <Metadata label="Target types" value={String(Object.keys(relationshipSummary).length)} />
+          <Metadata
+            label="Coverage"
+            value={
+              Object.entries(relationshipSummary)
+                .map(([type, count]) => `${titleize(type)} ${count}`)
+                .join(', ') || 'No links'
+            }
+          />
+        </div>
+        <div className="trace-path-list">
+          {selectedLinks.map((link, index) => (
+            <div className="trace-path-row" key={link.id}>
+              <div className="trace-step source">
+                <strong>{selectedEvent?.canonical.event_id}</strong>
+                <span>quality_event</span>
+              </div>
+              <Route size={16} />
+              <div className="trace-step">
+                <strong>{titleize(link.relationshipType)}</strong>
+                <span>Path {index + 1}</span>
+              </div>
+              <Route size={16} />
+              <div className="trace-step target">
+                <strong>{link.targetLabel}</strong>
+                <span>{titleize(link.targetObjectType)}</span>
+              </div>
+              <StatusChip status={link.status} label={link.status} />
+              <p>{link.evidence}</p>
+            </div>
+          ))}
+          {selectedLinks.length === 0 ? (
+            <div className="empty-state compact">No traceability paths are available for this event.</div>
+          ) : null}
+        </div>
+      </section>
     </>
   )
 }
@@ -2668,6 +2851,21 @@ function ReportCatalogView({
           <span>{reports.length} reports</span>
           <span>{staleCount} need review</span>
         </div>
+        <div className="toolbar-actions">
+          <button
+            className="secondary-action"
+            onClick={() =>
+              downloadJson(
+                'tracs-report-approval-notifications.json',
+                reports.map(createReportApprovalNotification),
+              )
+            }
+            type="button"
+          >
+            <Bell size={15} />
+            Export Notices
+          </button>
+        </div>
       </section>
 
       <section className="report-grid">
@@ -2689,6 +2887,8 @@ function ReportCatalogView({
               <Metadata label="Freshness evidence" value={report.freshnessEvidence} />
               <Metadata label="Approval" value={reportApprovalLabel(report.approvalStatus)} />
               <Metadata label="Reviewer" value={report.approvalReviewer || 'Not assigned'} />
+              <Metadata label="Route stage" value={reportRouteLabel(report.reviewerRouteStage)} />
+              <Metadata label="Route due" value={report.routeDueAt || 'Not scheduled'} />
             </div>
             <div className="source-column-list report-dependencies">
               {report.sourceDependencies.map((dependency) => (
@@ -2744,6 +2944,11 @@ function ReportCatalogEditor({
   )
   const [approvalReviewer, setApprovalReviewer] = useState(report.approvalReviewer ?? '')
   const [approvalRationale, setApprovalRationale] = useState(report.approvalRationale ?? '')
+  const [reviewerRouteStage, setReviewerRouteStage] = useState<
+    NonNullable<ReportCatalogItem['reviewerRouteStage']>
+  >(report.reviewerRouteStage ?? 'owner_review')
+  const [routedReviewers, setRoutedReviewers] = useState(report.routedReviewers?.join(', ') ?? '')
+  const [routeDueAt, setRouteDueAt] = useState(report.routeDueAt ?? '')
 
   function splitCsv(value: string) {
     return value
@@ -2768,6 +2973,9 @@ function ReportCatalogEditor({
       approvalStatus,
       approvalReviewer,
       approvalRationale,
+      reviewerRouteStage,
+      routedReviewers: splitCsv(routedReviewers),
+      routeDueAt,
       ...freshness,
     }
   }
@@ -2838,11 +3046,43 @@ function ReportCatalogEditor({
             <span>Reviewer</span>
             <input value={approvalReviewer} onChange={(event) => setApprovalReviewer(event.target.value)} />
           </label>
+          <label>
+            <span>Route stage</span>
+            <select
+              value={reviewerRouteStage}
+              onChange={(event) =>
+                setReviewerRouteStage(event.target.value as NonNullable<ReportCatalogItem['reviewerRouteStage']>)
+              }
+            >
+              <option value="owner_review">Owner review</option>
+              <option value="quality_review">Quality review</option>
+              <option value="executive_signoff">Executive signoff</option>
+              <option value="published">Published</option>
+            </select>
+          </label>
+          <label>
+            <span>Route due date</span>
+            <input type="date" value={routeDueAt} onChange={(event) => setRouteDueAt(event.target.value)} />
+          </label>
+          <label className="template-editor-notes">
+            <span>Routed reviewers</span>
+            <input value={routedReviewers} onChange={(event) => setRoutedReviewers(event.target.value)} />
+          </label>
           <label className="template-editor-notes">
             <span>Sign-off rationale</span>
             <textarea value={approvalRationale} onChange={(event) => setApprovalRationale(event.target.value)} />
           </label>
           <div className="report-editor-actions">
+            <button
+              className="secondary-action"
+              onClick={() =>
+                downloadJson('tracs-report-approval-notification.json', createReportApprovalNotification(draftReport()))
+              }
+              type="button"
+            >
+              <Bell size={15} />
+              Export Notice
+            </button>
             <button className="secondary-action" onClick={() => onSave(draftReport(), 'draft')} type="button">
               <ServerCog size={15} />
               Save Draft
@@ -2869,8 +3109,28 @@ function ReportCatalogEditor({
               <Metadata label="Publish state" value={previewReport.publishStatus ?? 'unsaved draft'} />
               <Metadata label="Approval" value={reportApprovalLabel(previewReport.approvalStatus)} />
               <Metadata label="Reviewer" value={previewReport.approvalReviewer || 'Not assigned'} />
+              <Metadata label="Route stage" value={reportRouteLabel(previewReport.reviewerRouteStage)} />
+              <Metadata label="Route due" value={previewReport.routeDueAt || 'Not scheduled'} />
+              <Metadata label="Routed reviewers" value={previewReport.routedReviewers?.join(', ') || 'Not routed'} />
             </div>
           </div>
+          {previewReport.notificationHistory?.length ? (
+            <div className="report-approval-history">
+              <h4>Notification History</h4>
+              {previewReport.notificationHistory.slice(-4).reverse().map((entry) => (
+                <div className="connector-run-row" key={entry.notificationId}>
+                  <div>
+                    <strong>{reportRouteLabel(entry.routeStage)}</strong>
+                    <span>
+                      {entry.recipients.join(', ') || 'No recipients'} / {new Date(entry.sentAt).toLocaleString()}
+                    </span>
+                    <small>{entry.summary}</small>
+                  </div>
+                  <StatusChip status="pass" label="notice" />
+                </div>
+              ))}
+            </div>
+          ) : null}
           {previewReport.approvalHistory?.length ? (
             <div className="report-approval-history">
               <h4>Approval History</h4>
@@ -3017,6 +3277,15 @@ function MappingStudio({
   const selectedJobRuns = selectedJob
     ? extractionRuns.filter((run) => run.payload.jobId === selectedJob.payload.jobId)
     : []
+  const queuedJobs = extractionJobs
+    .slice()
+    .sort((first, second) => {
+      const firstTime = Date.parse(first.payload.nextRunAt)
+      const secondTime = Date.parse(second.payload.nextRunAt)
+      return (Number.isFinite(firstTime) ? firstTime : Number.MAX_SAFE_INTEGER) -
+        (Number.isFinite(secondTime) ? secondTime : Number.MAX_SAFE_INTEGER)
+    })
+  const retryEligibleRuns = extractionRuns.filter((run) => run.payload.retryEligible)
 
   return (
     <>
@@ -3194,6 +3463,81 @@ function MappingStudio({
           title="Connector Extraction Jobs"
           subtitle="Save reusable connector-backed jobs, then run them into canonical load and traceability records."
         />
+        <div className="extraction-ops-grid">
+          <div className="latest-contract">
+            <div className="report-card-header">
+              <div>
+                <strong>Run Queue</strong>
+                <span>{queuedJobs.length} job(s), {retryEligibleRuns.length} retry eligible run(s)</span>
+              </div>
+              <button
+                className="secondary-action compact"
+                onClick={() =>
+                  downloadJson('tracs-extraction-run-queue.json', createExtractionQueueExport(extractionJobs, extractionRuns))
+                }
+                type="button"
+              >
+                <Download size={14} />
+                Export Queue
+              </button>
+            </div>
+            <div className="queue-list">
+              {queuedJobs.slice(0, 5).map((job) => {
+                const queueState = extractionQueueStatus(job.payload, extractionRuns)
+                return (
+                  <button
+                    className="queue-row"
+                    key={job.id}
+                    onClick={() => setSelectedJobId(job.id)}
+                    type="button"
+                  >
+                    <div>
+                      <strong>{job.payload.name}</strong>
+                      <span>{job.payload.connectorId} / {titleize(job.payload.scheduleCadence)}</span>
+                    </div>
+                    <StatusChip
+                      status={queueState === 'due now' || queueState === 'retry eligible' ? 'warning' : job.status}
+                      label={queueState}
+                    />
+                  </button>
+                )
+              })}
+              {queuedJobs.length === 0 ? (
+                <div className="empty-state compact">No extraction jobs have been saved yet.</div>
+              ) : null}
+            </div>
+          </div>
+          <div className="latest-contract">
+            <div className="report-card-header">
+              <div>
+                <strong>Schedule Calendar</strong>
+                <span>Next-run dates and retry windows for operational planning.</span>
+              </div>
+              <CalendarDays size={18} />
+            </div>
+            <div className="calendar-list">
+              {queuedJobs.slice(0, 5).map((job) => (
+                <div className="calendar-row" key={job.id}>
+                  <div className="calendar-date">
+                    <strong>
+                      {job.payload.nextRunAt ? new Date(job.payload.nextRunAt).toLocaleDateString() : 'Manual'}
+                    </strong>
+                    <span>
+                      {job.payload.nextRunAt ? new Date(job.payload.nextRunAt).toLocaleTimeString() : 'On demand'}
+                    </span>
+                  </div>
+                  <div>
+                    <strong>{job.payload.targetObject}</strong>
+                    <span>{job.payload.sourceObject}</span>
+                  </div>
+                </div>
+              ))}
+              {queuedJobs.length === 0 ? (
+                <div className="empty-state compact">Save scheduled jobs to populate the calendar.</div>
+              ) : null}
+            </div>
+          </div>
+        </div>
         <div className="extraction-job-grid">
           <ExtractionJobForm
             activeConnectorName={

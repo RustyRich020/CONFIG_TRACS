@@ -82,6 +82,11 @@ This prototype now includes the first practical build phases for TRACS:
 - Routes readiness evidence packets to reviewer stages and appends approval audit history to saved packet records.
 - Adds extraction job scheduling controls, cadence metadata, retry policy, and run retry eligibility evidence.
 - Adds credential provider configuration templates for Snowflake, Microsoft Graph, and external reference adapters without storing secret values.
+- Routes report catalog items with reviewer stages, due dates, routed reviewers, notification exports, and notification history.
+- Exports readiness evidence approval notification packets for reviewer handoff.
+- Adds extraction job run queue and schedule calendar views with queue export.
+- Validates external-reference connector credentials with backend environment and token rotation checks.
+- Adds a traceability path explorer that shows event-to-object relationship paths and coverage.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
@@ -92,6 +97,7 @@ Credential environment variables:
 
 - Snowflake SQL API: `TRACS_SNOWFLAKE_ACCOUNT_URL` or `TRACS_SNOWFLAKE_ACCOUNT`, plus `TRACS_SNOWFLAKE_TOKEN`
 - Microsoft Graph SharePoint Excel: `TRACS_GRAPH_TOKEN`
+- External reference API: `TRACS_EXTERNAL_API_BASE_URL`, plus `TRACS_EXTERNAL_API_TOKEN`
 
 Credential provider templates are available in `public/config/templates/` for Snowflake, Microsoft Graph, and external reference adapters. These templates define required backend environment references, rotation evidence variables, validation routes, owner roles, and missing-credential behavior. They intentionally do not store tokens, API keys, passwords, or rotated-at values in committed configuration.
 
@@ -157,7 +163,7 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add report catalog reviewer routing and approval notifications.
-2. Add evidence packet approval notification exports.
-3. Add extraction job calendar view and run queue dashboard.
-4. Add external-reference credential validation adapter implementation.
+1. Add notification delivery adapters for email, Teams, and SharePoint export folders.
+2. Add live external-reference metadata discovery and bounded preview.
+3. Add traceability graph filtering across object families and persisted evidence packets.
+4. Add storage adapter implementation for SQLite or Postgres.

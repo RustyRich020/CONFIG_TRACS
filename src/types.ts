@@ -440,6 +440,17 @@ export type ReportCatalogItem = {
   approvalReviewer?: string
   approvalRationale?: string
   approvalSignedAt?: string
+  reviewerRouteStage?: 'owner_review' | 'quality_review' | 'executive_signoff' | 'published'
+  routedReviewers?: string[]
+  routeDueAt?: string
+  notificationHistory?: Array<{
+    notificationId: string
+    sentAt: string
+    routeStage: 'owner_review' | 'quality_review' | 'executive_signoff' | 'published'
+    recipients: string[]
+    summary: string
+    evidence: string
+  }>
   approvalHistory?: Array<{
     status: 'pending' | 'approved' | 'approved_with_conditions' | 'rejected'
     reviewer: string
