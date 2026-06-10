@@ -278,7 +278,7 @@ async function handleRequest(req, res) {
     }
 
     if (req.method === 'GET' && url.pathname === '/api/reports') {
-      jsonResponse(res, 200, listReportCatalog())
+      jsonResponse(res, 200, await listReportCatalog())
       return
     }
 

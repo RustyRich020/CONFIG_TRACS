@@ -395,6 +395,8 @@ export type ReportCatalogItem = {
   semanticModel: string
   refreshStatus: StatusLevel
   lastRefresh: string
+  maxAgeHours: number
+  freshnessEvidence: string
   url: string
   sourceDependencies: string[]
   domains: string[]

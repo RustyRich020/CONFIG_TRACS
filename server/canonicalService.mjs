@@ -1,49 +1,49 @@
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import yaml from 'js-yaml'
 
 const qualityEventSamplePath = resolve('public', 'samples', 'quality_events_sample.csv')
+const reportCatalogPath = resolve('public', 'config', 'reports', 'report_catalog.yaml')
 
-export const reportCatalogItems = [
-  {
-    id: 'quality-events-overview',
-    title: 'Quality Events Overview',
-    platform: 'Power BI',
-    workspace: 'TRACS Quality',
-    owner: 'Quality Manager',
-    semanticModel: 'TRACS Quality Events',
-    refreshStatus: 'pass',
-    lastRefresh: '2026-06-08T12:30:00.000Z',
-    url: 'https://app.powerbi.com/groups/tracs-quality/reports/quality-events-overview',
-    sourceDependencies: ['quality_event', 'product', 'traceability_link'],
-    domains: ['quality', 'reporting_bi', 'traceability'],
-  },
-  {
-    id: 'returns-and-capa-bridge',
-    title: 'Returns and CAPA Bridge',
-    platform: 'Power BI',
-    workspace: 'TRACS Quality',
-    owner: 'QA / Validation Owner',
-    semanticModel: 'TRACS Returns and CAPA',
-    refreshStatus: 'warning',
-    lastRefresh: '2026-06-07T18:15:00.000Z',
-    url: 'https://app.powerbi.com/groups/tracs-quality/reports/returns-capa-bridge',
-    sourceDependencies: ['quality_event', 'return_case', 'capa_reference'],
-    domains: ['quality', 'qms', 'reporting_bi'],
-  },
-  {
-    id: 'operations-traceability',
-    title: 'Operations Traceability',
-    platform: 'Power BI',
-    workspace: 'TRACS Operations',
-    owner: 'Operations Manager',
-    semanticModel: 'TRACS Traceability',
-    refreshStatus: 'pass',
-    lastRefresh: '2026-06-08T10:45:00.000Z',
-    url: 'https://app.powerbi.com/groups/tracs-operations/reports/traceability',
-    sourceDependencies: ['product', 'lot_serial', 'work_order', 'shipment'],
-    domains: ['mes', 'scm', 'traceability', 'reporting_bi'],
-  },
-]
+function freshnessStatus(lastRefresh, maxAgeHours) {
+  const ageHours = (Date.now() - Date.parse(lastRefresh)) / 36e5
+  if (!Number.isFinite(ageHours)) {
+    return {
+      refreshStatus: 'blocking',
+      freshnessEvidence: 'Last refresh timestamp is missing or invalid.',
+    }
+  }
+  const roundedAge = Math.max(0, Math.round(ageHours * 10) / 10)
+  return {
+    refreshStatus: ageHours <= maxAgeHours ? 'pass' : 'warning',
+    freshnessEvidence: `Last refreshed ${roundedAge} hour(s) ago; threshold is ${maxAgeHours} hour(s).`,
+  }
+}
+
+async function loadReportCatalogConfig() {
+  const raw = yaml.load(await readFile(reportCatalogPath, 'utf8'))
+  return raw?.reports ?? []
+}
+
+function normalizeReport(report) {
+  const maxAgeHours = Number(report.max_age_hours ?? 48)
+  const freshness = freshnessStatus(report.last_refresh, maxAgeHours)
+  return {
+    id: report.id,
+    title: report.title,
+    platform: report.platform,
+    workspace: report.workspace,
+    owner: report.owner,
+    semanticModel: report.semantic_model,
+    refreshStatus: freshness.refreshStatus,
+    lastRefresh: report.last_refresh,
+    maxAgeHours,
+    freshnessEvidence: freshness.freshnessEvidence,
+    url: report.url,
+    sourceDependencies: report.source_dependencies ?? [],
+    domains: report.domains ?? [],
+  }
+}
 
 function parseCsvLine(line) {
   const values = []
@@ -304,6 +304,7 @@ export async function getTraceabilityResult(objectId) {
   return { object, links }
 }
 
-export function listReportCatalog() {
-  return reportCatalogItems
+export async function listReportCatalog() {
+  const reports = await loadReportCatalogConfig()
+  return reports.map(normalizeReport)
 }

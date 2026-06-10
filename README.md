@@ -19,6 +19,7 @@ This prototype now includes the first practical build phases for TRACS:
 13. Backend Record Store Abstraction + Database Schema Blueprint v1
 14. Canonical Workflow Surface v1
 15. Live Canonical Load + Connector-Backed Objects v1
+16. Report Catalog Config + Freshness Checks
 
 ## What It Proves
 
@@ -57,6 +58,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Adds Quality Events, Object Explorer, Traceability, and Report Catalog workspaces to the shell.
 - Loads mapped CSV quality-event rows into persisted canonical object and traceability-link records.
 - Updates workflow screens to prefer persisted canonical records while keeping sample fallback before first load.
+- Loads BI/report catalog metadata from YAML config and computes freshness status from refresh SLA thresholds.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
@@ -117,13 +119,14 @@ npm run build
 - `public/config/solutions/solution_domains.yaml`: solution domain definitions.
 - `public/config/mappings/domain_object_families.yaml`: canonical object family definitions.
 - `public/config/templates/`: reusable starter templates for the next build phases.
+- `public/config/reports/report_catalog.yaml`: governed BI/report catalog with source dependencies and freshness thresholds.
 - `public/samples/quality_events_sample.csv`: CSV/manual upload fixture for Mapping Studio.
 
 ## Next Phase
 
-Use the canonical load path to move deeper into live connector-backed records:
+Use the canonical load and report config paths to move deeper into live connector-backed records:
 
 1. Add live connector-backed canonical load for Snowflake and SharePoint Excel sources.
-2. Move the report catalog into config files and add freshness checks.
-3. Add template detail editing for category/domain/tag overrides.
-4. Add readiness evidence packet export for canonical loads and open exceptions.
+2. Add template detail editing for category/domain/tag overrides.
+3. Add readiness evidence packet export for canonical loads, report freshness, and open exceptions.
+4. Build credential-backed Snowflake and SharePoint metadata discovery.

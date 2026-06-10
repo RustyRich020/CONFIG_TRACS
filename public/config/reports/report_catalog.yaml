@@ -1,0 +1,54 @@
+reports:
+  - id: quality-events-overview
+    title: Quality Events Overview
+    platform: Power BI
+    workspace: TRACS Quality
+    owner: Quality Manager
+    semantic_model: TRACS Quality Events
+    last_refresh: '2026-06-08T12:30:00.000Z'
+    max_age_hours: 72
+    url: https://app.powerbi.com/groups/tracs-quality/reports/quality-events-overview
+    source_dependencies:
+      - quality_event
+      - product
+      - traceability_link
+    domains:
+      - quality
+      - reporting_bi
+      - traceability
+  - id: returns-and-capa-bridge
+    title: Returns and CAPA Bridge
+    platform: Power BI
+    workspace: TRACS Quality
+    owner: QA / Validation Owner
+    semantic_model: TRACS Returns and CAPA
+    last_refresh: '2026-06-07T18:15:00.000Z'
+    max_age_hours: 24
+    url: https://app.powerbi.com/groups/tracs-quality/reports/returns-capa-bridge
+    source_dependencies:
+      - quality_event
+      - return_case
+      - capa_reference
+    domains:
+      - quality
+      - qms
+      - reporting_bi
+  - id: operations-traceability
+    title: Operations Traceability
+    platform: Power BI
+    workspace: TRACS Operations
+    owner: Operations Manager
+    semantic_model: TRACS Traceability
+    last_refresh: '2026-06-08T10:45:00.000Z'
+    max_age_hours: 72
+    url: https://app.powerbi.com/groups/tracs-operations/reports/traceability
+    source_dependencies:
+      - product
+      - lot_serial
+      - work_order
+      - shipment
+    domains:
+      - mes
+      - scm
+      - traceability
+      - reporting_bi

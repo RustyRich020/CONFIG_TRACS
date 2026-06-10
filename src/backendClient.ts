@@ -1,4 +1,5 @@
 import { getAdapterContract } from './backendContracts'
+import yaml from 'js-yaml'
 import type {
   AdapterDryRunResult,
   AppConfig,
@@ -113,6 +114,58 @@ async function loadCsvFixture() {
     return Object.fromEntries(columns.map((column, index) => [column, values[index] ?? '']))
   })
   return { columns, rows }
+}
+
+function reportFreshness(lastRefresh: string, maxAgeHours: number): Pick<ReportCatalogItem, 'refreshStatus' | 'freshnessEvidence'> {
+  const ageHours = (Date.now() - Date.parse(lastRefresh)) / 36e5
+  if (!Number.isFinite(ageHours)) {
+    return {
+      refreshStatus: 'blocking',
+      freshnessEvidence: 'Last refresh timestamp is missing or invalid.',
+    }
+  }
+  const roundedAge = Math.max(0, Math.round(ageHours * 10) / 10)
+  return {
+    refreshStatus: ageHours <= maxAgeHours ? 'pass' : 'warning',
+    freshnessEvidence: `Last refreshed ${roundedAge} hour(s) ago; threshold is ${maxAgeHours} hour(s).`,
+  }
+}
+
+async function loadReportCatalogFixture(): Promise<ReportCatalogItem[]> {
+  const response = await fetch('/config/reports/report_catalog.yaml')
+  if (!response.ok) return []
+  const parsed = yaml.load(await response.text()) as {
+    reports?: Array<{
+      id: string
+      title: string
+      platform: string
+      workspace: string
+      owner: string
+      semantic_model: string
+      last_refresh: string
+      max_age_hours: number
+      url: string
+      source_dependencies: string[]
+      domains: string[]
+    }>
+  }
+  return (parsed.reports ?? []).map((report) => {
+    const maxAgeHours = Number(report.max_age_hours ?? 48)
+    return {
+      id: report.id,
+      title: report.title,
+      platform: report.platform,
+      workspace: report.workspace,
+      owner: report.owner,
+      semanticModel: report.semantic_model,
+      lastRefresh: report.last_refresh,
+      maxAgeHours,
+      ...reportFreshness(report.last_refresh, maxAgeHours),
+      url: report.url,
+      sourceDependencies: report.source_dependencies ?? [],
+      domains: report.domains ?? [],
+    }
+  })
 }
 
 function qualityEventFromRow(row: Record<string, string>): QualityEvent {
@@ -294,47 +347,6 @@ function traceabilityLinksForEvent(event: QualityEvent): TraceabilityLink[] {
   return links
 }
 
-const fallbackReports: ReportCatalogItem[] = [
-  {
-    id: 'quality-events-overview',
-    title: 'Quality Events Overview',
-    platform: 'Power BI',
-    workspace: 'TRACS Quality',
-    owner: 'Quality Manager',
-    semanticModel: 'TRACS Quality Events',
-    refreshStatus: 'pass',
-    lastRefresh: '2026-06-08T12:30:00.000Z',
-    url: 'https://app.powerbi.com/groups/tracs-quality/reports/quality-events-overview',
-    sourceDependencies: ['quality_event', 'product', 'traceability_link'],
-    domains: ['quality', 'reporting_bi', 'traceability'],
-  },
-  {
-    id: 'returns-and-capa-bridge',
-    title: 'Returns and CAPA Bridge',
-    platform: 'Power BI',
-    workspace: 'TRACS Quality',
-    owner: 'QA / Validation Owner',
-    semanticModel: 'TRACS Returns and CAPA',
-    refreshStatus: 'warning',
-    lastRefresh: '2026-06-07T18:15:00.000Z',
-    url: 'https://app.powerbi.com/groups/tracs-quality/reports/returns-capa-bridge',
-    sourceDependencies: ['quality_event', 'return_case', 'capa_reference'],
-    domains: ['quality', 'qms', 'reporting_bi'],
-  },
-  {
-    id: 'operations-traceability',
-    title: 'Operations Traceability',
-    platform: 'Power BI',
-    workspace: 'TRACS Operations',
-    owner: 'Operations Manager',
-    semanticModel: 'TRACS Traceability',
-    refreshStatus: 'pass',
-    lastRefresh: '2026-06-08T10:45:00.000Z',
-    url: 'https://app.powerbi.com/groups/tracs-operations/reports/traceability',
-    sourceDependencies: ['product', 'lot_serial', 'work_order', 'shipment'],
-    domains: ['mes', 'scm', 'traceability', 'reporting_bi'],
-  },
-]
 
 export class LocalBackendClient {
   private endpoint = 'localStorage://tracs.backend.records.v1'
@@ -470,7 +482,7 @@ export class LocalBackendClient {
   }
 
   async listReports(): Promise<ReportCatalogItem[]> {
-    return fallbackReports
+    return loadReportCatalogFixture()
   }
 
   async loadStorageSchema(): Promise<RecordStoreSchema> {

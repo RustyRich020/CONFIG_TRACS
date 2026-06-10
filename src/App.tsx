@@ -1563,7 +1563,9 @@ function ReportCatalogView({ reports }: { reports: ReportCatalogItem[] }) {
               <Metadata label="Platform" value={report.platform} />
               <Metadata label="Owner" value={report.owner} />
               <Metadata label="Last refresh" value={new Date(report.lastRefresh).toLocaleString()} />
+              <Metadata label="Freshness SLA" value={`${report.maxAgeHours} hours`} />
               <Metadata label="Domains" value={report.domains.map(titleize).join(', ')} />
+              <Metadata label="Freshness evidence" value={report.freshnessEvidence} />
             </div>
             <div className="source-column-list report-dependencies">
               {report.sourceDependencies.map((dependency) => (

@@ -68,6 +68,8 @@ The canonical workflow routes are sample-backed in v1. `server/canonicalService.
 
 The canonical load route persists the mapped CSV-derived canonical objects and traceability links as latest-version backend records. After `POST /api/canonical-loads`, object and traceability routes prefer persisted records and only fall back to sample derivation when no canonical load has been run.
 
+The report catalog route reads `public/config/reports/report_catalog.yaml` and computes `refreshStatus` from each report's `last_refresh` and `max_age_hours` values. The frontend browser-local fallback reads the same YAML file so report readiness behavior stays consistent with or without the API.
+
 ### Planned Saved Versions
 
 ```http
