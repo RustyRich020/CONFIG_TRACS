@@ -158,6 +158,24 @@ const templateCatalog = [
     purpose: 'Create a manual upload path with target object and schema inference defaults.',
   },
   {
+    name: 'Snowflake Credential Provider',
+    file: 'credential_provider_snowflake.template.yaml',
+    type: 'Credential',
+    purpose: 'Declare server-only Snowflake SQL API environment references, rotation evidence, and validation checks.',
+  },
+  {
+    name: 'Microsoft Graph Credential Provider',
+    file: 'credential_provider_microsoft_graph.template.yaml',
+    type: 'Credential',
+    purpose: 'Declare server-only Graph token references for SharePoint Excel discovery and rotation validation.',
+  },
+  {
+    name: 'External Reference Credential Provider',
+    file: 'credential_provider_external_reference.template.yaml',
+    type: 'Credential',
+    purpose: 'Start a no-secret provider contract for vendor APIs and future REST-backed connectors.',
+  },
+  {
     name: 'Mapping Manifest',
     file: 'mapping_manifest.template.yaml',
     type: 'Mapping',

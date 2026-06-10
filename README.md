@@ -81,6 +81,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Captures report catalog reviewer sign-off, rationale, status, and approval history as versioned report records.
 - Routes readiness evidence packets to reviewer stages and appends approval audit history to saved packet records.
 - Adds extraction job scheduling controls, cadence metadata, retry policy, and run retry eligibility evidence.
+- Adds credential provider configuration templates for Snowflake, Microsoft Graph, and external reference adapters without storing secret values.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
@@ -91,6 +92,8 @@ Credential environment variables:
 
 - Snowflake SQL API: `TRACS_SNOWFLAKE_ACCOUNT_URL` or `TRACS_SNOWFLAKE_ACCOUNT`, plus `TRACS_SNOWFLAKE_TOKEN`
 - Microsoft Graph SharePoint Excel: `TRACS_GRAPH_TOKEN`
+
+Credential provider templates are available in `public/config/templates/` for Snowflake, Microsoft Graph, and external reference adapters. These templates define required backend environment references, rotation evidence variables, validation routes, owner roles, and missing-credential behavior. They intentionally do not store tokens, API keys, passwords, or rotated-at values in committed configuration.
 
 ## Run Locally
 
@@ -154,7 +157,7 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add credential provider configuration templates for Snowflake, Graph, and external references.
-2. Add report catalog reviewer routing and approval notifications.
-3. Add evidence packet approval notification exports.
-4. Add extraction job calendar view and run queue dashboard.
+1. Add report catalog reviewer routing and approval notifications.
+2. Add evidence packet approval notification exports.
+3. Add extraction job calendar view and run queue dashboard.
+4. Add external-reference credential validation adapter implementation.

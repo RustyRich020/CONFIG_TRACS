@@ -58,6 +58,8 @@ Snowflake and SharePoint Excel metadata discovery are now credential-aware backe
 
 Credential validation uses `POST /api/connectors/{connectorId}/credential-validation` and persists `credential_validation` records. The route checks required server environment references and token rotation evidence without returning token values. Snowflake rotation evidence reads `TRACS_SNOWFLAKE_TOKEN_ROTATED_AT` with optional `TRACS_SNOWFLAKE_TOKEN_MAX_AGE_DAYS`; Microsoft Graph reads `TRACS_GRAPH_TOKEN_ROTATED_AT` with optional `TRACS_GRAPH_TOKEN_MAX_AGE_DAYS`.
 
+Credential provider configuration templates live in `public/config/templates/credential_provider_*.template.yaml`. They define the backend environment references, rotation evidence fields, validation routes, owner roles, and missing-credential fallback behavior for Snowflake, Microsoft Graph, and external reference adapters. These templates are governance contracts only; token values, API keys, client secrets, and rotated-at values must remain in the backend host environment or deployment secret store.
+
 Mapping Studio validation runs are persisted as `mapping_validation` records. The frontend still performs the current schema-to-manifest validation, then sends the reviewed mapping, inferred schema, validation result, and summary to the API for versioned storage.
 
 Integration contracts are persisted as `integration_contract` records. The Contract workspace saves the same generated payload that can be downloaded for governance review, including readiness status, backend evidence, adapter contracts, and recent backend records.
