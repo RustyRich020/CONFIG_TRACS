@@ -267,6 +267,18 @@ function evaluateReportPublishGate(report: ReportCatalogItem, canonicalObjects: 
   }
 }
 
+type ReportCatalogSaveAction = 'draft' | 'publish' | 'signoff'
+
+function reportApprovalStatusLevel(status: NonNullable<ReportCatalogItem['approvalStatus']>): StatusLevel {
+  if (status === 'approved') return 'pass'
+  if (status === 'rejected') return 'blocking'
+  return 'warning'
+}
+
+function reportApprovalLabel(status?: ReportCatalogItem['approvalStatus']) {
+  return status ? titleize(status) : 'Not signed'
+}
+
 function defaultEvidenceApproval(): ReadinessEvidenceApproval {
   return {
     status: 'draft',
@@ -1013,24 +1025,57 @@ function App() {
     )
   }
 
-  async function saveReportCatalogItem(report: ReportCatalogItem, publish: boolean) {
+  async function saveReportCatalogItem(report: ReportCatalogItem, action: ReportCatalogSaveAction) {
     const freshness = reportFreshnessStatus(report.lastRefresh, report.maxAgeHours)
     const normalizedReport: ReportCatalogItem = {
       ...report,
       ...freshness,
     }
     const gate = evaluateReportPublishGate(normalizedReport, canonicalObjects)
+    const signedAt = new Date().toISOString()
+    const approvalStatus = normalizedReport.approvalStatus ?? 'pending'
+    const approvalEvidence = `${reportApprovalLabel(approvalStatus)} by ${normalizedReport.approvalReviewer || 'unassigned reviewer'}.`
     const payload: ReportCatalogItem = {
       ...normalizedReport,
-      publishStatus: publish ? (gate.status === 'pass' ? 'published' : 'blocked') : 'draft',
-      publishGateEvidence: publish ? gate.evidence : 'Draft saved; publish gate has not been applied.',
-      publishedAt: publish && gate.status === 'pass' ? new Date().toISOString() : normalizedReport.publishedAt,
+      publishStatus:
+        action === 'publish' ? (gate.status === 'pass' ? 'published' : 'blocked') : normalizedReport.publishStatus ?? 'draft',
+      publishGateEvidence:
+        action === 'publish' ? gate.evidence : normalizedReport.publishGateEvidence ?? 'Draft saved; publish gate has not been applied.',
+      publishedAt: action === 'publish' && gate.status === 'pass' ? signedAt : normalizedReport.publishedAt,
+      approvalStatus,
+      approvalSignedAt: action === 'signoff' ? signedAt : normalizedReport.approvalSignedAt,
+      approvalHistory:
+        action === 'signoff'
+          ? [
+              ...(normalizedReport.approvalHistory ?? []),
+              {
+                status: approvalStatus,
+                reviewer: normalizedReport.approvalReviewer ?? '',
+                rationale: normalizedReport.approvalRationale ?? '',
+                signedAt,
+                publishStatus: normalizedReport.publishStatus,
+                evidence: `${approvalEvidence} ${gate.evidence}`,
+              },
+            ]
+          : normalizedReport.approvalHistory,
     }
+    const saveStatus =
+      action === 'signoff'
+        ? mostSevereStatus([gate.status, reportApprovalStatusLevel(approvalStatus)])
+        : action === 'publish'
+          ? gate.status
+          : payload.refreshStatus
+    const summary =
+      action === 'signoff'
+        ? `${payload.title} report sign-off recorded. ${approvalEvidence}`
+        : action === 'publish'
+          ? gate.evidence
+          : `${payload.title} report catalog draft saved.`
     const saved = await backendClient.saveRecord({
       kind: 'report_catalog_item',
       label: payload.id,
-      status: publish ? gate.status : payload.refreshStatus,
-      summary: publish ? gate.evidence : `${payload.title} report catalog draft saved.`,
+      status: saveStatus,
+      summary,
       payload,
     })
     await Promise.all([refreshBackend(), refreshWorkflowSurface()])
@@ -1045,7 +1090,7 @@ function App() {
     )
     record(
       'report',
-      publish ? 'publish_gate' : 'save_draft',
+      action === 'signoff' ? 'sign_off' : action === 'publish' ? 'publish_gate' : 'save_draft',
       `${payload.title} saved as report catalog record v${saved.version}.`,
     )
   }
@@ -2306,7 +2351,7 @@ function ReportCatalogView({
   reports,
 }: {
   canonicalObjects: CanonicalObject[]
-  onSaveReport: (report: ReportCatalogItem, publish: boolean) => void
+  onSaveReport: (report: ReportCatalogItem, action: ReportCatalogSaveAction) => void
   reports: ReportCatalogItem[]
 }) {
   const staleCount = reports.filter((report) => report.refreshStatus !== 'pass').length
@@ -2345,6 +2390,8 @@ function ReportCatalogView({
               <Metadata label="Freshness SLA" value={`${report.maxAgeHours} hours`} />
               <Metadata label="Domains" value={report.domains.map(titleize).join(', ')} />
               <Metadata label="Freshness evidence" value={report.freshnessEvidence} />
+              <Metadata label="Approval" value={reportApprovalLabel(report.approvalStatus)} />
+              <Metadata label="Reviewer" value={report.approvalReviewer || 'Not assigned'} />
             </div>
             <div className="source-column-list report-dependencies">
               {report.sourceDependencies.map((dependency) => (
@@ -2383,7 +2430,7 @@ function ReportCatalogEditor({
   report,
 }: {
   canonicalObjects: CanonicalObject[]
-  onSave: (report: ReportCatalogItem, publish: boolean) => void
+  onSave: (report: ReportCatalogItem, action: ReportCatalogSaveAction) => void
   report: ReportCatalogItem
 }) {
   const [title, setTitle] = useState(report.title)
@@ -2395,6 +2442,11 @@ function ReportCatalogEditor({
   const [url, setUrl] = useState(report.url)
   const [dependencies, setDependencies] = useState(report.sourceDependencies.join(', '))
   const [domains, setDomains] = useState(report.domains.join(', '))
+  const [approvalStatus, setApprovalStatus] = useState<NonNullable<ReportCatalogItem['approvalStatus']>>(
+    report.approvalStatus ?? 'pending',
+  )
+  const [approvalReviewer, setApprovalReviewer] = useState(report.approvalReviewer ?? '')
+  const [approvalRationale, setApprovalRationale] = useState(report.approvalRationale ?? '')
 
   function splitCsv(value: string) {
     return value
@@ -2416,6 +2468,9 @@ function ReportCatalogEditor({
       url,
       sourceDependencies: splitCsv(dependencies),
       domains: splitCsv(domains),
+      approvalStatus,
+      approvalReviewer,
+      approvalRationale,
       ...freshness,
     }
   }
@@ -2468,12 +2523,38 @@ function ReportCatalogEditor({
             <span>Domains</span>
             <input value={domains} onChange={(event) => setDomains(event.target.value)} />
           </label>
+          <label>
+            <span>Approval status</span>
+            <select
+              value={approvalStatus}
+              onChange={(event) =>
+                setApprovalStatus(event.target.value as NonNullable<ReportCatalogItem['approvalStatus']>)
+              }
+            >
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="approved_with_conditions">Approved with conditions</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </label>
+          <label>
+            <span>Reviewer</span>
+            <input value={approvalReviewer} onChange={(event) => setApprovalReviewer(event.target.value)} />
+          </label>
+          <label className="template-editor-notes">
+            <span>Sign-off rationale</span>
+            <textarea value={approvalRationale} onChange={(event) => setApprovalRationale(event.target.value)} />
+          </label>
           <div className="report-editor-actions">
-            <button className="secondary-action" onClick={() => onSave(draftReport(), false)} type="button">
+            <button className="secondary-action" onClick={() => onSave(draftReport(), 'draft')} type="button">
               <ServerCog size={15} />
               Save Draft
             </button>
-            <button className="primary-action" onClick={() => onSave(draftReport(), true)} type="button">
+            <button className="secondary-action" onClick={() => onSave(draftReport(), 'signoff')} type="button">
+              <ShieldCheck size={15} />
+              Save Sign-Off
+            </button>
+            <button className="primary-action" onClick={() => onSave(draftReport(), 'publish')} type="button">
               <CheckCircle2 size={16} />
               Run Publish Gate
             </button>
@@ -2489,8 +2570,27 @@ function ReportCatalogEditor({
               <Metadata label="Freshness evidence" value={previewReport.freshnessEvidence} />
               <Metadata label="Dependencies" value={previewReport.sourceDependencies.join(', ')} />
               <Metadata label="Publish state" value={previewReport.publishStatus ?? 'unsaved draft'} />
+              <Metadata label="Approval" value={reportApprovalLabel(previewReport.approvalStatus)} />
+              <Metadata label="Reviewer" value={previewReport.approvalReviewer || 'Not assigned'} />
             </div>
           </div>
+          {previewReport.approvalHistory?.length ? (
+            <div className="report-approval-history">
+              <h4>Approval History</h4>
+              {previewReport.approvalHistory.slice(-4).reverse().map((entry) => (
+                <div className="connector-run-row" key={`${entry.signedAt}-${entry.status}`}>
+                  <div>
+                    <strong>{reportApprovalLabel(entry.status)}</strong>
+                    <span>
+                      {entry.reviewer || 'Unassigned reviewer'} / {new Date(entry.signedAt).toLocaleString()}
+                    </span>
+                    <small>{entry.rationale || entry.evidence}</small>
+                  </div>
+                  <StatusChip status={reportApprovalStatusLevel(entry.status)} label={entry.status} />
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
     </section>

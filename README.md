@@ -28,6 +28,7 @@ This prototype now includes the first practical build phases for TRACS:
 22. Evidence Packet Approval Workflow + Exception Disposition Tracking v1
 23. Connector-Backed Extraction Jobs v1
 24. Credential Validation Tests + Token Rotation Checks v1
+25. Report Catalog Approval History + Reviewer Sign-Off v1
 
 ## What It Proves
 
@@ -75,6 +76,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Captures readiness evidence approval state, reviewer rationale, next-review date, and exception dispositions before packet save/export.
 - Saves reusable connector-backed extraction jobs and records executable job runs that feed canonical load evidence.
 - Validates deployed adapter credential presence and token-rotation evidence without exposing secret values to the frontend.
+- Captures report catalog reviewer sign-off, rationale, status, and approval history as versioned report records.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
@@ -148,7 +150,7 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add report catalog approval history and reviewer sign-off.
-2. Add approval audit history and reviewer routing for readiness evidence packets.
-3. Add extraction job scheduling controls and run retry policy.
-4. Add credential provider configuration templates for Snowflake, Graph, and external references.
+1. Add approval audit history and reviewer routing for readiness evidence packets.
+2. Add extraction job scheduling controls and run retry policy.
+3. Add credential provider configuration templates for Snowflake, Graph, and external references.
+4. Add report catalog reviewer routing and approval notifications.

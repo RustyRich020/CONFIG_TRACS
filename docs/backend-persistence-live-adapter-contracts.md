@@ -78,7 +78,7 @@ The canonical load route persists mapped canonical objects and traceability link
 
 Connector-backed extraction jobs are persisted as `extraction_job` records and executed into `extraction_run` records. The v1 job runner reuses the canonical load contract so each run produces canonical objects, traceability links, a `canonical_load` record, and a governed extraction-run wrapper that captures request profile, warnings, status, and load result evidence.
 
-Report catalog records now use YAML config as seed data and `report_catalog_item` backend records as governed overrides. The Reports workspace can save draft catalog edits or run publish gates. Publish gates block release when freshness is stale or declared source dependencies are not present in the canonical object registry.
+Report catalog records now use YAML config as seed data and `report_catalog_item` backend records as governed overrides. The Reports workspace can save draft catalog edits, run publish gates, and record reviewer sign-off. Publish gates block release when freshness is stale or declared source dependencies are not present in the canonical object registry. Sign-off history is append-only inside each versioned report catalog payload and captures reviewer, status, rationale, signed timestamp, and publish state.
 
 The report catalog route reads `public/config/reports/report_catalog.yaml` and computes `refreshStatus` from each report's `last_refresh` and `max_age_hours` values. The frontend browser-local fallback reads the same YAML file so report readiness behavior stays consistent with or without the API.
 

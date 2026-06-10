@@ -436,6 +436,18 @@ export type ReportCatalogItem = {
   publishStatus?: 'draft' | 'blocked' | 'published'
   publishGateEvidence?: string
   publishedAt?: string
+  approvalStatus?: 'pending' | 'approved' | 'approved_with_conditions' | 'rejected'
+  approvalReviewer?: string
+  approvalRationale?: string
+  approvalSignedAt?: string
+  approvalHistory?: Array<{
+    status: 'pending' | 'approved' | 'approved_with_conditions' | 'rejected'
+    reviewer: string
+    rationale: string
+    signedAt: string
+    publishStatus?: 'draft' | 'blocked' | 'published'
+    evidence: string
+  }>
 }
 
 export type CanonicalLoadResult = {
