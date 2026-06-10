@@ -55,6 +55,7 @@ import type {
   BackendRecord,
   CanonicalObject,
   ControlledTemplatePayload,
+  ControlledTemplateStatus,
   LocalAsset,
   ConnectorPreviewResult,
   ConnectorSourceMetadata,
@@ -356,6 +357,30 @@ function App() {
       'template',
       'activate',
       `${templateRecord.payload.templateId} activated as controlled template v${saved.version}.`,
+    )
+  }
+
+  async function updateTemplateRecord(
+    templateRecord: BackendRecord<ControlledTemplatePayload>,
+    updates: Partial<ControlledTemplatePayload>,
+  ) {
+    const saved = await backendClient.updateControlledTemplate(templateRecord, updates)
+    const templates = await backendClient.listControlledTemplates()
+    setTemplateRecords(templates)
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'controlled_template',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record(
+      'template',
+      'update',
+      `${templateRecord.payload.templateId} updated as controlled template v${saved.version}.`,
     )
   }
 
@@ -831,6 +856,7 @@ function App() {
             onActivateTemplate={activateTemplateRecord}
             onPromoteAsset={promoteTemplateAsset}
             onRefreshAssets={refreshAssetRegistry}
+            onUpdateTemplate={updateTemplateRecord}
             templateRecords={templateRecords}
           />
         ) : activeView === 'Mapping' ? (
@@ -1861,15 +1887,21 @@ function TemplatesView({
   onActivateTemplate,
   onPromoteAsset,
   onRefreshAssets,
+  onUpdateTemplate,
   templateRecords,
 }: {
   assetRegistry: AssetRegistry | null
   onActivateTemplate: (templateRecord: BackendRecord<ControlledTemplatePayload>) => void
   onPromoteAsset: (asset: LocalAsset) => void
   onRefreshAssets: () => void
+  onUpdateTemplate: (
+    templateRecord: BackendRecord<ControlledTemplatePayload>,
+    updates: Partial<ControlledTemplatePayload>,
+  ) => void
   templateRecords: BackendRecord<ControlledTemplatePayload>[]
 }) {
   const [activeCategory, setActiveCategory] = useState('All')
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
   const categories = useMemo(
     () => ['All', ...Object.keys(assetRegistry?.summary.byCategory ?? {}).sort()],
     [assetRegistry],
@@ -1902,6 +1934,9 @@ function TemplatesView({
   const activeTemplates = latestTemplateRecords.filter(
     (record) => record.payload.status === 'active',
   ).length
+  const selectedTemplate =
+    latestTemplateRecords.find((record) => record.id === selectedTemplateId) ??
+    latestTemplateRecords[0]
 
   return (
     <>
@@ -2026,6 +2061,7 @@ function TemplatesView({
                 currentAsset={assetById.get(record.payload.source.id)}
                 key={record.id}
                 onActivate={onActivateTemplate}
+                onEdit={setSelectedTemplateId}
                 templateRecord={record}
               />
             ))}
@@ -2034,6 +2070,15 @@ function TemplatesView({
           <div className="empty-state">Promote a local asset to create the first controlled template record.</div>
         )}
       </section>
+
+      {selectedTemplate ? (
+        <TemplateRecordEditor
+          currentAsset={assetById.get(selectedTemplate.payload.source.id)}
+          key={selectedTemplate.id}
+          onSave={onUpdateTemplate}
+          templateRecord={selectedTemplate}
+        />
+      ) : null}
     </>
   )
 }
@@ -2071,10 +2116,12 @@ function AssetRow({
 function TemplateRecordRow({
   currentAsset,
   onActivate,
+  onEdit,
   templateRecord,
 }: {
   currentAsset?: LocalAsset
   onActivate: (templateRecord: BackendRecord<ControlledTemplatePayload>) => void
+  onEdit: (recordId: string) => void
   templateRecord: BackendRecord<ControlledTemplatePayload>
 }) {
   const template = templateRecord.payload
@@ -2103,15 +2150,143 @@ function TemplateRecordRow({
         <strong>{sourceChanged ? 'Source changed' : template.source.sourceFamily}</strong>
         <span>{template.source.relativePath}</span>
       </div>
-      {template.status === 'active' ? (
-        <span className="controlled-state">Active</span>
-      ) : (
-        <button className="secondary-action compact" onClick={() => onActivate(templateRecord)} type="button">
-          <CheckCircle2 size={14} />
-          Activate
+      <div className="row-actions">
+        <button className="secondary-action compact" onClick={() => onEdit(templateRecord.id)} type="button">
+          <FileCog size={14} />
+          Edit
         </button>
-      )}
+        {template.status === 'active' ? (
+          <span className="controlled-state">Active</span>
+        ) : (
+          <button className="secondary-action compact" onClick={() => onActivate(templateRecord)} type="button">
+            <CheckCircle2 size={14} />
+            Activate
+          </button>
+        )}
+      </div>
     </div>
+  )
+}
+
+function TemplateRecordEditor({
+  currentAsset,
+  onSave,
+  templateRecord,
+}: {
+  currentAsset?: LocalAsset
+  onSave: (
+    templateRecord: BackendRecord<ControlledTemplatePayload>,
+    updates: Partial<ControlledTemplatePayload>,
+  ) => void
+  templateRecord: BackendRecord<ControlledTemplatePayload>
+}) {
+  const template = templateRecord.payload
+  const [status, setStatus] = useState<ControlledTemplateStatus>(template.status)
+  const [category, setCategory] = useState(template.classification.category)
+  const [domain, setDomain] = useState(template.classification.domain)
+  const [kind, setKind] = useState<LocalAsset['kind']>(template.classification.kind)
+  const [industries, setIndustries] = useState(template.tags.industries.join(', '))
+  const [solutions, setSolutions] = useState(template.tags.solutions.join(', '))
+  const [provenanceNotes, setProvenanceNotes] = useState(template.provenanceNotes)
+  const sourceChanged =
+    Boolean(currentAsset?.fingerprint) && currentAsset?.fingerprint !== template.source.fingerprint
+
+  function splitTags(value: string) {
+    return value
+      .split(',')
+      .map((tag) => tag.trim())
+      .filter(Boolean)
+  }
+
+  function saveOverrides() {
+    onSave(templateRecord, {
+      status,
+      versionLabel: `v${templateRecord.version + 1}`,
+      classification: {
+        category,
+        domain,
+        kind,
+        sourceFamily: template.classification.sourceFamily,
+      },
+      tags: {
+        industries: splitTags(industries),
+        solutions: splitTags(solutions),
+      },
+      provenanceNotes,
+    })
+  }
+
+  return (
+    <section className="panel template-editor-panel">
+      <PanelHeader
+        icon={FileCog}
+        title="Template Detail Editor"
+        subtitle="Override lifecycle, classification, tags, and provenance for the selected controlled template."
+      />
+      <div className="template-editor-grid">
+        <div className="template-editor-form">
+          <label>
+            <span>Status</span>
+            <select value={status} onChange={(event) => setStatus(event.target.value as ControlledTemplateStatus)}>
+              {(['candidate', 'draft', 'active', 'retired'] as ControlledTemplateStatus[]).map((option) => (
+                <option key={option} value={option}>
+                  {titleize(option)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Category</span>
+            <input value={category} onChange={(event) => setCategory(event.target.value)} />
+          </label>
+          <label>
+            <span>Domain</span>
+            <input value={domain} onChange={(event) => setDomain(event.target.value)} />
+          </label>
+          <label>
+            <span>Kind</span>
+            <select value={kind} onChange={(event) => setKind(event.target.value as LocalAsset['kind'])}>
+              {(['template', 'database_schema', 'data_template', 'manifest', 'reference'] as LocalAsset['kind'][]).map((option) => (
+                <option key={option} value={option}>
+                  {titleize(option)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Industry tags</span>
+            <input value={industries} onChange={(event) => setIndustries(event.target.value)} />
+          </label>
+          <label>
+            <span>Solution tags</span>
+            <input value={solutions} onChange={(event) => setSolutions(event.target.value)} />
+          </label>
+          <label className="template-editor-notes">
+            <span>Provenance notes</span>
+            <textarea value={provenanceNotes} onChange={(event) => setProvenanceNotes(event.target.value)} />
+          </label>
+          <button className="primary-action" onClick={saveOverrides} type="button">
+            <CheckCircle2 size={16} />
+            Save Template Version
+          </button>
+        </div>
+        <div className="template-editor-summary">
+          <div className="latest-contract">
+            <StatusChip status={status === 'active' ? 'pass' : 'warning'} label={status} />
+            <h3>{templateRecord.label}</h3>
+            <p>{template.templateId}</p>
+            <div className="metadata-grid">
+              <Metadata label="Current version" value={`v${templateRecord.version}`} />
+              <Metadata label="Next version label" value={`v${templateRecord.version + 1}`} />
+              <Metadata label="Source family" value={template.source.sourceFamily} />
+              <Metadata label="Source changed" value={sourceChanged ? 'Yes' : 'No'} />
+              <Metadata label="Source path" value={template.source.relativePath} />
+              <Metadata label="Fingerprint" value={template.source.fingerprint} />
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
   )
 }
 
