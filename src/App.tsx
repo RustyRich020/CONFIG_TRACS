@@ -283,9 +283,13 @@ function defaultEvidenceApproval(): ReadinessEvidenceApproval {
   return {
     status: 'draft',
     reviewer: '',
+    routeStage: 'quality_review',
+    routedReviewers: [],
+    routeDueAt: '',
     nextReviewAt: '',
     rationale: '',
     dispositions: [],
+    auditHistory: [],
   }
 }
 
@@ -297,6 +301,14 @@ function evidenceApprovalStatusLevel(status: ReadinessEvidenceApprovalStatus): S
 
 function evidenceApprovalLabel(status: ReadinessEvidenceApprovalStatus) {
   return titleize(status)
+}
+
+function evidenceApprovalAuditAction(status: ReadinessEvidenceApprovalStatus) {
+  if (status === 'submitted') return 'submitted'
+  if (status === 'approved') return 'approved'
+  if (status === 'approved_with_exceptions') return 'approved_with_exceptions'
+  if (status === 'rejected') return 'rejected'
+  return 'updated'
 }
 
 function createReadinessEvidencePacket({
@@ -1432,8 +1444,18 @@ function EvidencePacketWorkspace({
     latestApproval?.status ?? 'draft',
   )
   const [reviewer, setReviewer] = useState(latestApproval?.reviewer ?? '')
+  const [routeStage, setRouteStage] = useState<NonNullable<ReadinessEvidenceApproval['routeStage']>>(
+    latestApproval?.routeStage ?? 'quality_review',
+  )
+  const [routedReviewers, setRoutedReviewers] = useState(
+    latestApproval?.routedReviewers?.join(', ') ?? '',
+  )
+  const [routeDueAt, setRouteDueAt] = useState(latestApproval?.routeDueAt ?? '')
   const [nextReviewAt, setNextReviewAt] = useState(latestApproval?.nextReviewAt ?? '')
   const [approvalRationale, setApprovalRationale] = useState(latestApproval?.rationale ?? '')
+  const [approvalAuditHistory] = useState(
+    latestApproval?.auditHistory ?? [],
+  )
   const [dispositions, setDispositions] = useState<Record<string, ReadinessEvidenceExceptionDisposition>>(
     () =>
       Object.fromEntries(
@@ -1464,10 +1486,45 @@ function EvidencePacketWorkspace({
   const approval: ReadinessEvidenceApproval = {
     status: approvalStatus,
     reviewer,
+    routeStage,
+    routedReviewers: routedReviewers
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean),
+    routeDueAt,
     reviewedAt: approvalStatus === 'draft' ? latestApproval?.reviewedAt : new Date().toISOString(),
     nextReviewAt,
     rationale: approvalRationale,
     dispositions: approvalDispositions.map(({ disposition }) => disposition),
+    auditHistory: approvalAuditHistory,
+  }
+
+  function approvalForSave(): ReadinessEvidenceApproval {
+    const timestamp = new Date().toISOString()
+    const routed = routedReviewers
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+    const auditAction = evidenceApprovalAuditAction(approvalStatus)
+    return {
+      ...approval,
+      reviewedAt: approvalStatus === 'draft' ? latestApproval?.reviewedAt : timestamp,
+      routedReviewers: routed,
+      auditHistory: [
+        ...(approval.auditHistory ?? []),
+        {
+          action: routed.length > 0 && approvalStatus === 'draft' ? 'routed' : auditAction,
+          actor: reviewer || 'unassigned reviewer',
+          routeStage,
+          status: approvalStatus,
+          timestamp,
+          summary:
+            routed.length > 0
+              ? `${evidenceApprovalLabel(approvalStatus)} packet routed to ${routed.join(', ')}.`
+              : `${evidenceApprovalLabel(approvalStatus)} packet updated by ${reviewer || 'unassigned reviewer'}.`,
+        },
+      ],
+    }
   }
 
   function updateDisposition(
@@ -1504,11 +1561,11 @@ function EvidencePacketWorkspace({
           </p>
         </div>
         <div className="toolbar-actions">
-          <button className="secondary-action" onClick={() => onSavePacket(approval)} type="button">
+          <button className="secondary-action" onClick={() => onSavePacket(approvalForSave())} type="button">
             <ServerCog size={15} />
             Save Packet
           </button>
-          <button className="primary-action" onClick={() => onDownloadPacket(approval)} type="button">
+          <button className="primary-action" onClick={() => onDownloadPacket(approvalForSave())} type="button">
             <Download size={16} />
             Save & Export
           </button>
@@ -1588,8 +1645,30 @@ function EvidencePacketWorkspace({
               <input value={reviewer} onChange={(event) => setReviewer(event.target.value)} />
             </label>
             <label>
+              <span>Route stage</span>
+              <select
+                value={routeStage}
+                onChange={(event) =>
+                  setRouteStage(event.target.value as NonNullable<ReadinessEvidenceApproval['routeStage']>)
+                }
+              >
+                <option value="quality_review">Quality review</option>
+                <option value="operations_review">Operations review</option>
+                <option value="executive_signoff">Executive signoff</option>
+                <option value="closed">Closed</option>
+              </select>
+            </label>
+            <label>
+              <span>Route due date</span>
+              <input type="date" value={routeDueAt} onChange={(event) => setRouteDueAt(event.target.value)} />
+            </label>
+            <label>
               <span>Next review date</span>
               <input type="date" value={nextReviewAt} onChange={(event) => setNextReviewAt(event.target.value)} />
+            </label>
+            <label className="template-editor-notes">
+              <span>Routed reviewers</span>
+              <input value={routedReviewers} onChange={(event) => setRoutedReviewers(event.target.value)} />
             </label>
             <label className="template-editor-notes">
               <span>Approval rationale</span>
@@ -1602,6 +1681,9 @@ function EvidencePacketWorkspace({
             <p>{approvalRationale || 'No approval rationale has been recorded yet.'}</p>
             <div className="metadata-grid">
               <Metadata label="Disposition rows" value={String(approval.dispositions.length)} />
+              <Metadata label="Route stage" value={titleize(routeStage)} />
+              <Metadata label="Routed reviewers" value={approval.routedReviewers?.join(', ') || 'Not routed'} />
+              <Metadata label="Route due" value={routeDueAt || 'No due date'} />
               <Metadata label="Next review" value={nextReviewAt || 'Not scheduled'} />
               <Metadata label="Saved packets" value={String(evidenceRecords.length)} />
               <Metadata label="Packet record status" value={mostSevereStatus([packet.status, evidenceApprovalStatusLevel(approval.status)])} />
@@ -1707,9 +1789,31 @@ function EvidencePacketWorkspace({
               <Metadata label="Packet status" value={latestPacket.payload.status} />
               <Metadata label="Approval" value={evidenceApprovalLabel(latestPacket.payload.approval?.status ?? 'draft')} />
               <Metadata label="Reviewer" value={latestPacket.payload.approval?.reviewer || 'Not assigned'} />
+              <Metadata label="Route stage" value={titleize(latestPacket.payload.approval?.routeStage ?? 'quality_review')} />
+              <Metadata
+                label="Routed reviewers"
+                value={latestPacket.payload.approval?.routedReviewers?.join(', ') || 'Not routed'}
+              />
               <Metadata label="Open exceptions" value={String(latestPacket.payload.summary.openExceptions)} />
               <Metadata label="Canonical loads" value={String(latestPacket.payload.summary.canonicalLoads)} />
             </div>
+            {latestPacket.payload.approval?.auditHistory?.length ? (
+              <div className="evidence-approval-history">
+                <h4>Approval Audit History</h4>
+                {latestPacket.payload.approval.auditHistory.slice(-5).reverse().map((entry) => (
+                  <div className="connector-run-row" key={`${entry.timestamp}-${entry.action}`}>
+                    <div>
+                      <strong>{titleize(entry.action)}</strong>
+                      <span>
+                        {entry.actor} / {titleize(entry.routeStage)} / {new Date(entry.timestamp).toLocaleString()}
+                      </span>
+                      <small>{entry.summary}</small>
+                    </div>
+                    <StatusChip status={evidenceApprovalStatusLevel(entry.status)} label={entry.status} />
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="empty-state">No readiness evidence packet has been saved yet.</div>

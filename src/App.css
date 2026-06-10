@@ -368,6 +368,18 @@
   padding: 0;
 }
 
+.evidence-approval-history {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #e3ecea;
+}
+
+.evidence-approval-history h4 {
+  margin: 0 0 8px;
+  color: #1e3030;
+  font-size: 13px;
+}
+
 .evidence-list {
   display: grid;
   gap: 10px;

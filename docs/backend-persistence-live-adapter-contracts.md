@@ -68,7 +68,7 @@ Controlled templates are persisted as `controlled_template` records. Promotion c
 
 The Template Library editor uses `PUT /api/templates/{recordId}` to save lifecycle, classification, tag, and provenance overrides as new controlled-template versions. The latest template record is selected by `templateId`, so history remains append-only while the UI shows the current controlled state.
 
-The Evidence workspace saves readiness evidence packets through the generic `POST /api/records` record boundary with kind `readiness_evidence_packet`. Packets include canonical load records, report freshness results, open readiness exceptions, approval state, reviewer rationale, next-review date, and per-exception dispositions. The same governed payload can be downloaded as JSON for governance review.
+The Evidence workspace saves readiness evidence packets through the generic `POST /api/records` record boundary with kind `readiness_evidence_packet`. Packets include canonical load records, report freshness results, open readiness exceptions, approval state, reviewer routing, route due date, reviewer rationale, next-review date, per-exception dispositions, and approval audit history. The same governed payload can be downloaded as JSON for governance review.
 
 The API persistence layer now routes through `server/recordStore.mjs`, which keeps the current file-backed behavior but exposes a database-ready schema contract. `GET /api/storage/schema` returns the `tracs_records` and `tracs_record_links` blueprint that future SQLite or Postgres adapters should implement.
 

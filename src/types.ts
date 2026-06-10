@@ -537,10 +537,21 @@ export type ReadinessEvidenceExceptionDisposition = {
 export type ReadinessEvidenceApproval = {
   status: ReadinessEvidenceApprovalStatus
   reviewer: string
+  routeStage?: 'quality_review' | 'operations_review' | 'executive_signoff' | 'closed'
+  routedReviewers?: string[]
+  routeDueAt?: string
   reviewedAt?: string
   nextReviewAt: string
   rationale: string
   dispositions: ReadinessEvidenceExceptionDisposition[]
+  auditHistory?: Array<{
+    action: 'routed' | 'submitted' | 'approved' | 'approved_with_exceptions' | 'rejected' | 'updated'
+    actor: string
+    routeStage: string
+    status: ReadinessEvidenceApprovalStatus
+    timestamp: string
+    summary: string
+  }>
 }
 
 export type ReadinessEvidencePacket = {
