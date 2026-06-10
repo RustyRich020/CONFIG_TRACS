@@ -444,6 +444,38 @@ export type ReadinessEvidenceException = {
   source: string
 }
 
+export type ReadinessEvidenceApprovalStatus =
+  | 'draft'
+  | 'submitted'
+  | 'approved'
+  | 'approved_with_exceptions'
+  | 'rejected'
+
+export type ReadinessEvidenceExceptionDispositionStatus =
+  | 'open'
+  | 'accepted_risk'
+  | 'remediation_planned'
+  | 'resolved'
+  | 'deferred'
+
+export type ReadinessEvidenceExceptionDisposition = {
+  exceptionId: string
+  status: ReadinessEvidenceExceptionDispositionStatus
+  owner: string
+  dueDate: string
+  rationale: string
+  updatedAt: string
+}
+
+export type ReadinessEvidenceApproval = {
+  status: ReadinessEvidenceApprovalStatus
+  reviewer: string
+  reviewedAt?: string
+  nextReviewAt: string
+  rationale: string
+  dispositions: ReadinessEvidenceExceptionDisposition[]
+}
+
 export type ReadinessEvidencePacket = {
   packetId: string
   generatedAt: string
@@ -464,5 +496,6 @@ export type ReadinessEvidencePacket = {
     items: ReportCatalogItem[]
   }
   openExceptions: ReadinessEvidenceException[]
+  approval: ReadinessEvidenceApproval
   evidence: string
 }

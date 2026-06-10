@@ -67,7 +67,11 @@ import type {
   QualityEvent,
   ReportCatalogItem,
   ReadinessCheck,
+  ReadinessEvidenceApproval,
+  ReadinessEvidenceApprovalStatus,
   ReadinessEvidenceException,
+  ReadinessEvidenceExceptionDisposition,
+  ReadinessEvidenceExceptionDispositionStatus,
   ReadinessEvidencePacket,
   RecordStoreSchema,
   SavedVersion,
@@ -260,13 +264,35 @@ function evaluateReportPublishGate(report: ReportCatalogItem, canonicalObjects: 
   }
 }
 
+function defaultEvidenceApproval(): ReadinessEvidenceApproval {
+  return {
+    status: 'draft',
+    reviewer: '',
+    nextReviewAt: '',
+    rationale: '',
+    dispositions: [],
+  }
+}
+
+function evidenceApprovalStatusLevel(status: ReadinessEvidenceApprovalStatus): StatusLevel {
+  if (status === 'approved') return 'pass'
+  if (status === 'rejected') return 'blocking'
+  return 'warning'
+}
+
+function evidenceApprovalLabel(status: ReadinessEvidenceApprovalStatus) {
+  return titleize(status)
+}
+
 function createReadinessEvidencePacket({
+  approval,
   backendRecords,
   environment,
   readinessChecks,
   readinessSummary,
   reports,
 }: {
+  approval?: ReadinessEvidenceApproval
   backendRecords: BackendRecord[]
   environment: string
   readinessChecks: ReadinessCheck[]
@@ -308,6 +334,7 @@ function createReadinessEvidencePacket({
     canonicalLoads,
     reportFreshness,
     openExceptions,
+    approval: approval ?? defaultEvidenceApproval(),
     evidence: `${canonicalLoads.length} canonical load record(s), ${reports.length} report freshness item(s), and ${openExceptions.length} open exception(s) packaged for readiness review.`,
   }
 }
@@ -826,9 +853,16 @@ function App() {
     )
   }
 
-  async function persistReadinessEvidencePacket({ download }: { download: boolean }) {
+  async function persistReadinessEvidencePacket({
+    approval,
+    download,
+  }: {
+    approval: ReadinessEvidenceApproval
+    download: boolean
+  }) {
     if (!config) return
     const packet = createReadinessEvidencePacket({
+      approval,
       backendRecords,
       environment: config.environment.environment.name,
       readinessChecks,
@@ -838,8 +872,8 @@ function App() {
     const saved = await backendClient.saveRecord({
       kind: 'readiness_evidence_packet',
       label: `${config.environment.environment.name} readiness evidence packet`,
-      status: packet.status,
-      summary: packet.evidence,
+      status: mostSevereStatus([packet.status, evidenceApprovalStatusLevel(approval.status)]),
+      summary: `${packet.evidence} Approval state: ${evidenceApprovalLabel(approval.status)}.`,
       payload: packet,
     })
     await refreshBackend()
@@ -858,7 +892,7 @@ function App() {
     record(
       'evidence',
       download ? 'save_export' : 'save',
-      `Readiness evidence packet saved as backend record v${saved.version}.`,
+      `Readiness evidence packet saved as backend record v${saved.version} with ${evidenceApprovalLabel(approval.status)} approval state.`,
     )
   }
 
@@ -1135,8 +1169,8 @@ function App() {
               (record) => record.kind === 'readiness_evidence_packet',
             )}
             environment={config.environment.environment.name}
-            onDownloadPacket={() => persistReadinessEvidencePacket({ download: true })}
-            onSavePacket={() => persistReadinessEvidencePacket({ download: false })}
+            onDownloadPacket={(approval) => persistReadinessEvidencePacket({ approval, download: true })}
+            onSavePacket={(approval) => persistReadinessEvidencePacket({ approval, download: false })}
             readinessChecks={readinessChecks}
             readinessSummary={readinessSummary}
             reports={reportCatalog}
@@ -1196,12 +1230,26 @@ function EvidencePacketWorkspace({
   backendRecords: BackendRecord[]
   environment: string
   evidenceRecords: BackendRecord[]
-  onDownloadPacket: () => void
-  onSavePacket: () => void
+  onDownloadPacket: (approval: ReadinessEvidenceApproval) => void
+  onSavePacket: (approval: ReadinessEvidenceApproval) => void
   readinessChecks: ReadinessCheck[]
   readinessSummary: Record<StatusLevel, number>
   reports: ReportCatalogItem[]
 }) {
+  const latestPacket = evidenceRecords[0] as BackendRecord<ReadinessEvidencePacket> | undefined
+  const latestApproval = latestPacket?.payload.approval
+  const [approvalStatus, setApprovalStatus] = useState<ReadinessEvidenceApprovalStatus>(
+    latestApproval?.status ?? 'draft',
+  )
+  const [reviewer, setReviewer] = useState(latestApproval?.reviewer ?? '')
+  const [nextReviewAt, setNextReviewAt] = useState(latestApproval?.nextReviewAt ?? '')
+  const [approvalRationale, setApprovalRationale] = useState(latestApproval?.rationale ?? '')
+  const [dispositions, setDispositions] = useState<Record<string, ReadinessEvidenceExceptionDisposition>>(
+    () =>
+      Object.fromEntries(
+        latestApproval?.dispositions.map((disposition) => [disposition.exceptionId, disposition]) ?? [],
+      ),
+  )
   const packet = createReadinessEvidencePacket({
     backendRecords,
     environment,
@@ -1209,9 +1257,52 @@ function EvidencePacketWorkspace({
     readinessSummary,
     reports,
   })
-  const latestPacket = evidenceRecords[0] as BackendRecord<ReadinessEvidencePacket> | undefined
   const canonicalLoads = packet.canonicalLoads
   const latestCanonicalLoad = canonicalLoads[0]
+  const approvalDispositions = packet.openExceptions.map((exception) => ({
+    exception,
+    disposition:
+      dispositions[exception.id] ?? {
+        exceptionId: exception.id,
+        status: 'open' as ReadinessEvidenceExceptionDispositionStatus,
+        owner: '',
+        dueDate: '',
+        rationale: '',
+        updatedAt: new Date().toISOString(),
+      },
+  }))
+  const approval: ReadinessEvidenceApproval = {
+    status: approvalStatus,
+    reviewer,
+    reviewedAt: approvalStatus === 'draft' ? latestApproval?.reviewedAt : new Date().toISOString(),
+    nextReviewAt,
+    rationale: approvalRationale,
+    dispositions: approvalDispositions.map(({ disposition }) => disposition),
+  }
+
+  function updateDisposition(
+    exceptionId: string,
+    patch: Partial<Omit<ReadinessEvidenceExceptionDisposition, 'exceptionId' | 'updatedAt'>>,
+  ) {
+    setDispositions((current) => {
+      const existing = current[exceptionId] ?? {
+        exceptionId,
+        status: 'open' as ReadinessEvidenceExceptionDispositionStatus,
+        owner: '',
+        dueDate: '',
+        rationale: '',
+        updatedAt: new Date().toISOString(),
+      }
+      return {
+        ...current,
+        [exceptionId]: {
+          ...existing,
+          ...patch,
+          updatedAt: new Date().toISOString(),
+        },
+      }
+    })
+  }
 
   return (
     <>
@@ -1223,11 +1314,11 @@ function EvidencePacketWorkspace({
           </p>
         </div>
         <div className="toolbar-actions">
-          <button className="secondary-action" onClick={onSavePacket} type="button">
+          <button className="secondary-action" onClick={() => onSavePacket(approval)} type="button">
             <ServerCog size={15} />
             Save Packet
           </button>
-          <button className="primary-action" onClick={onDownloadPacket} type="button">
+          <button className="primary-action" onClick={() => onDownloadPacket(approval)} type="button">
             <Download size={16} />
             Save & Export
           </button>
@@ -1249,6 +1340,7 @@ function EvidencePacketWorkspace({
               <Metadata label="Canonical loads" value={String(packet.summary.canonicalLoads)} />
               <Metadata label="Report items" value={String(packet.summary.reportCatalogItems)} />
               <Metadata label="Open exceptions" value={String(packet.summary.openExceptions)} />
+              <Metadata label="Approval state" value={evidenceApprovalLabel(approval.status)} />
               <Metadata label="Generated" value={new Date(packet.generatedAt).toLocaleString()} />
             </div>
           </div>
@@ -1280,6 +1372,54 @@ function EvidencePacketWorkspace({
         </section>
       </section>
 
+      <section className="panel evidence-approval-panel">
+        <PanelHeader
+          icon={CheckCircle2}
+          title="Approval Workflow"
+          subtitle="Capture reviewer decision, exception dispositions, owners, and follow-up dates before saving packet evidence."
+        />
+        <div className="evidence-approval-grid">
+          <div className="template-editor-form evidence-approval-form">
+            <label>
+              <span>Approval state</span>
+              <select
+                value={approvalStatus}
+                onChange={(event) => setApprovalStatus(event.target.value as ReadinessEvidenceApprovalStatus)}
+              >
+                <option value="draft">Draft</option>
+                <option value="submitted">Submitted</option>
+                <option value="approved">Approved</option>
+                <option value="approved_with_exceptions">Approved with exceptions</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </label>
+            <label>
+              <span>Reviewer</span>
+              <input value={reviewer} onChange={(event) => setReviewer(event.target.value)} />
+            </label>
+            <label>
+              <span>Next review date</span>
+              <input type="date" value={nextReviewAt} onChange={(event) => setNextReviewAt(event.target.value)} />
+            </label>
+            <label className="template-editor-notes">
+              <span>Approval rationale</span>
+              <textarea value={approvalRationale} onChange={(event) => setApprovalRationale(event.target.value)} />
+            </label>
+          </div>
+          <div className="latest-contract">
+            <StatusChip status={evidenceApprovalStatusLevel(approval.status)} label={evidenceApprovalLabel(approval.status)} />
+            <h3>{reviewer || 'Reviewer not assigned'}</h3>
+            <p>{approvalRationale || 'No approval rationale has been recorded yet.'}</p>
+            <div className="metadata-grid">
+              <Metadata label="Disposition rows" value={String(approval.dispositions.length)} />
+              <Metadata label="Next review" value={nextReviewAt || 'Not scheduled'} />
+              <Metadata label="Saved packets" value={String(evidenceRecords.length)} />
+              <Metadata label="Packet record status" value={mostSevereStatus([packet.status, evidenceApprovalStatusLevel(approval.status)])} />
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="evidence-grid">
         <section className="panel">
           <PanelHeader
@@ -1307,24 +1447,56 @@ function EvidencePacketWorkspace({
         <section className="panel">
           <PanelHeader
             icon={TriangleAlert}
-            title="Open Exceptions"
-            subtitle="Warnings and blocking items that still need remediation or acceptance."
+            title="Exception Dispositions"
+            subtitle="Warnings and blocking items that need remediation, acceptance, deferral, or closure."
           />
-          {packet.openExceptions.length > 0 ? (
+          {approvalDispositions.length > 0 ? (
             <div className="evidence-list">
-              {packet.openExceptions.slice(0, 8).map((exception) => (
-                <div className="evidence-list-item" key={exception.id}>
+              {approvalDispositions.slice(0, 8).map(({ disposition, exception }) => (
+                <div className="evidence-list-item disposition-list-item" key={exception.id}>
                   <StatusChip status={exception.status} label={exception.status} />
                   <div>
                     <strong>{exception.summary}</strong>
                     <span>{exception.evidence}</span>
                     <small>{exception.remediation}</small>
+                    <div className="disposition-controls">
+                      <select
+                        value={disposition.status}
+                        onChange={(event) =>
+                          updateDisposition(exception.id, {
+                            status: event.target.value as ReadinessEvidenceExceptionDispositionStatus,
+                          })
+                        }
+                      >
+                        <option value="open">Open</option>
+                        <option value="accepted_risk">Accepted risk</option>
+                        <option value="remediation_planned">Remediation planned</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="deferred">Deferred</option>
+                      </select>
+                      <input
+                        placeholder="Owner"
+                        value={disposition.owner}
+                        onChange={(event) => updateDisposition(exception.id, { owner: event.target.value })}
+                      />
+                      <input
+                        type="date"
+                        value={disposition.dueDate}
+                        onChange={(event) => updateDisposition(exception.id, { dueDate: event.target.value })}
+                      />
+                    </div>
+                    <textarea
+                      className="disposition-rationale"
+                      placeholder="Disposition rationale"
+                      value={disposition.rationale}
+                      onChange={(event) => updateDisposition(exception.id, { rationale: event.target.value })}
+                    />
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="empty-state">No open readiness or report freshness exceptions.</div>
+            <div className="empty-state">No open readiness or report freshness exceptions require disposition.</div>
           )}
         </section>
       </section>
@@ -1343,6 +1515,8 @@ function EvidencePacketWorkspace({
             <div className="metadata-grid">
               <Metadata label="Saved" value={new Date(latestPacket.createdAt).toLocaleString()} />
               <Metadata label="Packet status" value={latestPacket.payload.status} />
+              <Metadata label="Approval" value={evidenceApprovalLabel(latestPacket.payload.approval?.status ?? 'draft')} />
+              <Metadata label="Reviewer" value={latestPacket.payload.approval?.reviewer || 'Not assigned'} />
               <Metadata label="Open exceptions" value={String(latestPacket.payload.summary.openExceptions)} />
               <Metadata label="Canonical loads" value={String(latestPacket.payload.summary.canonicalLoads)} />
             </div>
