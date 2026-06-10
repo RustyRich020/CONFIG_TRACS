@@ -265,6 +265,8 @@ export type ConnectorSourceMetadata = {
   connectorId: string
   adapterType: string
   discoveredAt: string
+  credentialMode?: string
+  requiredEnvironment?: string[]
   sourcePath?: string
   sourceObjects: string[]
   targetObjects: string[]

@@ -52,7 +52,9 @@ POST /api/adapter-dry-runs
 
 The frontend uses the API when `VITE_TRACS_API_URL` is set. Without that value, or if the API is unreachable, it uses browser-local fallback persistence.
 
-The CSV/manual upload connector is the first implemented live adapter. It reads the configured sample CSV, infers source columns, reports row counts, and returns bounded preview rows. Metadata discovery and row previews are persisted as `connector_run` records. Snowflake, SharePoint Excel, and external reference connectors still return contract/dry-run evidence until credential-backed adapters are added.
+The CSV/manual upload connector reads the configured sample CSV, infers source columns, reports row counts, and returns bounded preview rows. Metadata discovery and row previews are persisted as `connector_run` records. External reference connectors still return contract/dry-run evidence until credential-backed adapters are added.
+
+Snowflake and SharePoint Excel metadata discovery are now credential-aware backend adapters. `POST /api/connectors/{connectorId}/metadata` routes Snowflake manifests through the Snowflake SQL API when `TRACS_SNOWFLAKE_ACCOUNT_URL` or `TRACS_SNOWFLAKE_ACCOUNT` plus `TRACS_SNOWFLAKE_TOKEN` are configured. SharePoint Excel manifests route through Microsoft Graph when `TRACS_GRAPH_TOKEN` is configured. When credentials are missing, the API persists warning `connector_run` evidence with the required environment variables and manifest source objects instead of returning a hard failure or exposing secrets.
 
 Mapping Studio validation runs are persisted as `mapping_validation` records. The frontend still performs the current schema-to-manifest validation, then sends the reviewed mapping, inferred schema, validation result, and summary to the API for versioned storage.
 

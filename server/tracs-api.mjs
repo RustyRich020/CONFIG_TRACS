@@ -10,6 +10,10 @@ import {
   listReportCatalog,
   listTraceabilityLinks,
 } from './canonicalService.mjs'
+import {
+  discoverSharePointExcelMetadata,
+  discoverSnowflakeMetadata,
+} from './credentialMetadataAdapters.mjs'
 import { discoverCsvMetadata, previewCsvRows } from './csvAdapter.mjs'
 import { createFileRecordStore } from './recordStore.mjs'
 
@@ -379,13 +383,20 @@ async function handleRequest(req, res) {
     if (req.method === 'POST' && metadataMatch) {
       const connectorId = decodeURIComponent(metadataMatch[1])
       const body = await parseBody(req)
-      if (body.connector?.type !== 'csv') {
+      const connectorType = body.connector?.type
+      let metadata
+      if (connectorType === 'csv') {
+        metadata = await discoverCsvMetadata(connectorId, body.connector)
+      } else if (connectorType === 'snowflake') {
+        metadata = await discoverSnowflakeMetadata(connectorId, body.connector)
+      } else if (connectorType === 'sharepoint_excel') {
+        metadata = await discoverSharePointExcelMetadata(connectorId, body.connector)
+      } else {
         jsonResponse(res, 422, {
-          error: 'Live metadata discovery is implemented for csv connectors in this phase.',
+          error: `Live metadata discovery is not implemented for ${connectorType ?? 'unknown'} connectors.`,
         })
         return
       }
-      const metadata = await discoverCsvMetadata(connectorId, body.connector)
       const record = await recordStore.saveRecord({
         kind: 'connector_run',
         label: `${body.connector.display_name} metadata discovery`,

@@ -2921,8 +2921,22 @@ function ConnectorHub({
                   <div className="source-discovery-summary">
                     <Metadata label="Rows" value={String(selectedSourceMetadata.rowCount)} />
                     <Metadata label="Columns" value={String(selectedSourceMetadata.columns.length)} />
+                    <Metadata
+                      label="Credential mode"
+                      value={selectedSourceMetadata.credentialMode ?? 'not required'}
+                    />
                   </div>
                   <p>{selectedSourceMetadata.evidence}</p>
+                  {selectedSourceMetadata.requiredEnvironment?.length ? (
+                    <div className="credential-requirements">
+                      <strong>Required server environment</strong>
+                      <div>
+                        {selectedSourceMetadata.requiredEnvironment.map((name) => (
+                          <span className="chip" key={name}>{name}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="source-column-list">
                     {selectedSourceMetadata.columns.slice(0, 8).map((column) => (
                       <span className="chip active" key={column.name}>

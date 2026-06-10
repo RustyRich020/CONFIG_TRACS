@@ -1178,7 +1178,7 @@
 
 .source-discovery-summary {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -1194,6 +1194,27 @@
   flex-wrap: wrap;
   gap: 7px;
   margin-top: 12px;
+}
+
+.credential-requirements {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid #eadfcf;
+  border-radius: 8px;
+  background: #fffaf3;
+}
+
+.credential-requirements strong {
+  color: #6c512d;
+  font-size: 12px;
+}
+
+.credential-requirements div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
 }
 
 .preview-table {

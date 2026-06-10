@@ -23,6 +23,7 @@ This prototype now includes the first practical build phases for TRACS:
 17. Template Detail Editing + Controlled Template Overrides v1
 18. Readiness Evidence Packet Export v1
 19. Connector-Profiled Canonical Loads v1
+20. Credential-Aware Metadata Discovery v1
 
 ## What It Proves
 
@@ -65,11 +66,17 @@ This prototype now includes the first practical build phases for TRACS:
 - Edits controlled template lifecycle status, classification, tags, and provenance as new versioned template records.
 - Packages canonical load records, report freshness, and open exceptions into versioned readiness evidence packet records.
 - Loads canonical records through selectable Snowflake, SharePoint Excel, and CSV connector profiles with source-object evidence.
+- Discovers Snowflake and SharePoint Excel metadata through server-side credential-aware adapters, with safe missing-credential evidence when tokens are not configured.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
 
-This phase intentionally does not authenticate against live external systems yet. The CSV/manual upload adapter now performs real metadata discovery and bounded row preview from the included sample file. Live Snowflake, SharePoint, and external API authentication require credential-backed adapters in the next implementation slice.
+The CSV/manual upload adapter performs real metadata discovery and bounded row preview from the included sample file. Snowflake and SharePoint Excel metadata discovery is now credential-aware on the backend. Without server-side tokens it returns warning evidence and required environment variables instead of failing or exposing secrets.
+
+Credential environment variables:
+
+- Snowflake SQL API: `TRACS_SNOWFLAKE_ACCOUNT_URL` or `TRACS_SNOWFLAKE_ACCOUNT`, plus `TRACS_SNOWFLAKE_TOKEN`
+- Microsoft Graph SharePoint Excel: `TRACS_GRAPH_TOKEN`
 
 ## Run Locally
 
@@ -119,6 +126,7 @@ npm run build
 - `server/recordStore.mjs`: storage boundary for versioned backend records and the database schema blueprint.
 - `server/canonicalService.mjs`: sample-backed canonical object, quality event, traceability, and report catalog service.
 - `server/adapterContracts.mjs`: backend adapter dry-run contract implementation.
+- `server/credentialMetadataAdapters.mjs`: credential-aware Snowflake and Microsoft Graph metadata discovery adapters.
 - `server/csvAdapter.mjs`: CSV/manual upload adapter for metadata discovery and bounded source preview rows.
 - `server/assetRegistry.mjs`: read-only local scanner for MYROBOTS template and schema assets.
 - `public/config/industries/industries.yaml`: industry profile definitions.
@@ -132,7 +140,7 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Build credential-backed Snowflake and SharePoint metadata discovery.
-2. Add config-driven report/catalog editing and publish gates.
-3. Add evidence packet approval workflow and exception disposition tracking.
-4. Add connector-backed extraction jobs that replace the current sample-backed load profile.
+1. Add config-driven report/catalog editing and publish gates.
+2. Add evidence packet approval workflow and exception disposition tracking.
+3. Add connector-backed extraction jobs that replace the current sample-backed load profile.
+4. Add credential validation tests and token rotation checks for deployed adapters.
