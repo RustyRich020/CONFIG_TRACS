@@ -622,6 +622,46 @@ function schemaForMappingProfile(mappingId: string, mapping: AppConfig['mappings
   } satisfies CsvSchemaInference
 }
 
+function schemaFromExternalPreview(
+  mappingId: string,
+  mapping: AppConfig['mappings'][string],
+  metadata?: ConnectorSourceMetadata,
+  preview?: ConnectorPreviewResult,
+) {
+  const metadataColumns = metadata?.columns ?? []
+  const hasLiveRows = (metadata?.rowCount ?? 0) > 0 || (preview?.returnedRows ?? 0) > 0
+  const hasCompleteMetadata = metadataColumns.length >= Object.keys(mapping.fields).length
+  if (metadataColumns.length > 0 && (hasLiveRows || hasCompleteMetadata)) {
+    return {
+      rowCount: metadata?.rowCount ?? 0,
+      columns: metadataColumns,
+    } satisfies CsvSchemaInference
+  }
+
+  const hasCompletePreview = (preview?.columns.length ?? 0) >= Object.keys(mapping.fields).length
+  if (preview?.columns.length && ((preview?.returnedRows ?? 0) > 0 || hasCompletePreview)) {
+    return {
+      rowCount: preview.rowCount,
+      columns: preview.columns.map((column) => {
+        const values = preview.rows.map((row) => row[column] ?? '').filter(Boolean)
+        return {
+          name: column,
+          nonEmptyCount: values.length,
+          sampleValues: Array.from(new Set(values)).slice(0, 3),
+          inferredType:
+            values.some((value) => !Number.isNaN(Number(value)))
+              ? 'number'
+              : values.some((value) => /^\d{4}-\d{2}-\d{2}/.test(value))
+                ? 'date'
+                : 'text',
+        }
+      }),
+    } satisfies CsvSchemaInference
+  }
+
+  return schemaForMappingProfile(mappingId, mapping, '')
+}
+
 function App() {
   const [config, setConfig] = useState<AppConfig | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -1075,12 +1115,35 @@ function App() {
     )
   }
 
+  async function loadMappingProfileSource(mappingId: string, mapping: AppConfig['mappings'][string]) {
+    if (!config || mappingId === 'quality_event') {
+      return schemaForMappingProfile(mappingId, mapping, csvText)
+    }
+
+    const connectorId = mapping.source_connector
+    const connector = config.connectors.connectors[connectorId]
+    if (!connector || !['external_reference', 'rest_api'].includes(connector.type)) {
+      return schemaForMappingProfile(mappingId, mapping, csvText)
+    }
+
+    const [metadata, preview] = await Promise.all([
+      backendClient.discoverConnectorMetadata(connectorId, connector),
+      backendClient.previewConnectorRows(connectorId, connector, 5),
+    ])
+    const runs = await backendClient.listConnectorRuns(connectorId)
+    setSourceMetadata((current) => ({ ...current, [connectorId]: metadata }))
+    setSourcePreviews((current) => ({ ...current, [connectorId]: preview }))
+    setConnectorRuns((current) => ({ ...current, [connectorId]: runs }))
+    setSelectedConnectorId(connectorId)
+    return schemaFromExternalPreview(mappingId, mapping, metadata, preview)
+  }
+
   async function runMappingValidation() {
     if (!config) return
     const mappingId = activeMappingId
     const mapping = config.mappings[mappingId]
     if (!mapping) return
-    const schema = schemaForMappingProfile(mappingId, mapping, csvText)
+    const schema = await loadMappingProfileSource(mappingId, mapping)
     const result = validateMappingAgainstSchema(mapping, schema)
     const summary = `${result.mappedFields.filter((field) => field.present).length}/${result.mappedFields.length} mapped fields present.`
     setCsvSchema(schema)
@@ -1125,11 +1188,11 @@ function App() {
     if (!config) return
     const mapping = config.mappings[mappingId]
     if (!mapping) return
-    const schema = schemaForMappingProfile(mappingId, mapping, csvText)
+    const schema = await loadMappingProfileSource(mappingId, mapping)
     setCsvSchema(schema)
     setMappingResults((current) => ({
       ...current,
-      [mappingId]: current[mappingId] ?? validateMappingAgainstSchema(mapping, schema),
+      [mappingId]: validateMappingAgainstSchema(mapping, schema),
     }))
     const runs = await backendClient.listMappingRuns(mappingId)
     setMappingRuns((current) => ({ ...current, [mappingId]: runs }))
@@ -1807,6 +1870,8 @@ function App() {
             mappingIds={Object.keys(config.mappings)}
             mappingResult={mappingResults[activeMappingId] ?? null}
             mappingRuns={mappingRuns[activeMappingId] ?? []}
+            profileMetadata={sourceMetadata[config.mappings[activeMappingId]?.source_connector ?? '']}
+            profilePreview={sourcePreviews[config.mappings[activeMappingId]?.source_connector ?? '']}
             onCsvTextChange={setCsvText}
             onCreateExtractionJob={saveExtractionJob}
             onLoadConnectorChange={setCanonicalLoadConnectorId}
@@ -4416,6 +4481,8 @@ function MappingStudio({
   mappingIds,
   mappingResult,
   mappingRuns,
+  profileMetadata,
+  profilePreview,
   onCsvTextChange,
   onCreateExtractionJob,
   onLoadConnectorChange,
@@ -4436,6 +4503,8 @@ function MappingStudio({
   mappingIds: string[]
   mappingResult: MappingValidationResult | null
   mappingRuns: BackendRecord[]
+  profileMetadata?: ConnectorSourceMetadata
+  profilePreview?: ConnectorPreviewResult
   onCsvTextChange: (value: string) => void
   onCreateExtractionJob: (policy: {
     status: ExtractionJobPayload['status']
@@ -4535,7 +4604,7 @@ function MappingStudio({
             subtitle={
               activeMappingId === 'quality_event'
                 ? 'Manual upload adapter starter using the included quality event sample.'
-                : 'External-reference profiles validate against source fields declared in the active mapping manifest.'
+                : 'External-reference profiles validate against credential-aware metadata and bounded preview rows.'
             }
           />
           {activeMappingId === 'quality_event' ? (
@@ -4555,8 +4624,53 @@ function MappingStudio({
                   <span>{mapping.source_object} / {mapping.object}</span>
                   <small>{Object.keys(mapping.fields).length} declared source field mapping(s)</small>
                 </div>
-                <StatusChip status="warning" label="profile" />
+                <StatusChip status={profileMetadata?.columns.length || profilePreview?.columns.length ? 'pass' : 'warning'} label="adapter" />
               </div>
+              {profileMetadata ? (
+                <div className="mapping-run-row">
+                  <div>
+                    <strong>Metadata discovery</strong>
+                    <span>{profileMetadata.sourcePath ?? mapping.source_object}</span>
+                    <small>{profileMetadata.evidence}</small>
+                  </div>
+                  <StatusChip status={profileMetadata.columns.length > 0 ? 'pass' : 'warning'} label={`${profileMetadata.columns.length} fields`} />
+                </div>
+              ) : null}
+              {profilePreview ? (
+                <div className="mapping-run-row">
+                  <div>
+                    <strong>Bounded preview</strong>
+                    <span>{profilePreview.sourcePath ?? mapping.source_object}</span>
+                    <small>{profilePreview.evidence}</small>
+                  </div>
+                  <StatusChip status={profilePreview.returnedRows > 0 ? 'pass' : 'warning'} label={`${profilePreview.returnedRows} rows`} />
+                </div>
+              ) : null}
+              {profilePreview?.rows.length ? (
+                <div className="preview-table compact">
+                  <h4>Preview Rows</h4>
+                  <div className="preview-scroll">
+                    <table>
+                      <thead>
+                        <tr>
+                          {profilePreview.columns.slice(0, 5).map((column) => (
+                            <th key={column}>{column}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {profilePreview.rows.slice(0, 3).map((row, index) => (
+                          <tr key={`${profilePreview.connectorId}-${index}`}>
+                            {profilePreview.columns.slice(0, 5).map((column) => (
+                              <td key={column}>{row[column] ?? ''}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
           {csvSchema ? (

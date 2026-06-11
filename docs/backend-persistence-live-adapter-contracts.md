@@ -70,6 +70,8 @@ Source-specific external-reference mapping starters live in `public/config/templ
 
 The CAPA, supplier, and document external-reference mappings are also promoted into active validation profiles under `public/config/mappings/`. Mapping Studio loads these profiles beside `quality_event`, validates their declared source fields against generated profile schemas, and persists each profile's `mapping_validation` records independently. Canonical load execution remains scoped to the sample-backed `quality_event` profile until live external-reference preview and extraction adapters are enabled.
 
+Mapping Studio now calls the active profile's configured external-reference connector before validating CAPA, supplier, and document profiles. It runs credential-aware metadata discovery plus bounded row preview through `/api/connectors/{connectorId}/metadata` and `/api/connectors/{connectorId}/preview`, persists the connector-run evidence, and validates against discovered fields when live metadata or rows are available. If credentials are not configured, the UI keeps the declared manifest-field fallback while displaying the adapter warning evidence.
+
 Mapping Studio validation runs are persisted as `mapping_validation` records. The frontend still performs the current schema-to-manifest validation, then sends the reviewed mapping, inferred schema, validation result, and summary to the API for versioned storage.
 
 Integration contracts are persisted as `integration_contract` records. The Contract workspace saves the same generated payload that can be downloaded for governance review, including readiness status, backend evidence, adapter contracts, and recent backend records.

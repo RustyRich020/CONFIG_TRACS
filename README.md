@@ -92,6 +92,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Requires reviewer sign-off records before tenant live notification channels can execute.
 - Adds source-specific external-reference mapping templates for CAPA, supplier, and document systems.
 - Promotes CAPA, supplier, and document external-reference mappings into active validation profiles.
+- Connects active CAPA, supplier, and document mapping profiles to credential-aware external-reference metadata and preview adapters.
 - Exports traceability graph packages from active filters and saved readiness evidence packet coverage.
 - Captures signed traceability graph export reviews with reviewer rationale and retention evidence.
 - Discovers external-reference metadata and bounded preview rows through a credential-aware backend adapter.
@@ -247,7 +248,7 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add live external-reference preview adapters for active CAPA, supplier, and document profiles.
-2. Add traceability export package delivery to reviewer notification channels.
-3. Add applied migration approval gates for production Postgres cutover.
-4. Add notification approval expiry reminders and renewal routing.
+1. Add traceability export package delivery to reviewer notification channels.
+2. Add applied migration approval gates for production Postgres cutover.
+3. Add notification approval expiry reminders and renewal routing.
+4. Add canonical load execution for approved external-reference mappings.
