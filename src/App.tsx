@@ -70,6 +70,7 @@ import type {
   ExtractionRunPayload,
   MappingValidationResult,
   NotificationLiveChannelApproval,
+  NotificationApprovalRenewalRoute,
   NotificationLiveChannelApprovalStatus,
   NotificationDeliveryPayload,
   NotificationDeliveryResult,
@@ -525,6 +526,71 @@ function notificationApprovalStatusLevel(status: NotificationLiveChannelApproval
   if (status === 'approved') return 'pass'
   if (status === 'rejected') return 'blocking'
   return 'warning'
+}
+
+function notificationApprovalExpiryStatus(approval?: BackendRecord<NotificationLiveChannelApproval>) {
+  if (!approval?.payload.expiresAt) {
+    return {
+      status: 'warning' as StatusLevel,
+      daysUntilExpiry: null,
+      evidence: 'No active notification live-channel approval expiry is available.',
+    }
+  }
+  const expiresAt = Date.parse(approval.payload.expiresAt)
+  if (!Number.isFinite(expiresAt)) {
+    return {
+      status: 'warning' as StatusLevel,
+      daysUntilExpiry: null,
+      evidence: 'Notification live-channel approval expiry is not a valid date.',
+    }
+  }
+  const daysUntilExpiry = Math.ceil((expiresAt - Date.now()) / 86_400_000)
+  if (daysUntilExpiry < 0) {
+    return {
+      status: 'blocking' as StatusLevel,
+      daysUntilExpiry,
+      evidence: `Notification live-channel approval expired ${Math.abs(daysUntilExpiry)} day(s) ago.`,
+    }
+  }
+  if (daysUntilExpiry <= 14) {
+    return {
+      status: 'warning' as StatusLevel,
+      daysUntilExpiry,
+      evidence: `Notification live-channel approval expires in ${daysUntilExpiry} day(s); renewal routing is due.`,
+    }
+  }
+  return {
+    status: 'pass' as StatusLevel,
+    daysUntilExpiry,
+    evidence: `Notification live-channel approval expires in ${daysUntilExpiry} day(s).`,
+  }
+}
+
+function notificationApprovalRenewalDueAt(approval?: BackendRecord<NotificationLiveChannelApproval>) {
+  if (!approval?.payload.expiresAt || !Number.isFinite(Date.parse(approval.payload.expiresAt))) return ''
+  const dueAt = new Date(approval.payload.expiresAt)
+  dueAt.setDate(dueAt.getDate() - 7)
+  return dueAt.toISOString().slice(0, 10)
+}
+
+function createNotificationApprovalRenewalNotification(route: NotificationApprovalRenewalRoute) {
+  return {
+    notificationId: `notification_approval_renewal_notice:${route.routeId}`,
+    generatedAt: new Date().toISOString(),
+    type: 'notification_approval_renewal',
+    routeId: route.routeId,
+    approvalId: route.approvalId,
+    routeStage: route.routeStage,
+    recipients: route.routedReviewers,
+    dueAt: route.dueAt,
+    summary: `Notification live-channel approval renewal is routed for ${titleize(route.routeStage)} with ${route.expiryStatus} expiry status.`,
+    evidence: [
+      route.evidence,
+      `Approval expires ${route.approvalExpiresAt || 'without a retained expiry date'}.`,
+      route.rationale,
+    ],
+    route,
+  }
 }
 
 function postgresCutoverApprovalStatusLevel(status: PostgresCutoverApprovalStatus, gateStatus: StatusLevel): StatusLevel {
@@ -1748,6 +1814,102 @@ function App() {
     )
   }
 
+  async function saveNotificationApprovalRenewalRoute({
+    channels,
+    dueAt,
+    rationale,
+    reminderAt,
+    reviewers,
+    routeStage,
+  }: {
+    channels: NotificationApprovalRenewalRoute['channels']
+    dueAt: string
+    rationale: string
+    reminderAt: string
+    reviewers: string[]
+    routeStage: NotificationApprovalRenewalRoute['routeStage']
+  }) {
+    const latestApproval = backendRecords.find(
+      (record): record is BackendRecord<NotificationLiveChannelApproval> =>
+        record.kind === 'notification_live_channel_approval',
+    )
+    const expiry = notificationApprovalExpiryStatus(latestApproval)
+    const routedAt = new Date().toISOString()
+    const routedReviewers = reviewers.length > 0 ? reviewers : [latestApproval?.payload.reviewer ?? 'TRACS Tenant Reviewer']
+    const payload: NotificationApprovalRenewalRoute = {
+      routeId: `notification_approval_renewal:${routedAt}`,
+      routedAt,
+      approvalId: latestApproval?.payload.approvalId,
+      approvalExpiresAt: latestApproval?.payload.expiresAt,
+      daysUntilExpiry: expiry.daysUntilExpiry,
+      expiryStatus: expiry.status,
+      routeStage,
+      routedReviewers,
+      dueAt,
+      reminderAt,
+      channels,
+      rationale: rationale.trim() || 'No renewal rationale recorded.',
+      requiredEvidence: [
+        'Review latest notification live-channel approval record.',
+        'Confirm tenant recipients, Teams webhook, or SharePoint folder targets remain approved.',
+        'Run dry-run smoke fixture evidence before renewing live-channel approval.',
+      ],
+      auditHistory: [
+        {
+          action: 'renewal_routed',
+          actor: routedReviewers[0],
+          timestamp: routedAt,
+          routeStage,
+          summary: `Notification live-channel approval renewal routed to ${routedReviewers.join(', ')}.`,
+        },
+      ],
+      evidence: `${expiry.evidence} Renewal routed to ${routedReviewers.join(', ')}.`,
+    }
+    const saved = await backendClient.saveRecord({
+      kind: 'notification_approval_renewal',
+      label: 'notification live-channel approval renewal',
+      status: expiry.status,
+      summary: payload.evidence,
+      payload,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'notification_approval_renewal',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record(
+      'notification',
+      'renewal_routed',
+      `Notification approval renewal route saved as backend record v${saved.version}.`,
+    )
+    return saved
+  }
+
+  async function deliverNotificationApprovalRenewalRoute(request: {
+    channels: NotificationApprovalRenewalRoute['channels']
+    dueAt: string
+    rationale: string
+    reminderAt: string
+    reviewers: string[]
+    routeStage: NotificationApprovalRenewalRoute['routeStage']
+  }) {
+    const saved = await saveNotificationApprovalRenewalRoute(request)
+    const notification = createNotificationApprovalRenewalNotification(saved.payload)
+    await deliverNotifications({
+      ...notificationToDeliveryPayload(
+        'notification_approval_renewal',
+        'Notification live-channel approval renewal',
+        notification,
+      ),
+      channels: request.channels,
+    })
+  }
+
   async function saveReportCatalogItem(report: ReportCatalogItem, action: ReportCatalogSaveAction) {
     const freshness = reportFreshnessStatus(report.lastRefresh, report.maxAgeHours)
     const normalizedReport: ReportCatalogItem = {
@@ -2146,6 +2308,10 @@ function App() {
               (record): record is BackendRecord<NotificationLiveChannelApproval> =>
                 record.kind === 'notification_live_channel_approval',
             )}
+            notificationRenewalRecords={backendRecords.filter(
+              (record): record is BackendRecord<NotificationApprovalRenewalRoute> =>
+                record.kind === 'notification_approval_renewal',
+            )}
             postgresCutoverApprovalRecords={backendRecords.filter(
               (record): record is BackendRecord<PostgresCutoverApproval> =>
                 record.kind === 'postgres_cutover_approval',
@@ -2153,6 +2319,8 @@ function App() {
             onRefresh={refreshBackend}
             onRunAdapterDryRun={runAdapterDryRun}
             onRunNotificationSmokeFixtures={runNotificationSmokeFixtures}
+            onDeliverNotificationApprovalRenewalRoute={deliverNotificationApprovalRenewalRoute}
+            onSaveNotificationApprovalRenewalRoute={saveNotificationApprovalRenewalRoute}
             onSavePostgresCutoverApproval={savePostgresCutoverApproval}
             onSaveSnapshot={saveBackendSnapshot}
             onSaveNotificationLiveApproval={saveNotificationLiveChannelApproval}
@@ -2783,10 +2951,13 @@ function BackendPersistenceView({
   backendRecords,
   connectorEntries,
   notificationApprovalRecords,
+  notificationRenewalRecords,
   postgresCutoverApprovalRecords,
   onRefresh,
   onRunAdapterDryRun,
   onRunNotificationSmokeFixtures,
+  onDeliverNotificationApprovalRenewalRoute,
+  onSaveNotificationApprovalRenewalRoute,
   onSavePostgresCutoverApproval,
   onSaveSnapshot,
   onSaveNotificationLiveApproval,
@@ -2799,10 +2970,27 @@ function BackendPersistenceView({
   backendRecords: BackendRecord[]
   connectorEntries: [string, AppConfig['connectors']['connectors'][string]][]
   notificationApprovalRecords: BackendRecord<NotificationLiveChannelApproval>[]
+  notificationRenewalRecords: BackendRecord<NotificationApprovalRenewalRoute>[]
   postgresCutoverApprovalRecords: BackendRecord<PostgresCutoverApproval>[]
   onRefresh: () => void
   onRunAdapterDryRun: (connectorId: string) => void
   onRunNotificationSmokeFixtures: () => void
+  onDeliverNotificationApprovalRenewalRoute: (request: {
+    channels: NotificationApprovalRenewalRoute['channels']
+    dueAt: string
+    rationale: string
+    reminderAt: string
+    reviewers: string[]
+    routeStage: NotificationApprovalRenewalRoute['routeStage']
+  }) => void
+  onSaveNotificationApprovalRenewalRoute: (request: {
+    channels: NotificationApprovalRenewalRoute['channels']
+    dueAt: string
+    rationale: string
+    reminderAt: string
+    reviewers: string[]
+    routeStage: NotificationApprovalRenewalRoute['routeStage']
+  }) => void
   onSavePostgresCutoverApproval: (request: {
     conditions: string
     plannedCutoverAt: string
@@ -2831,6 +3019,16 @@ function BackendPersistenceView({
     'email',
     'teams',
   ])
+  const latestNotificationApproval = notificationApprovalRecords[0]
+  const notificationExpiry = notificationApprovalExpiryStatus(latestNotificationApproval)
+  const [renewalReviewers, setRenewalReviewers] = useState('TRACS Tenant Reviewer')
+  const [renewalRouteStage, setRenewalRouteStage] =
+    useState<NotificationApprovalRenewalRoute['routeStage']>('renewal_review')
+  const [renewalDueAt, setRenewalDueAt] = useState(notificationApprovalRenewalDueAt(latestNotificationApproval))
+  const [renewalReminderAt, setRenewalReminderAt] = useState(new Date().toISOString().slice(0, 10))
+  const [renewalRationale, setRenewalRationale] = useState(
+    'Route renewal before tenant live-channel approval expires; rerun smoke fixture evidence before reapproval.',
+  )
   const [postgresReviewer, setPostgresReviewer] = useState('TRACS Platform Owner')
   const [postgresApprovalStatus, setPostgresApprovalStatus] =
     useState<PostgresCutoverApprovalStatus>('approved_with_conditions')
@@ -2870,7 +3068,7 @@ function BackendPersistenceView({
     }),
     { read: 0, importable: 0, imported: 0, skipped: 0, invalid: 0 },
   )
-  const latestNotificationApproval = notificationApprovalRecords[0]
+  const latestNotificationRenewal = notificationRenewalRecords[0]
   const latestPostgresCutoverApproval = postgresCutoverApprovalRecords[0]
   const postgresCutoverGateReview = evaluatePostgresCutoverGates({
     backendHealth,
@@ -2901,6 +3099,20 @@ function BackendPersistenceView({
         ? current.filter((item) => item !== channel)
         : [...current, channel],
     )
+  }
+
+  function renewalRouteRequest() {
+    return {
+      channels: notificationChannels,
+      dueAt: renewalDueAt || notificationApprovalRenewalDueAt(latestNotificationApproval),
+      rationale: renewalRationale,
+      reminderAt: renewalReminderAt,
+      reviewers: renewalReviewers
+        .split(',')
+        .map((reviewer) => reviewer.trim())
+        .filter(Boolean),
+      routeStage: renewalRouteStage,
+    }
   }
 
   return (
@@ -3139,6 +3351,11 @@ function BackendPersistenceView({
                     : 'No active approval'
                 }
               />
+              <Metadata label="Expiry status" value={notificationExpiry.status} />
+              <Metadata
+                label="Days left"
+                value={notificationExpiry.daysUntilExpiry === null ? 'Unknown' : String(notificationExpiry.daysUntilExpiry)}
+              />
             </div>
             {latestNotificationApproval ? (
               <div className="connector-run-history">
@@ -3156,6 +3373,103 @@ function BackendPersistenceView({
               </div>
             ) : (
               <div className="empty-state compact">No tenant live-channel approval has been saved yet.</div>
+            )}
+          </div>
+        </div>
+        <div className="notification-approval-grid renewal-routing-grid">
+          <div className="notification-approval-form">
+            <div className="trace-review-grid">
+              <label>
+                <span>Renewal reviewers</span>
+                <input value={renewalReviewers} onChange={(event) => setRenewalReviewers(event.target.value)} />
+              </label>
+              <label>
+                <span>Route stage</span>
+                <select
+                  value={renewalRouteStage}
+                  onChange={(event) =>
+                    setRenewalRouteStage(event.target.value as NotificationApprovalRenewalRoute['routeStage'])
+                  }
+                >
+                  <option value="renewal_review">Renewal review</option>
+                  <option value="owner_follow_up">Owner follow-up</option>
+                  <option value="security_review">Security review</option>
+                  <option value="closed">Closed</option>
+                </select>
+              </label>
+              <label>
+                <span>Reminder date</span>
+                <input
+                  value={renewalReminderAt}
+                  onChange={(event) => setRenewalReminderAt(event.target.value)}
+                  type="date"
+                />
+              </label>
+              <label>
+                <span>Due date</span>
+                <input
+                  value={renewalDueAt || notificationApprovalRenewalDueAt(latestNotificationApproval)}
+                  onChange={(event) => setRenewalDueAt(event.target.value)}
+                  type="date"
+                />
+              </label>
+              <label className="trace-review-rationale">
+                <span>Renewal rationale</span>
+                <textarea value={renewalRationale} onChange={(event) => setRenewalRationale(event.target.value)} />
+              </label>
+            </div>
+            <div className="toolbar-actions notification-approval-actions">
+              <button
+                className="secondary-action"
+                onClick={() => onSaveNotificationApprovalRenewalRoute(renewalRouteRequest())}
+                type="button"
+              >
+                <Route size={15} />
+                Save Renewal Route
+              </button>
+              <button
+                className="primary-action"
+                onClick={() => onDeliverNotificationApprovalRenewalRoute(renewalRouteRequest())}
+                type="button"
+              >
+                <Bell size={15} />
+                Deliver Renewal Reminder
+              </button>
+            </div>
+          </div>
+          <div className="notification-approval-summary">
+            <div className="metadata-grid">
+              <Metadata label="Renewal routes" value={String(notificationRenewalRecords.length)} />
+              <Metadata
+                label="Latest route"
+                value={latestNotificationRenewal ? titleize(latestNotificationRenewal.payload.routeStage) : 'Not routed'}
+              />
+              <Metadata
+                label="Latest due"
+                value={
+                  latestNotificationRenewal?.payload.dueAt
+                    ? new Date(latestNotificationRenewal.payload.dueAt).toLocaleDateString()
+                    : 'No due date'
+                }
+              />
+              <Metadata label="Reminder evidence" value={notificationExpiry.evidence} />
+            </div>
+            {latestNotificationRenewal ? (
+              <div className="connector-run-history">
+                <h4>Latest renewal route</h4>
+                <div className="connector-run-row">
+                  <div>
+                    <strong>{latestNotificationRenewal.payload.routedReviewers.join(', ')}</strong>
+                    <span>
+                      v{latestNotificationRenewal.version} / {new Date(latestNotificationRenewal.createdAt).toLocaleString()}
+                    </span>
+                    <small>{latestNotificationRenewal.payload.evidence}</small>
+                  </div>
+                  <StatusChip status={latestNotificationRenewal.status} label={latestNotificationRenewal.status} />
+                </div>
+              </div>
+            ) : (
+              <div className="empty-state compact">No notification approval renewal route has been saved yet.</div>
             )}
           </div>
         </div>

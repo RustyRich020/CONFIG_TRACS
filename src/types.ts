@@ -173,6 +173,7 @@ export type SavedVersionKind =
   | 'credential_validation'
   | 'notification_delivery'
   | 'notification_live_channel_approval'
+  | 'notification_approval_renewal'
   | 'traceability_export_review'
   | 'postgres_import_reconciliation'
   | 'postgres_cutover_approval'
@@ -205,6 +206,7 @@ export type BackendRecordKind =
   | 'credential_validation'
   | 'notification_delivery'
   | 'notification_live_channel_approval'
+  | 'notification_approval_renewal'
   | 'traceability_export_review'
   | 'postgres_import_reconciliation'
   | 'postgres_cutover_approval'
@@ -763,7 +765,7 @@ export type ReadinessEvidencePacket = {
 export type NotificationDeliveryPayload = {
   deliveryId: string
   generatedAt: string
-  source: 'report_catalog' | 'readiness_evidence' | 'traceability_export'
+  source: 'report_catalog' | 'readiness_evidence' | 'traceability_export' | 'notification_approval_renewal'
   channels: Array<'email' | 'teams' | 'sharepoint_folder'>
   recipients: string[]
   subject: string
@@ -787,6 +789,30 @@ export type NotificationLiveChannelApproval = {
     actor: string
     timestamp: string
     status: NotificationLiveChannelApprovalStatus
+    summary: string
+  }>
+  evidence: string
+}
+
+export type NotificationApprovalRenewalRoute = {
+  routeId: string
+  routedAt: string
+  approvalId?: string
+  approvalExpiresAt?: string
+  daysUntilExpiry: number | null
+  expiryStatus: StatusLevel
+  routeStage: 'renewal_review' | 'owner_follow_up' | 'security_review' | 'closed'
+  routedReviewers: string[]
+  dueAt: string
+  reminderAt: string
+  channels: Array<'email' | 'teams' | 'sharepoint_folder'>
+  rationale: string
+  requiredEvidence: string[]
+  auditHistory: Array<{
+    action: 'renewal_routed' | 'reminder_sent' | 'renewal_closed'
+    actor: string
+    timestamp: string
+    routeStage: string
     summary: string
   }>
   evidence: string
