@@ -181,6 +181,7 @@ export type SavedVersionKind =
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'traceability_export_review'
+  | 'traceability_delivery_response'
   | 'postgres_import_reconciliation'
   | 'postgres_cutover_approval'
 
@@ -214,6 +215,7 @@ export type BackendRecordKind =
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'traceability_export_review'
+  | 'traceability_delivery_response'
   | 'postgres_import_reconciliation'
   | 'postgres_cutover_approval'
 
@@ -582,6 +584,36 @@ export type TraceabilityExportReview = {
     actor: string
     timestamp: string
     status: TraceabilityExportReviewStatus
+    summary: string
+  }>
+  evidence: string
+}
+
+export type TraceabilityDeliveryResponseStatus =
+  | 'acknowledged'
+  | 'approved'
+  | 'changes_requested'
+  | 'rejected'
+
+export type TraceabilityDeliveryResponse = {
+  responseId: string
+  deliveryRecordId: string
+  deliverySubject: string
+  packageId?: string
+  selectedEventId?: string
+  respondedAt: string
+  reviewer: string
+  status: TraceabilityDeliveryResponseStatus
+  routeStage: 'reviewer_acknowledgement' | 'quality_follow_up' | 'closed'
+  responseNotes: string
+  requestedActions: string[]
+  channelSummary: string
+  auditHistory: Array<{
+    action: 'delivery_response_recorded'
+    actor: string
+    timestamp: string
+    status: TraceabilityDeliveryResponseStatus
+    routeStage: string
     summary: string
   }>
   evidence: string

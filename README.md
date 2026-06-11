@@ -98,6 +98,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Exports traceability graph packages from active filters and saved readiness evidence packet coverage.
 - Captures signed traceability graph export reviews with reviewer rationale and retention evidence.
 - Delivers traceability graph export packages to reviewer notification channels with persisted delivery evidence.
+- Tracks reviewer acknowledgement and response records for delivered traceability export packages.
 - Discovers external-reference metadata and bounded preview rows through a credential-aware backend adapter.
 - Filters traceability graphs by object family, status, and saved evidence packet coverage.
 - Adds a selectable SQLite record store adapter behind the existing API persistence contract.
@@ -252,7 +253,7 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add traceability delivery acknowledgement and reviewer response tracking.
-2. Add production cutover checklist export packages for infrastructure reviewers.
-3. Add notification renewal closure and superseded-approval evidence.
-4. Add external-reference load exception disposition and replay controls.
+1. Add production cutover checklist export packages for infrastructure reviewers.
+2. Add notification renewal closure and superseded-approval evidence.
+3. Add external-reference load exception disposition and replay controls.
+4. Add traceability response closure notifications and follow-up routing.

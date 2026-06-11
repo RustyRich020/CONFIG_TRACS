@@ -92,6 +92,8 @@ import type {
   SavedVersion,
   StatusLevel,
   TraceabilityExportRetentionClass,
+  TraceabilityDeliveryResponse,
+  TraceabilityDeliveryResponseStatus,
   TraceabilityExportReview,
   TraceabilityExportReviewStatus,
   TraceabilityGraphExportPackage,
@@ -345,6 +347,16 @@ function traceabilityReviewStatusLevel(status: TraceabilityExportReviewStatus): 
   if (status === 'approved') return 'pass'
   if (status === 'rejected') return 'blocking'
   return 'warning'
+}
+
+function traceabilityResponseStatusLevel(status: TraceabilityDeliveryResponseStatus): StatusLevel {
+  if (status === 'approved' || status === 'acknowledged') return 'pass'
+  if (status === 'rejected') return 'blocking'
+  return 'warning'
+}
+
+function traceabilityResponseLabel(status: TraceabilityDeliveryResponseStatus) {
+  return status === 'changes_requested' ? 'Changes requested' : titleize(status)
 }
 
 function traceabilityRetentionLabel(retentionClass: TraceabilityExportRetentionClass) {
@@ -1659,6 +1671,76 @@ function App() {
     return saved
   }
 
+  async function saveTraceabilityDeliveryResponse({
+    deliveryRecord,
+    requestedActions,
+    responseNotes,
+    reviewer,
+    routeStage,
+    status,
+  }: {
+    deliveryRecord: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>
+    requestedActions: string[]
+    responseNotes: string
+    reviewer: string
+    routeStage: TraceabilityDeliveryResponse['routeStage']
+    status: TraceabilityDeliveryResponseStatus
+  }) {
+    const respondedAt = new Date().toISOString()
+    const reviewerName = reviewer.trim() || 'Unassigned reviewer'
+    const graphPackage = (deliveryRecord.payload.request.evidence as { graphPackage?: TraceabilityGraphExportPackage })?.graphPackage
+    const channelSummary = deliveryRecord.payload.result.channelResults
+      .map((result) => `${titleize(result.channel)} ${result.mode}/${result.status}`)
+      .join(', ')
+    const payload: TraceabilityDeliveryResponse = {
+      responseId: `traceability_delivery_response:${deliveryRecord.id}:${respondedAt}`,
+      deliveryRecordId: deliveryRecord.id,
+      deliverySubject: deliveryRecord.payload.request.subject,
+      packageId: graphPackage?.packageId,
+      selectedEventId: graphPackage?.selectedEvent?.canonical.event_id,
+      respondedAt,
+      reviewer: reviewerName,
+      status,
+      routeStage,
+      responseNotes: responseNotes.trim() || 'No reviewer response notes recorded.',
+      requestedActions,
+      channelSummary,
+      auditHistory: [
+        {
+          action: 'delivery_response_recorded',
+          actor: reviewerName,
+          timestamp: respondedAt,
+          status,
+          routeStage,
+          summary: `${reviewerName} recorded ${traceabilityResponseLabel(status)} for ${deliveryRecord.payload.request.subject}.`,
+        },
+      ],
+      evidence: `${reviewerName} recorded ${traceabilityResponseLabel(status)} for ${deliveryRecord.payload.request.subject}. ${requestedActions.length} requested action(s).`,
+    }
+    const saved = await backendClient.saveRecord({
+      kind: 'traceability_delivery_response',
+      label: deliveryRecord.payload.request.subject,
+      status: traceabilityResponseStatusLevel(status),
+      summary: payload.evidence,
+      payload,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'traceability_delivery_response',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record(
+      'traceability',
+      'delivery_response',
+      `Traceability delivery response saved as backend record v${saved.version}.`,
+    )
+  }
+
   async function deliverNotifications(payload: NotificationDeliveryPayload) {
     const result = await backendClient.deliverNotification(payload)
     await refreshBackend()
@@ -2286,8 +2368,13 @@ function App() {
             events={qualityEvents}
             links={traceabilityLinks}
             onDeliverNotifications={deliverNotifications}
+            onSaveDeliveryResponse={saveTraceabilityDeliveryResponse}
             onSelectEvent={setSelectedQualityEventId}
             onSaveExportReview={saveTraceabilityExportReview}
+            responseRecords={backendRecords.filter(
+              (record): record is BackendRecord<TraceabilityDeliveryResponse> =>
+                record.kind === 'traceability_delivery_response',
+            )}
             reviewRecords={backendRecords.filter(
               (record): record is BackendRecord<TraceabilityExportReview> =>
                 record.kind === 'traceability_export_review',
@@ -4192,8 +4279,10 @@ function TraceabilityView({
   events,
   links,
   onDeliverNotifications,
+  onSaveDeliveryResponse,
   onSelectEvent,
   onSaveExportReview,
+  responseRecords,
   reviewRecords,
   selectedEventId,
 }: {
@@ -4203,6 +4292,14 @@ function TraceabilityView({
   events: QualityEvent[]
   links: TraceabilityLink[]
   onDeliverNotifications: (payload: NotificationDeliveryPayload) => void
+  onSaveDeliveryResponse: (request: {
+    deliveryRecord: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>
+    requestedActions: string[]
+    responseNotes: string
+    reviewer: string
+    routeStage: TraceabilityDeliveryResponse['routeStage']
+    status: TraceabilityDeliveryResponseStatus
+  }) => void
   onSelectEvent: (eventId: string) => void
   onSaveExportReview: (request: {
     graphPackage: TraceabilityGraphExportPackage
@@ -4211,6 +4308,7 @@ function TraceabilityView({
     rationale: string
     retentionClass: TraceabilityExportRetentionClass
   }) => Promise<BackendRecord<TraceabilityExportReview>>
+  responseRecords: BackendRecord<TraceabilityDeliveryResponse>[]
   reviewRecords: BackendRecord<TraceabilityExportReview>[]
   selectedEventId: string | null
 }) {
@@ -4225,6 +4323,15 @@ function TraceabilityView({
     'Traceability export reviewed for active filters, evidence packet coverage, and retained governance handoff.',
   )
   const [traceabilityRecipients, setTraceabilityRecipients] = useState('TRACS Quality Reviewer')
+  const [deliveryResponseReviewer, setDeliveryResponseReviewer] = useState('TRACS Quality Reviewer')
+  const [deliveryResponseStatus, setDeliveryResponseStatus] =
+    useState<TraceabilityDeliveryResponseStatus>('acknowledged')
+  const [deliveryResponseRouteStage, setDeliveryResponseRouteStage] =
+    useState<TraceabilityDeliveryResponse['routeStage']>('reviewer_acknowledgement')
+  const [deliveryResponseNotes, setDeliveryResponseNotes] = useState(
+    'Reviewer acknowledged receipt of the traceability export package and delivery evidence.',
+  )
+  const [deliveryResponseActions, setDeliveryResponseActions] = useState('')
   const selectedEvent = events.find((event) => event.id === selectedEventId) ?? events[0]
   const canonicalById = useMemo(
     () => new Map(canonicalObjects.map((object) => [object.id, object])),
@@ -4362,6 +4469,24 @@ function TraceabilityView({
   const traceabilityDeliveryRecords = deliveryRecords.filter(
     (record) => record.payload.request.source === 'traceability_export',
   )
+  const latestTraceabilityDelivery = traceabilityDeliveryRecords[0]
+  const latestDeliveryResponse = responseRecords[0]
+  const acknowledgedDeliveryIds = new Set(responseRecords.map((record) => record.payload.deliveryRecordId))
+  const openDeliveryCount = traceabilityDeliveryRecords.filter((record) => !acknowledgedDeliveryIds.has(record.id)).length
+  function saveDeliveryResponse(deliveryRecord = latestTraceabilityDelivery) {
+    if (!deliveryRecord) return
+    onSaveDeliveryResponse({
+      deliveryRecord,
+      requestedActions: deliveryResponseActions
+        .split('\n')
+        .map((action) => action.trim())
+        .filter(Boolean),
+      responseNotes: deliveryResponseNotes,
+      reviewer: deliveryResponseReviewer,
+      routeStage: deliveryResponseRouteStage,
+      status: deliveryResponseStatus,
+    })
+  }
 
   return (
     <>
@@ -4491,6 +4616,7 @@ function TraceabilityView({
             value={traceabilityRetentionLabel(retentionClass)}
           />
           <Metadata label="Deliveries" value={String(traceabilityDeliveryRecords.length)} />
+          <Metadata label="Open responses" value={String(openDeliveryCount)} />
         </div>
       </section>
 
@@ -4713,12 +4839,109 @@ function TraceabilityView({
                   </span>
                   <small>{record.payload.result.evidence}</small>
                 </div>
-                <StatusChip status={record.status} label={record.status} />
+                <div className="toolbar-actions">
+                  <button className="secondary-action compact" onClick={() => saveDeliveryResponse(record)} type="button">
+                    <ClipboardCheck size={14} />
+                    Respond
+                  </button>
+                  <StatusChip
+                    status={acknowledgedDeliveryIds.has(record.id) ? 'pass' : record.status}
+                    label={acknowledgedDeliveryIds.has(record.id) ? 'responded' : record.status}
+                  />
+                </div>
               </div>
             ))}
           </div>
         ) : (
           <div className="empty-state">No traceability export delivery has been recorded yet.</div>
+        )}
+      </section>
+
+      <section className="panel trace-review-history-panel">
+        <PanelHeader
+          icon={ClipboardCheck}
+          title="Reviewer Response Tracking"
+          subtitle="Capture acknowledgement, approval, or requested changes for delivered traceability export packages."
+        />
+        <div className="trace-review-grid">
+          <label>
+            <span>Response reviewer</span>
+            <input value={deliveryResponseReviewer} onChange={(event) => setDeliveryResponseReviewer(event.target.value)} />
+          </label>
+          <label>
+            <span>Response status</span>
+            <select
+              value={deliveryResponseStatus}
+              onChange={(event) => setDeliveryResponseStatus(event.target.value as TraceabilityDeliveryResponseStatus)}
+            >
+              <option value="acknowledged">Acknowledged</option>
+              <option value="approved">Approved</option>
+              <option value="changes_requested">Changes requested</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </label>
+          <label>
+            <span>Route stage</span>
+            <select
+              value={deliveryResponseRouteStage}
+              onChange={(event) =>
+                setDeliveryResponseRouteStage(event.target.value as TraceabilityDeliveryResponse['routeStage'])
+              }
+            >
+              <option value="reviewer_acknowledgement">Reviewer acknowledgement</option>
+              <option value="quality_follow_up">Quality follow-up</option>
+              <option value="closed">Closed</option>
+            </select>
+          </label>
+          <label className="trace-review-rationale">
+            <span>Response notes</span>
+            <textarea value={deliveryResponseNotes} onChange={(event) => setDeliveryResponseNotes(event.target.value)} />
+          </label>
+          <label className="trace-review-rationale">
+            <span>Requested actions</span>
+            <textarea
+              value={deliveryResponseActions}
+              onChange={(event) => setDeliveryResponseActions(event.target.value)}
+              placeholder="One requested action per line"
+            />
+          </label>
+        </div>
+        <div className="toolbar-actions notification-approval-actions">
+          <button
+            className="primary-action"
+            disabled={!latestTraceabilityDelivery}
+            onClick={() => saveDeliveryResponse()}
+            type="button"
+          >
+            <ClipboardCheck size={15} />
+            Save Latest Response
+          </button>
+        </div>
+        <div className="trace-path-summary">
+          <Metadata label="Responses" value={String(responseRecords.length)} />
+          <Metadata label="Open deliveries" value={String(openDeliveryCount)} />
+          <Metadata
+            label="Latest response"
+            value={latestDeliveryResponse ? traceabilityResponseLabel(latestDeliveryResponse.payload.status) : 'Not recorded'}
+          />
+        </div>
+        {responseRecords.length > 0 ? (
+          <div className="mapping-run-history">
+            {responseRecords.slice(0, 6).map((record) => (
+              <div className="mapping-run-row" key={record.id}>
+                <div>
+                  <strong>{record.payload.deliverySubject}</strong>
+                  <span>
+                    v{record.version} / {record.payload.reviewer} / {new Date(record.payload.respondedAt).toLocaleString()}
+                  </span>
+                  <small>{record.payload.evidence}</small>
+                </div>
+                <StatusChip status={record.status} label={traceabilityResponseLabel(record.payload.status)} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state">No reviewer responses have been retained yet.</div>
         )}
       </section>
     </>
