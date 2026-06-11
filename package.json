@@ -9,6 +9,8 @@
     "api:postgres": "node server/tracs-api.mjs",
     "postgres:up": "docker compose -f docker-compose.postgres.yml up -d",
     "postgres:down": "docker compose -f docker-compose.postgres.yml down",
+    "records:import:postgres": "node server/importRecordsToPostgres.mjs",
+    "records:import:postgres:sqlite": "node --experimental-sqlite server/importRecordsToPostgres.mjs --source sqlite",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",

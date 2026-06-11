@@ -186,6 +186,28 @@ Optional Postgres controls:
 
 Postgres initializes the `tracs_records` and `tracs_record_links` tables on API startup. The connection string belongs in the backend host secret store, not in frontend configuration. `GET /api/storage/postgres-migration-checklist` returns the production migration checklist used by the API.
 
+To dry-run a guarded JSON-to-Postgres import:
+
+```bash
+$env:TRACS_POSTGRES_URL='postgres://tracs_app:tracs_dev_password@127.0.0.1:55432/tracs'
+$env:TRACS_POSTGRES_SSL='false'
+npm run records:import:postgres -- --source json --file data/backend-records.json
+```
+
+To apply the import after reviewing the dry-run summary:
+
+```bash
+npm run records:import:postgres -- --source json --file data/backend-records.json --apply
+```
+
+SQLite imports use the same guardrails and require Node's SQLite runtime:
+
+```bash
+npm run records:import:postgres:sqlite -- --file data/tracs-records.sqlite
+```
+
+The import utility preserves source record IDs, labels, versions, timestamps, statuses, summaries, and payload evidence. It skips duplicate IDs and, by default, duplicate `kind + label + version` records.
+
 ## Build
 
 ```bash
@@ -218,7 +240,7 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add a guarded JSON/SQLite-to-Postgres import utility after a target database is selected.
-2. Add tenant-approved live email and Teams smoke fixtures when real endpoints are available.
-3. Promote external-reference mapping templates into active mapping validation profiles.
-4. Add signed traceability export review and retention records.
+1. Add tenant-approved live email and Teams smoke fixtures when real endpoints are available.
+2. Promote external-reference mapping templates into active mapping validation profiles.
+3. Add signed traceability export review and retention records.
+4. Add import reconciliation dashboards for Postgres migration runs.
