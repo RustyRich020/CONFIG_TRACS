@@ -84,6 +84,7 @@ import type {
   RecordStoreSchema,
   SavedVersion,
   StatusLevel,
+  TraceabilityGraphExportPackage,
   TraceabilityLink,
 } from './types'
 
@@ -2946,6 +2947,47 @@ function TraceabilityView({
         }),
       ]
     : []
+  function createGraphExportPackage(
+    evidencePacket?: BackendRecord<ReadinessEvidencePacket>,
+  ): TraceabilityGraphExportPackage {
+    const selectedEvidencePackets = evidencePacket
+      ? [evidencePacket]
+      : packetFilter === 'all'
+        ? traceEvidencePackets
+        : traceEvidencePackets.filter((record) => record.id === packetFilter)
+    const generatedAt = new Date().toISOString()
+    const packageId = `traceability_graph:${selectedEvent?.canonical.event_id ?? 'all'}:${generatedAt}`
+    return {
+      packageId,
+      generatedAt,
+      source: 'traceability_workspace',
+      selectedEvent,
+      filters: {
+        family: familyFilter,
+        status: statusFilter,
+        evidencePacket: evidencePacket?.id ?? packetFilter,
+      },
+      graph: {
+        nodes: graphNodes,
+        edges: filteredLinks,
+        relationshipSummary,
+      },
+      evidencePackets: selectedEvidencePackets,
+      coverage: {
+        canonicalObjects: canonicalObjects.length,
+        filteredLinks: filteredLinks.length,
+        availableLinks: selectedLinks.length,
+        evidencePackets: selectedEvidencePackets.length,
+        selectedEvidencePacket: evidencePacket?.id,
+      },
+      evidence: `${filteredLinks.length} filtered traceability link(s), ${graphNodes.length} graph node(s), and ${selectedEvidencePackets.length} evidence packet(s) exported for ${selectedEvent?.canonical.event_id ?? 'the active traceability selection'}.`,
+    }
+  }
+  function exportGraphPackage(evidencePacket?: BackendRecord<ReadinessEvidencePacket>) {
+    const packagePayload = createGraphExportPackage(evidencePacket)
+    const packetSuffix = evidencePacket ? `-${evidencePacket.id.slice(0, 8)}` : ''
+    downloadJson(`tracs-traceability-graph-package${packetSuffix}.json`, packagePayload)
+  }
 
   return (
     <>
@@ -2956,18 +2998,24 @@ function TraceabilityView({
             Follow quality-event relationships into product, lot/serial, return, and external CAPA references.
           </p>
         </div>
-        <select
-          aria-label="Select traceability event"
-          className="workflow-select"
-          onChange={(event) => onSelectEvent(event.target.value)}
-          value={selectedEvent?.id ?? ''}
-        >
-          {events.map((event) => (
-            <option key={event.id} value={event.id}>
-              {event.canonical.event_id} / {event.canonical.product_code}
-            </option>
-          ))}
-        </select>
+        <div className="toolbar-actions">
+          <select
+            aria-label="Select traceability event"
+            className="workflow-select"
+            onChange={(event) => onSelectEvent(event.target.value)}
+            value={selectedEvent?.id ?? ''}
+          >
+            {events.map((event) => (
+              <option key={event.id} value={event.id}>
+                {event.canonical.event_id} / {event.canonical.product_code}
+              </option>
+            ))}
+          </select>
+          <button className="secondary-action" onClick={() => exportGraphPackage()} type="button">
+            <Download size={15} />
+            Export Graph Package
+          </button>
+        </div>
       </section>
 
       <section className="panel trace-filter-panel">
@@ -3167,7 +3215,13 @@ function TraceabilityView({
                       .join(' / ')}
                   </small>
                 </div>
-                <StatusChip status={record.status} label={record.status} />
+                <div className="toolbar-actions">
+                  <button className="secondary-action compact" onClick={() => exportGraphPackage(record)} type="button">
+                    <Download size={14} />
+                    Export
+                  </button>
+                  <StatusChip status={record.status} label={record.status} />
+                </div>
               </div>
             ))}
           </div>

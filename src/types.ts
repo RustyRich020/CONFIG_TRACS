@@ -447,6 +447,38 @@ export type TraceabilityResult = {
   links: TraceabilityLink[]
 }
 
+export type TraceabilityGraphExportPackage = {
+  packageId: string
+  generatedAt: string
+  source: 'traceability_workspace'
+  selectedEvent?: QualityEvent
+  filters: {
+    family: string
+    status: StatusLevel | 'all'
+    evidencePacket: string
+  }
+  graph: {
+    nodes: Array<{
+      id: string
+      label: string
+      family: string
+      type: string
+      status: string
+    }>
+    edges: TraceabilityLink[]
+    relationshipSummary: Record<string, number>
+  }
+  evidencePackets: Array<BackendRecord<ReadinessEvidencePacket>>
+  coverage: {
+    canonicalObjects: number
+    filteredLinks: number
+    availableLinks: number
+    evidencePackets: number
+    selectedEvidencePacket?: string
+  }
+  evidence: string
+}
+
 export type ReportCatalogItem = {
   id: string
   title: string
