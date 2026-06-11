@@ -173,6 +173,7 @@ export type SavedVersionKind =
   | 'credential_validation'
   | 'notification_delivery'
   | 'traceability_export_review'
+  | 'postgres_import_reconciliation'
 
 export type SavedVersion = {
   id: string
@@ -202,6 +203,7 @@ export type BackendRecordKind =
   | 'credential_validation'
   | 'notification_delivery'
   | 'traceability_export_review'
+  | 'postgres_import_reconciliation'
 
 export type BackendRecord<TPayload = unknown> = {
   id: string
@@ -265,6 +267,30 @@ export type PostgresMigrationChecklist = {
   rollback?: string[]
   status?: string
   evidence?: string
+}
+
+export type PostgresImportReconciliation = {
+  reconciliationId: string
+  generatedAt: string
+  source: 'json' | 'sqlite' | string
+  sourceFile: string
+  mode: 'dry_run' | 'apply'
+  status: StatusLevel
+  read: number
+  valid: number
+  invalid: number
+  duplicateIds: number
+  duplicateVersions: number
+  importable: number
+  imported: number
+  skipped: number
+  recordKindCounts: Record<string, number>
+  invalidRecords: Array<{
+    id: string
+    label: string
+    missing: string[]
+  }>
+  evidence: string
 }
 
 export type AdapterOperation = 'health_check' | 'discover_metadata' | 'preview_rows' | 'validate_mapping'

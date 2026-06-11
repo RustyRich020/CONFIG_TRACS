@@ -97,6 +97,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Filters traceability graphs by object family, status, and saved evidence packet coverage.
 - Adds a selectable SQLite record store adapter behind the existing API persistence contract.
 - Adds an optional Postgres record store adapter and migration checklist for shared production persistence.
+- Adds Postgres import reconciliation summaries and Backend dashboard views for guarded migration runs.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
@@ -209,7 +210,7 @@ SQLite imports use the same guardrails and require Node's SQLite runtime:
 npm run records:import:postgres:sqlite -- --file data/tracs-records.sqlite
 ```
 
-The import utility preserves source record IDs, labels, versions, timestamps, statuses, summaries, and payload evidence. It skips duplicate IDs and, by default, duplicate `kind + label + version` records.
+The import utility preserves source record IDs, labels, versions, timestamps, statuses, summaries, and payload evidence. It skips duplicate IDs and, by default, duplicate `kind + label + version` records. Each dry run or applied run also writes a `postgres_import_reconciliation` record into Postgres so the Backend workspace can show importable, skipped, invalid, duplicate, and record-kind counts before legacy storage is retired.
 
 ## Build
 
@@ -244,7 +245,7 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add import reconciliation dashboards for Postgres migration runs.
-2. Add notification delivery reviewer sign-off before enabling tenant live channels.
-3. Add live external-reference preview adapters for active CAPA, supplier, and document profiles.
-4. Add traceability export package delivery to reviewer notification channels.
+1. Add notification delivery reviewer sign-off before enabling tenant live channels.
+2. Add live external-reference preview adapters for active CAPA, supplier, and document profiles.
+3. Add traceability export package delivery to reviewer notification channels.
+4. Add applied migration approval gates for production Postgres cutover.

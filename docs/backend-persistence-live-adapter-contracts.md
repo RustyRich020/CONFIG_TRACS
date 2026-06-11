@@ -350,6 +350,8 @@ Migration checklist:
 
 The guarded import utility is implemented in `server/importRecordsToPostgres.mjs`. It reads JSON or SQLite `tracs_records`, validates required record fields, checks duplicate IDs, checks duplicate `kind + label + version` tuples, and defaults to dry-run mode. `--apply` is required before it inserts records into Postgres. Imported records preserve source IDs, versions, timestamps, status, summary, label, kind, and payload JSON so historical evidence remains traceable.
 
+Each guarded import run persists a `postgres_import_reconciliation` record in Postgres. The payload captures source type, source file, dry-run/apply mode, read/valid/invalid counts, duplicate IDs, duplicate versions, importable/imported/skipped totals, record-kind distribution, sampled invalid records, and summary evidence. The Backend workspace renders these records as an import reconciliation dashboard so teams can compare migration outcomes before retiring JSON or SQLite storage.
+
 ## GitHub Implementation Plan
 
 1. Create branch: `codex/backend-persistence-adapter-contracts`

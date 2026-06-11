@@ -474,6 +474,10 @@
   margin-top: 16px;
 }
 
+.import-reconciliation-panel {
+  margin-top: 16px;
+}
+
 .mapping-grid {
   display: grid;
   grid-template-columns: minmax(360px, 1fr) minmax(440px, 1.2fr) minmax(320px, 0.9fr);
@@ -1243,6 +1247,77 @@
   color: #0d5f63;
   font-style: normal;
   font-weight: 800;
+}
+
+.import-reconciliation-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.4fr) repeat(5, minmax(100px, 0.7fr));
+  gap: 10px;
+  padding: 14px;
+  border-bottom: 1px solid #edf2f1;
+}
+
+.import-reconciliation-card {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 86px;
+  padding: 12px;
+  border: 1px solid #e0e8e7;
+  border-radius: 8px;
+  background: #f8fbfa;
+}
+
+.import-reconciliation-card.primary {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.import-reconciliation-card strong,
+.import-reconciliation-card span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.import-reconciliation-card strong {
+  color: #1e3030;
+  font-size: 20px;
+}
+
+.import-reconciliation-card.primary strong {
+  font-size: 13px;
+}
+
+.import-reconciliation-card span,
+.import-reconciliation-card p {
+  margin: 0;
+  color: #718080;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.import-reconciliation-card p {
+  grid-column: 1 / -1;
+}
+
+.import-reconciliation-detail {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(420px, 1.2fr);
+  gap: 14px;
+  padding: 14px;
+  border-bottom: 1px solid #edf2f1;
+}
+
+.import-reconciliation-detail h4,
+.import-reconciliation-errors h4 {
+  margin: 0 0 8px;
+  color: #1e3030;
+  font-size: 13px;
+}
+
+.import-reconciliation-errors {
+  padding: 14px;
 }
 
 .operation-list {
@@ -2538,6 +2613,8 @@
   .evidence-grid,
   .evidence-approval-grid,
   .storage-schema-grid,
+  .import-reconciliation-grid,
+  .import-reconciliation-detail,
   .workflow-grid,
   .traceability-grid,
   .report-grid,

@@ -72,6 +72,7 @@ import type {
   NotificationDeliveryPayload,
   NotificationDeliveryResult,
   PostgresMigrationChecklist,
+  PostgresImportReconciliation,
   QualityEvent,
   ReportCatalogItem,
   ReadinessCheck,
@@ -2459,6 +2460,25 @@ function BackendPersistenceView({
     },
     {} as Record<string, number>,
   )
+  const reconciliationRecords = backendRecords.filter(
+    (record): record is BackendRecord<PostgresImportReconciliation> =>
+      record.kind === 'postgres_import_reconciliation',
+  )
+  const latestReconciliation = reconciliationRecords[0]
+  const latestKindCounts = latestReconciliation?.payload.recordKindCounts ?? {}
+  const latestTopKinds = Object.entries(latestKindCounts)
+    .sort((first, second) => second[1] - first[1])
+    .slice(0, 5)
+  const reconciliationTotals = reconciliationRecords.reduce(
+    (summary, record) => ({
+      read: summary.read + record.payload.read,
+      importable: summary.importable + record.payload.importable,
+      imported: summary.imported + record.payload.imported,
+      skipped: summary.skipped + record.payload.skipped,
+      invalid: summary.invalid + record.payload.invalid,
+    }),
+    { read: 0, importable: 0, imported: 0, skipped: 0, invalid: 0 },
+  )
 
   return (
     <>
@@ -2466,7 +2486,7 @@ function BackendPersistenceView({
         <div>
           <h2>Backend Persistence Boundary</h2>
           <p>
-            Browser-local storage now behaves like a backend adapter with versioned records, health checks, and live adapter contract dry runs.
+            Versioned records, health checks, adapter dry runs, and migration reconciliation run through the selected backend adapter.
           </p>
         </div>
         <div className="toolbar-actions">
@@ -2516,7 +2536,7 @@ function BackendPersistenceView({
           <PanelHeader
             icon={History}
             title="Persisted Records"
-            subtitle={`${backendRecords.length} versioned backend record(s) stored by the local adapter.`}
+            subtitle={`${backendRecords.length} versioned backend record(s) stored by ${backendHealth?.store?.mode ?? backendHealth?.mode ?? 'the active adapter'}.`}
           />
           <div className="version-summary backend-summary">
             <span>{recordCounts.deployment_profile ?? 0} profiles</span>
@@ -2601,6 +2621,112 @@ function BackendPersistenceView({
             })}
           </div>
         </section>
+      </section>
+
+      <section className="panel import-reconciliation-panel">
+        <PanelHeader
+          icon={Database}
+          title="Postgres Import Reconciliation"
+          subtitle="Review guarded JSON or SQLite import runs before retiring legacy storage."
+        />
+        {latestReconciliation ? (
+          <>
+            <div className="import-reconciliation-grid">
+              <article className="import-reconciliation-card primary">
+                <div>
+                  <strong>{titleize(latestReconciliation.payload.mode)}</strong>
+                  <span>{latestReconciliation.payload.sourceFile}</span>
+                </div>
+                <StatusChip status={latestReconciliation.status} label={latestReconciliation.status} />
+                <p>{latestReconciliation.payload.evidence}</p>
+              </article>
+              <article className="import-reconciliation-card">
+                <strong>{latestReconciliation.payload.read}</strong>
+                <span>Records read</span>
+              </article>
+              <article className="import-reconciliation-card">
+                <strong>{latestReconciliation.payload.importable}</strong>
+                <span>Importable</span>
+              </article>
+              <article className="import-reconciliation-card">
+                <strong>{latestReconciliation.payload.imported}</strong>
+                <span>Imported</span>
+              </article>
+              <article className="import-reconciliation-card">
+                <strong>{latestReconciliation.payload.skipped}</strong>
+                <span>Skipped</span>
+              </article>
+              <article className="import-reconciliation-card">
+                <strong>{latestReconciliation.payload.invalid}</strong>
+                <span>Invalid</span>
+              </article>
+            </div>
+            <div className="import-reconciliation-detail">
+              <div>
+                <h4>Latest record mix</h4>
+                <div className="storage-column-list">
+                  {latestTopKinds.map(([kind, count]) => (
+                    <span key={kind}>
+                      {titleize(kind)} <em>{count}</em>
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <h4>Aggregate run totals</h4>
+                <div className="metadata-grid">
+                  <Metadata label="Runs" value={String(reconciliationRecords.length)} />
+                  <Metadata label="Read" value={String(reconciliationTotals.read)} />
+                  <Metadata label="Importable" value={String(reconciliationTotals.importable)} />
+                  <Metadata label="Imported" value={String(reconciliationTotals.imported)} />
+                  <Metadata label="Skipped" value={String(reconciliationTotals.skipped)} />
+                  <Metadata label="Invalid" value={String(reconciliationTotals.invalid)} />
+                </div>
+              </div>
+            </div>
+            {latestReconciliation.payload.invalidRecords.length > 0 ? (
+              <div className="import-reconciliation-errors">
+                <h4>Invalid record samples</h4>
+                {latestReconciliation.payload.invalidRecords.map((entry) => (
+                  <div className="backend-record-row" key={`${entry.id}:${entry.label}`}>
+                    <div>
+                      <strong>{entry.label || entry.id || 'Unnamed record'}</strong>
+                      <span>{entry.missing.join(', ')}</span>
+                    </div>
+                    <StatusChip status="blocking" label="Invalid" />
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <div className="empty-state compact">Run `npm run records:import:postgres` to persist reconciliation evidence.</div>
+        )}
+      </section>
+
+      <section className="panel import-reconciliation-panel">
+        <PanelHeader
+          icon={History}
+          title="Import Reconciliation History"
+          subtitle="Recent dry-run and applied migration summaries retained in Postgres."
+        />
+        {reconciliationRecords.length > 0 ? (
+          <div className="backend-record-list">
+            {reconciliationRecords.slice(0, 8).map((record) => (
+              <div className="backend-record-row" key={record.id}>
+                <div>
+                  <strong>{titleize(record.payload.source)} import / {titleize(record.payload.mode)}</strong>
+                  <span>
+                    v{record.version} / {new Date(record.createdAt).toLocaleString()} / read {record.payload.read}, importable {record.payload.importable}, skipped {record.payload.skipped}
+                  </span>
+                </div>
+                <StatusChip status={record.status} label={record.status} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state compact">No import reconciliation runs have been retained yet.</div>
+        )}
       </section>
 
       <section className="panel storage-schema-panel">

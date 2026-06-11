@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import { createPostgresRecordStore } from './recordStore.mjs'
@@ -145,6 +146,63 @@ async function insertRecords(pool, records) {
   }
 }
 
+function recordKindCounts(records) {
+  return records.reduce((summary, record) => {
+    summary[record.kind] = (summary[record.kind] ?? 0) + 1
+    return summary
+  }, {})
+}
+
+function reconciliationStatus({ apply, invalidRecords, duplicateIds, duplicateVersions }) {
+  if (invalidRecords.length > 0) return 'blocking'
+  if (!apply || duplicateIds.length > 0 || duplicateVersions.length > 0) return 'warning'
+  return 'pass'
+}
+
+async function saveReconciliationRecord(pool, summary) {
+  const client = await pool.connect()
+  const label = `${summary.source} to postgres import`
+  try {
+    await client.query('begin')
+    await client.query('select pg_advisory_xact_lock(hashtext($1)::bigint)', [
+      `postgres_import_reconciliation:${label}`,
+    ])
+    const versionResult = await client.query(
+      `
+        select coalesce(max(version), 0) + 1 as next_version
+        from tracs_records
+        where kind = $1 and label = $2
+      `,
+      ['postgres_import_reconciliation', label],
+    )
+    const now = new Date().toISOString()
+    await client.query(
+      `
+        insert into tracs_records (
+          id, kind, label, version, status, summary, payload_json, created_at, updated_at
+        ) values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)
+      `,
+      [
+        randomUUID(),
+        'postgres_import_reconciliation',
+        label,
+        versionResult.rows[0].next_version,
+        summary.status,
+        summary.evidence,
+        JSON.stringify(summary),
+        now,
+        now,
+      ],
+    )
+    await client.query('commit')
+  } catch (error) {
+    await client.query('rollback')
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
 async function main() {
   requirePostgresUrl()
   const records = source === 'sqlite' ? await readSqliteRecords(sourceFile) : await readJsonRecords(sourceFile)
@@ -177,10 +235,14 @@ async function main() {
       await insertRecords(pool, importableRecords)
     }
 
+    const generatedAt = new Date().toISOString()
     const summary = {
+      reconciliationId: `postgres_import_reconciliation:${source}:${generatedAt}`,
+      generatedAt,
       source,
       sourceFile,
       mode: apply ? 'apply' : 'dry_run',
+      status: reconciliationStatus({ apply, invalidRecords, duplicateIds, duplicateVersions }),
       read: records.length,
       valid: validRecords.length,
       invalid: invalidRecords.length,
@@ -189,6 +251,7 @@ async function main() {
       importable: importableRecords.length,
       imported: apply ? importableRecords.length : 0,
       skipped: records.length - importableRecords.length,
+      recordKindCounts: recordKindCounts(validRecords),
       evidence: apply
         ? `${importableRecords.length} backend record(s) imported into Postgres from ${sourceFile}.`
         : `${importableRecords.length} backend record(s) ready for Postgres import from ${sourceFile}; rerun with --apply to write.`,
@@ -198,6 +261,7 @@ async function main() {
         missing: entry.missing,
       })),
     }
+    await saveReconciliationRecord(pool, summary)
     console.log(JSON.stringify(summary, null, 2))
   } finally {
     await pool.end()
