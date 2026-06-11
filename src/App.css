@@ -1853,6 +1853,10 @@
   grid-column: 1 / -1;
 }
 
+.trace-review-panel .trace-path-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .trace-graph-canvas {
   display: grid;
   grid-template-columns: minmax(180px, 0.35fr) minmax(0, 1fr);

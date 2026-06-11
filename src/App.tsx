@@ -416,6 +416,42 @@ function createEvidenceApprovalNotification(packet: ReadinessEvidencePacket, app
   }
 }
 
+function createTraceabilityExportNotification(
+  graphPackage: TraceabilityGraphExportPackage,
+  review: {
+    reviewer: string
+    status: TraceabilityExportReviewStatus
+    rationale: string
+    retentionClass: TraceabilityExportRetentionClass
+  },
+) {
+  const generatedAt = new Date().toISOString()
+  const reviewer = review.reviewer.trim() || 'TRACS traceability reviewer'
+  return {
+    notificationId: `traceability_export_notice:${graphPackage.packageId}:${generatedAt}`,
+    generatedAt,
+    type: 'traceability_export_review',
+    packageId: graphPackage.packageId,
+    selectedEventId: graphPackage.selectedEvent?.canonical.event_id ?? 'all',
+    routeStage: 'traceability_review',
+    recipients: [reviewer],
+    dueAt: '',
+    reviewer,
+    reviewStatus: review.status,
+    retentionClass: review.retentionClass,
+    summary: `Traceability export ${graphPackage.selectedEvent?.canonical.event_id ?? 'all'} is ready for reviewer handoff with ${titleize(review.status)} review state.`,
+    evidence: [
+      graphPackage.evidence,
+      `${graphPackage.coverage.filteredLinks} filtered link(s), ${graphPackage.graph.nodes.length} graph node(s), and ${graphPackage.coverage.evidencePackets} evidence packet(s).`,
+      review.rationale || 'No reviewer rationale recorded.',
+    ],
+    coverage: graphPackage.coverage,
+    filters: graphPackage.filters,
+    relationshipSummary: graphPackage.graph.relationshipSummary,
+    graphPackage,
+  }
+}
+
 function extractionQueueStatus(job: ExtractionJobPayload, runs: BackendRecord<ExtractionRunPayload>[]) {
   const latestRun = runs
     .filter((run) => run.payload.jobId === job.jobId)
@@ -1892,12 +1928,17 @@ function App() {
         ) : activeView === 'Traceability' ? (
           <TraceabilityView
             canonicalObjects={canonicalObjects}
+            deliveryRecords={backendRecords.filter(
+              (record): record is BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }> =>
+                record.kind === 'notification_delivery',
+            )}
             evidenceRecords={backendRecords.filter(
               (record): record is BackendRecord<ReadinessEvidencePacket> =>
                 record.kind === 'readiness_evidence_packet',
             )}
             events={qualityEvents}
             links={traceabilityLinks}
+            onDeliverNotifications={deliverNotifications}
             onSelectEvent={setSelectedQualityEventId}
             onSaveExportReview={saveTraceabilityExportReview}
             reviewRecords={backendRecords.filter(
@@ -3491,18 +3532,22 @@ function ObjectExplorerView({ objects }: { objects: CanonicalObject[] }) {
 
 function TraceabilityView({
   canonicalObjects,
+  deliveryRecords,
   evidenceRecords,
   events,
   links,
+  onDeliverNotifications,
   onSelectEvent,
   onSaveExportReview,
   reviewRecords,
   selectedEventId,
 }: {
   canonicalObjects: CanonicalObject[]
+  deliveryRecords: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>[]
   evidenceRecords: BackendRecord<ReadinessEvidencePacket>[]
   events: QualityEvent[]
   links: TraceabilityLink[]
+  onDeliverNotifications: (payload: NotificationDeliveryPayload) => void
   onSelectEvent: (eventId: string) => void
   onSaveExportReview: (request: {
     graphPackage: TraceabilityGraphExportPackage
@@ -3524,6 +3569,7 @@ function TraceabilityView({
   const [reviewRationale, setReviewRationale] = useState(
     'Traceability export reviewed for active filters, evidence packet coverage, and retained governance handoff.',
   )
+  const [traceabilityRecipients, setTraceabilityRecipients] = useState('TRACS Quality Reviewer')
   const selectedEvent = events.find((event) => event.id === selectedEventId) ?? events[0]
   const canonicalById = useMemo(
     () => new Map(canonicalObjects.map((object) => [object.id, object])),
@@ -3627,6 +3673,40 @@ function TraceabilityView({
     const packetSuffix = evidencePacket ? `-${evidencePacket.id.slice(0, 8)}` : ''
     downloadJson(`tracs-traceability-graph-package${packetSuffix}.json`, packagePayload)
   }
+  function deliveryPayloadForGraph(graphPackage: TraceabilityGraphExportPackage) {
+    const notification = createTraceabilityExportNotification(graphPackage, {
+      reviewer,
+      status: reviewStatus,
+      rationale: reviewRationale,
+      retentionClass,
+    })
+    const recipients = traceabilityRecipients
+      .split(',')
+      .map((recipient) => recipient.trim())
+      .filter(Boolean)
+    return notificationToDeliveryPayload(
+      'traceability_export',
+      `Traceability export package ${graphPackage.selectedEvent?.canonical.event_id ?? 'all'}`,
+      {
+        ...notification,
+        recipients: recipients.length > 0 ? recipients : notification.recipients,
+      },
+    )
+  }
+  async function deliverGraphPackage(evidencePacket?: BackendRecord<ReadinessEvidencePacket>) {
+    const packagePayload = createGraphExportPackage(evidencePacket)
+    await onSaveExportReview({
+      graphPackage: packagePayload,
+      reviewer,
+      status: reviewStatus,
+      rationale: reviewRationale,
+      retentionClass,
+    })
+    onDeliverNotifications(deliveryPayloadForGraph(packagePayload))
+  }
+  const traceabilityDeliveryRecords = deliveryRecords.filter(
+    (record) => record.payload.request.source === 'traceability_export',
+  )
 
   return (
     <>
@@ -3653,6 +3733,10 @@ function TraceabilityView({
           <button className="secondary-action" onClick={() => exportGraphPackage()} type="button">
             <Download size={15} />
             Export Graph Package
+          </button>
+          <button className="primary-action" onClick={() => deliverGraphPackage()} type="button">
+            <Bell size={15} />
+            Deliver to Reviewers
           </button>
         </div>
       </section>
@@ -3739,6 +3823,10 @@ function TraceabilityView({
             <span>Rationale</span>
             <textarea value={reviewRationale} onChange={(event) => setReviewRationale(event.target.value)} />
           </label>
+          <label className="trace-review-rationale">
+            <span>Reviewer recipients</span>
+            <input value={traceabilityRecipients} onChange={(event) => setTraceabilityRecipients(event.target.value)} />
+          </label>
         </div>
         <div className="trace-path-summary">
           <Metadata label="Review records" value={String(reviewRecords.length)} />
@@ -3747,6 +3835,7 @@ function TraceabilityView({
             label="Retention rule"
             value={traceabilityRetentionLabel(retentionClass)}
           />
+          <Metadata label="Deliveries" value={String(traceabilityDeliveryRecords.length)} />
         </div>
       </section>
 
@@ -3908,6 +3997,10 @@ function TraceabilityView({
                     <Download size={14} />
                     Export
                   </button>
+                  <button className="secondary-action compact" onClick={() => deliverGraphPackage(record)} type="button">
+                    <Bell size={14} />
+                    Deliver
+                  </button>
                   <StatusChip status={record.status} label={record.status} />
                 </div>
               </div>
@@ -3945,6 +4038,32 @@ function TraceabilityView({
           </div>
         ) : (
           <div className="empty-state">No signed traceability export reviews have been retained yet.</div>
+        )}
+      </section>
+
+      <section className="panel trace-review-history-panel">
+        <PanelHeader
+          icon={Bell}
+          title="Traceability Delivery Evidence"
+          subtitle="Reviewer notification records for delivered traceability graph export packages."
+        />
+        {traceabilityDeliveryRecords.length > 0 ? (
+          <div className="mapping-run-history">
+            {traceabilityDeliveryRecords.slice(0, 6).map((record) => (
+              <div className="mapping-run-row" key={record.id}>
+                <div>
+                  <strong>{record.payload.request.subject}</strong>
+                  <span>
+                    v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ') || 'No recipients'}
+                  </span>
+                  <small>{record.payload.result.evidence}</small>
+                </div>
+                <StatusChip status={record.status} label={record.status} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state">No traceability export delivery has been recorded yet.</div>
         )}
       </section>
     </>

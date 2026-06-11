@@ -727,7 +727,7 @@ export type ReadinessEvidencePacket = {
 export type NotificationDeliveryPayload = {
   deliveryId: string
   generatedAt: string
-  source: 'report_catalog' | 'readiness_evidence'
+  source: 'report_catalog' | 'readiness_evidence' | 'traceability_export'
   channels: Array<'email' | 'teams' | 'sharepoint_folder'>
   recipients: string[]
   subject: string
