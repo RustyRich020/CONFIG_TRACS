@@ -87,7 +87,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Adds extraction job run queue and schedule calendar views with queue export.
 - Validates external-reference connector credentials with backend environment and token rotation checks.
 - Adds a traceability path explorer that shows event-to-object relationship paths and coverage.
-- Adds notification delivery dry-run adapters for email, Teams, and SharePoint export folders with persisted delivery evidence.
+- Adds guarded notification delivery connectors for email, Teams, and SharePoint export folders with persisted delivery evidence.
 - Discovers external-reference metadata and bounded preview rows through a credential-aware backend adapter.
 - Filters traceability graphs by object family, status, and saved evidence packet coverage.
 - Adds a selectable SQLite record store adapter behind the existing API persistence contract.
@@ -106,11 +106,17 @@ Credential environment variables:
 
 Credential provider templates are available in `public/config/templates/` for Snowflake, Microsoft Graph, and external reference adapters. These templates define required backend environment references, rotation evidence variables, validation routes, owner roles, and missing-credential behavior. They intentionally do not store tokens, API keys, passwords, or rotated-at values in committed configuration.
 
-Notification delivery dry-runs use environment references only:
+Notification delivery uses backend environment references only and stays in dry-run mode unless `TRACS_NOTIFICATION_LIVE_DELIVERY=true`:
 
 - Email handoff: `TRACS_NOTIFICATION_EMAIL_TARGET`
 - Teams handoff: `TRACS_NOTIFICATION_TEAMS_WEBHOOK_URL`
 - SharePoint folder handoff: `TRACS_NOTIFICATION_SHAREPOINT_FOLDER`
+
+Live delivery controls:
+
+- Global live gate: `TRACS_NOTIFICATION_LIVE_DELIVERY=true`
+- Email live send: `TRACS_GRAPH_TOKEN`, optional `TRACS_NOTIFICATION_EMAIL_SENDER`
+- Disable a channel while global live delivery is enabled: `TRACS_NOTIFICATION_EMAIL_LIVE=false`, `TRACS_NOTIFICATION_TEAMS_LIVE=false`, or `TRACS_NOTIFICATION_SHAREPOINT_FOLDER_LIVE=false`
 
 ## Run Locally
 
@@ -210,7 +216,7 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add live notification delivery connectors after tenant-specific email, Teams, and SharePoint targets are approved.
-2. Add source-specific external-reference mapping templates for CAPA, supplier, and document systems.
-3. Add traceability graph export packages for evidence packets.
-4. Add a guarded JSON/SQLite-to-Postgres import utility after a target database is selected.
+1. Add source-specific external-reference mapping templates for CAPA, supplier, and document systems.
+2. Add traceability graph export packages for evidence packets.
+3. Add a guarded JSON/SQLite-to-Postgres import utility after a target database is selected.
+4. Add tenant-approved live email and Teams smoke fixtures when real endpoints are available.

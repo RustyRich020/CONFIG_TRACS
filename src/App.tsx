@@ -1222,7 +1222,7 @@ function App() {
   }
 
   async function deliverNotifications(payload: NotificationDeliveryPayload) {
-    const result = await backendClient.deliverNotificationDryRun(payload)
+    const result = await backendClient.deliverNotification(payload)
     await refreshBackend()
     saveVersion(
       createSavedVersion({
@@ -1235,8 +1235,8 @@ function App() {
     )
     record(
       'notification',
-      'delivery_dry_run',
-      `${payload.subject} delivery dry-run completed with ${result.status} status.`,
+      'delivery',
+      `${payload.subject} delivery completed with ${result.status} status.`,
     )
   }
 
@@ -1824,7 +1824,7 @@ function EvidencePacketWorkspace({
             type="button"
           >
             <PlugZap size={15} />
-            Dry-Run Delivery
+            Run Delivery
           </button>
           <button className="secondary-action" onClick={() => onSavePacket(approvalForSave())} type="button">
             <ServerCog size={15} />
@@ -2102,7 +2102,7 @@ function EvidencePacketWorkspace({
                   </span>
                   <small>
                     {record.payload.result.channelResults
-                      .map((channel) => `${channel.channel}: ${channel.status}`)
+                      .map((channel) => `${channel.channel}: ${channel.mode} ${channel.status}`)
                       .join(' / ')}
                   </small>
                 </div>
@@ -2111,7 +2111,7 @@ function EvidencePacketWorkspace({
             ))}
           </div>
         ) : (
-          <div className="empty-state">No evidence notification delivery dry-run has been recorded yet.</div>
+          <div className="empty-state">No evidence notification delivery has been recorded yet.</div>
         )}
       </section>
     </>
@@ -3240,7 +3240,7 @@ function ReportCatalogView({
                     approvalStatus: 'pending',
                     publishStatus: 'draft',
                     freshnessStatus: staleCount > 0 ? 'warning' : 'pass',
-                    summary: `${reports.length} report catalog approval notice(s) prepared for delivery dry-run.`,
+                    summary: `${reports.length} report catalog approval notice(s) prepared for delivery.`,
                     evidence: reports.map((report) => report.freshnessEvidence),
                     sourceDependencies: Array.from(new Set(reports.flatMap((report) => report.sourceDependencies))),
                   },
@@ -3250,7 +3250,7 @@ function ReportCatalogView({
             type="button"
           >
             <PlugZap size={15} />
-            Dry-Run Delivery
+            Run Delivery
           </button>
         </div>
       </section>
@@ -3311,7 +3311,7 @@ function ReportCatalogView({
         <PanelHeader
           icon={Bell}
           title="Report Notification Delivery Evidence"
-          subtitle="Recent dry-run records for email, Teams, and SharePoint folder delivery contracts."
+          subtitle="Recent records for email, Teams, and SharePoint folder delivery contracts."
         />
         {reportDeliveryRecords.length > 0 ? (
           <div className="mapping-run-history">
@@ -3324,7 +3324,7 @@ function ReportCatalogView({
                   </span>
                   <small>
                     {record.payload.result.channelResults
-                      .map((channel) => `${channel.channel}: ${channel.status}`)
+                      .map((channel) => `${channel.channel}: ${channel.mode} ${channel.status}`)
                       .join(' / ')}
                   </small>
                 </div>
@@ -3333,7 +3333,7 @@ function ReportCatalogView({
             ))}
           </div>
         ) : (
-          <div className="empty-state">No report notification delivery dry-run has been recorded yet.</div>
+          <div className="empty-state">No report notification delivery has been recorded yet.</div>
         )}
       </section>
     </>
@@ -3518,10 +3518,10 @@ function ReportCatalogEditor({
                   ),
                 )
               }
-              type="button"
-            >
-              <PlugZap size={15} />
-              Dry-Run Delivery
+            type="button"
+          >
+            <PlugZap size={15} />
+              Run Delivery
             </button>
             <button className="secondary-action" onClick={() => onSave(draftReport(), 'draft')} type="button">
               <ServerCog size={15} />
@@ -3573,7 +3573,7 @@ function ReportCatalogEditor({
           ) : null}
           {deliveryRecords.length > 0 ? (
             <div className="report-approval-history">
-              <h4>Delivery Dry-Runs</h4>
+              <h4>Delivery Records</h4>
               {deliveryRecords.slice(0, 3).map((record) => (
                 <div className="connector-run-row" key={record.id}>
                   <div>

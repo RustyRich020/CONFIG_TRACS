@@ -18,7 +18,7 @@ import {
   validateConnectorCredentials,
 } from './credentialMetadataAdapters.mjs'
 import { discoverCsvMetadata, previewCsvRows } from './csvAdapter.mjs'
-import { runNotificationDeliveryDryRun } from './notificationDeliveryAdapters.mjs'
+import { runNotificationDelivery, runNotificationDeliveryDryRun } from './notificationDeliveryAdapters.mjs'
 import {
   createFileRecordStore,
   createPostgresRecordStore,
@@ -575,10 +575,27 @@ async function handleRequest(req, res) {
 
     if (req.method === 'POST' && url.pathname === '/api/notifications/delivery-dry-run') {
       const payload = await parseBody(req)
-      const result = runNotificationDeliveryDryRun(payload)
+      const result = await runNotificationDeliveryDryRun(payload)
       const record = await recordStore.saveRecord({
         kind: 'notification_delivery',
         label: payload.subject ?? payload.deliveryId ?? 'notification delivery dry-run',
+        status: result.status,
+        summary: result.evidence,
+        payload: {
+          request: payload,
+          result,
+        },
+      })
+      jsonResponse(res, 200, { ...result, record })
+      return
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/notifications/delivery') {
+      const payload = await parseBody(req)
+      const result = await runNotificationDelivery(payload)
+      const record = await recordStore.saveRecord({
+        kind: 'notification_delivery',
+        label: payload.subject ?? payload.deliveryId ?? 'notification delivery',
         status: result.status,
         summary: result.evidence,
         payload: {

@@ -646,7 +646,7 @@ export type NotificationDeliveryResult = {
   channelResults: Array<{
     channel: 'email' | 'teams' | 'sharepoint_folder'
     status: StatusLevel
-    mode: 'dry_run'
+    mode: 'dry_run' | 'live' | 'skipped'
     target: string
     evidence: string
   }>

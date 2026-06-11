@@ -673,7 +673,7 @@ export class LocalBackendClient {
     }
   }
 
-  async deliverNotificationDryRun(
+  async deliverNotification(
     payload: NotificationDeliveryPayload,
   ): Promise<NotificationDeliveryResult & { record?: BackendRecord }> {
     const deliveredAt = new Date().toISOString()
@@ -1208,19 +1208,19 @@ class ApiBackendClient {
     }
   }
 
-  async deliverNotificationDryRun(
+  async deliverNotification(
     payload: NotificationDeliveryPayload,
   ): Promise<NotificationDeliveryResult & { record?: BackendRecord }> {
     try {
       return await this.request<NotificationDeliveryResult & { record?: BackendRecord }>(
-        '/api/notifications/delivery-dry-run',
+        '/api/notifications/delivery',
         {
           method: 'POST',
           body: JSON.stringify(payload),
         },
       )
     } catch {
-      return this.localFallback.deliverNotificationDryRun(payload)
+      return this.localFallback.deliverNotification(payload)
     }
   }
 
