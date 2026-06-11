@@ -142,12 +142,20 @@ async function persistCanonicalLoad({
   connectorType = 'csv',
   sourceObject = 'quality_events_sample.csv',
   targetObject = 'quality_event',
+  mappingFields,
+  primaryKey,
+  sourceRows,
+  traceabilityLinks,
 } = {}) {
   const { objects, links, events, warnings } = await buildCanonicalLoadBundle({
     sourceConnector,
     connectorType,
     sourceObject,
     targetObject,
+    mappingFields,
+    primaryKey,
+    sourceRows,
+    traceabilityLinks,
   })
   const loadedAt = new Date().toISOString()
   const loadId = `canonical_load:${mappingId}:${loadedAt}`
@@ -188,10 +196,14 @@ async function persistCanonicalLoad({
     sourceObject,
     targetObject,
     mappingId,
+    executionMode: connectorType === 'external_reference' || connectorType === 'rest_api' ? 'approved_external_reference' : 'connector_profile',
     objectCount: objects.length,
     linkCount: links.length,
     qualityEventCount: events.length,
-    evidence: `${objects.length} canonical object(s), ${links.length} traceability link(s), and ${events.length} quality event(s) loaded from ${sourceConnector}/${sourceObject}.`,
+    evidence:
+      connectorType === 'external_reference' || connectorType === 'rest_api'
+        ? `${objects.length} canonical reference object(s) and ${links.length} traceability link(s) loaded from approved ${sourceConnector}/${sourceObject}.`
+        : `${objects.length} canonical object(s), ${links.length} traceability link(s), and ${events.length} quality event(s) loaded from ${sourceConnector}/${sourceObject}.`,
     warnings,
   }
 

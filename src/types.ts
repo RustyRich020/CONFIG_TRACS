@@ -131,6 +131,12 @@ export type MappingManifest = {
   fields: Record<string, string>
   required: string[]
   transforms?: Record<string, unknown>
+  traceability_links?: Array<{
+    relationship_type: string
+    source_field: string
+    target_field: string
+    required?: boolean
+  }>
 }
 
 export type CsvColumnProfile = {
@@ -631,6 +637,7 @@ export type CanonicalLoadResult = {
   sourceObject: string
   targetObject: string
   mappingId: string
+  executionMode?: 'connector_profile' | 'approved_external_reference'
   objectCount: number
   linkCount: number
   qualityEventCount: number
@@ -645,6 +652,13 @@ export type CanonicalLoadRequest = {
   connectorType?: string
   sourceObject?: string
   targetObject?: string
+  mappingFields?: Record<string, string>
+  primaryKey?: {
+    targetField: string
+    sourceField: string
+  }
+  sourceRows?: Array<Record<string, unknown>>
+  traceabilityLinks?: MappingManifest['traceability_links']
 }
 
 export type ExtractionJobPayload = {

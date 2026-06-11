@@ -415,7 +415,125 @@ export class LocalBackendClient {
     connectorType = 'csv',
     sourceObject = 'quality_events_sample.csv',
     targetObject = 'quality_event',
+    mappingFields,
+    primaryKey,
+    sourceRows,
+    traceabilityLinks,
   }: CanonicalLoadRequest = {}): Promise<CanonicalLoadResult> {
+    if ((connectorType === 'external_reference' || connectorType === 'rest_api') && targetObject !== 'quality_event') {
+      const loadedAt = new Date().toISOString()
+      const rows = sourceRows ?? []
+      const objects = new Map<string, CanonicalObject>()
+      const links: TraceabilityLink[] = []
+      rows.forEach((row, index) => {
+        const canonical = Object.fromEntries(
+          Object.entries(mappingFields ?? {}).map(([targetField, sourceField]) => [
+            targetField,
+            String(row[sourceField] ?? ''),
+          ]),
+        ) as Record<string, string>
+        const primaryTarget = primaryKey?.targetField ?? Object.keys(mappingFields ?? {})[0] ?? 'id'
+        const primarySource = primaryKey?.sourceField ?? mappingFields?.[primaryTarget] ?? primaryTarget
+        const sourceId = String(row[primarySource] ?? canonical[primaryTarget] ?? `${targetObject}-${index + 1}`)
+        const object: CanonicalObject = {
+          id: `${targetObject}:${sourceId}`,
+          objectType: targetObject,
+          family:
+            targetObject === 'supplier'
+              ? 'supply_chain'
+              : targetObject === 'document_reference'
+                ? 'traceability'
+                : targetObject === 'capa_reference'
+                  ? 'quality'
+                  : 'reference',
+          displayName: String(
+            canonical.title ?? canonical.supplier_name ?? canonical.document_number ?? canonical.capa_number ?? sourceId,
+          ),
+          status: String(canonical.status ?? canonical.lifecycle_status ?? canonical.qualification_status ?? 'referenced'),
+          sourceConnector,
+          sourceSystem: String(canonical.source_system ?? connectorType),
+          sourceObject,
+          sourceId,
+          createdAt: String(canonical.opened_at ?? canonical.effective_at ?? canonical.last_audit_at ?? loadedAt),
+          updatedAt: loadedAt,
+          canonical,
+          raw: {
+            ...row,
+            TRACS_LOAD_SOURCE_CONNECTOR: sourceConnector,
+            TRACS_LOAD_SOURCE_OBJECT: sourceObject,
+          },
+        }
+        objects.set(object.id, object)
+        ;(traceabilityLinks ?? []).forEach((link) => {
+          const value = row[link.target_field] ?? row[link.source_field]
+          if (!value) return
+          const discriminator = `${link.relationship_type} ${link.target_field} ${link.source_field}`
+          const targetPrefix = discriminator.includes('quality_event') || discriminator.includes('complaint')
+            ? 'quality_event'
+            : discriminator.includes('product')
+              ? 'product'
+              : discriminator.includes('supplier')
+                ? 'supplier'
+                : discriminator.includes('capa')
+                  ? 'capa_reference'
+                  : 'document_reference'
+          links.push({
+            id: `link:${object.id}:${link.relationship_type}:${value}`,
+            sourceObjectId: object.id,
+            sourceObjectType: object.objectType,
+            targetObjectId: `${targetPrefix}:${value}`,
+            targetObjectType: targetPrefix,
+            targetLabel: String(value),
+            relationshipType: link.relationship_type,
+            status: 'pass',
+            evidence: `${object.id} maps through ${link.relationship_type}.`,
+          })
+        })
+      })
+
+      for (const object of objects.values()) {
+        await this.saveRecord({
+          kind: 'canonical_object',
+          label: object.id,
+          status: object.status === 'active' || object.status === 'referenced' ? 'pass' : 'warning',
+          summary: `${object.objectType} canonical object loaded from ${object.sourceConnector}.`,
+          payload: { ...object, loadedAt, loadId: `canonical_load:${mappingId}:${loadedAt}` },
+        })
+      }
+      for (const link of links) {
+        await this.saveRecord({
+          kind: 'traceability_link',
+          label: link.id,
+          status: link.status,
+          summary: `${link.relationshipType} traceability link loaded.`,
+          payload: { ...link, loadedAt, loadId: `canonical_load:${mappingId}:${loadedAt}` },
+        })
+      }
+      const result: CanonicalLoadResult = {
+        loadId: `canonical_load:${mappingId}:${loadedAt}`,
+        loadedAt,
+        sourceConnector,
+        connectorType,
+        sourceObject,
+        targetObject,
+        mappingId,
+        executionMode: 'approved_external_reference',
+        objectCount: objects.size,
+        linkCount: links.length,
+        qualityEventCount: 0,
+        evidence: `${objects.size} canonical reference object(s) and ${links.length} traceability link(s) loaded from approved ${sourceConnector}/${sourceObject}.`,
+        warnings: rows.length > 0 ? [] : ['External-reference load executed without preview rows.'],
+      }
+      const record = await this.saveRecord({
+        kind: 'canonical_load',
+        label: `${mappingId} canonical load`,
+        status: result.warnings.length > 0 ? 'warning' : 'pass',
+        summary: result.evidence,
+        payload: result,
+      })
+      return { ...result, record }
+    }
+
     const { rows } = await loadCsvFixture()
     const events = rows
       .map((row) =>
@@ -482,6 +600,7 @@ export class LocalBackendClient {
       sourceObject,
       targetObject,
       mappingId,
+      executionMode: 'connector_profile',
       objectCount: objects.size,
       linkCount: links.length,
       qualityEventCount: events.length,
@@ -1182,11 +1301,25 @@ class ApiBackendClient {
     connectorType = 'csv',
     sourceObject = 'quality_events_sample.csv',
     targetObject = 'quality_event',
+    mappingFields,
+    primaryKey,
+    sourceRows,
+    traceabilityLinks,
   }: CanonicalLoadRequest = {}): Promise<CanonicalLoadResult> {
     try {
       return await this.request<CanonicalLoadResult>('/api/canonical-loads', {
         method: 'POST',
-        body: JSON.stringify({ mappingId, sourceConnector, connectorType, sourceObject, targetObject }),
+        body: JSON.stringify({
+          mappingId,
+          sourceConnector,
+          connectorType,
+          sourceObject,
+          targetObject,
+          mappingFields,
+          primaryKey,
+          sourceRows,
+          traceabilityLinks,
+        }),
       })
     } catch {
       return this.localFallback.loadCanonicalFromMapping({
@@ -1195,6 +1328,10 @@ class ApiBackendClient {
         connectorType,
         sourceObject,
         targetObject,
+        mappingFields,
+        primaryKey,
+        sourceRows,
+        traceabilityLinks,
       })
     }
   }

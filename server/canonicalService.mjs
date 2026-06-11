@@ -272,6 +272,108 @@ function linksForEvent(event) {
   return links
 }
 
+function familyForTargetObject(targetObject) {
+  if (targetObject === 'supplier') return 'supply_chain'
+  if (targetObject === 'document_reference') return 'traceability'
+  if (targetObject === 'capa_reference') return 'quality'
+  if (targetObject === 'quality_event') return 'quality'
+  return 'reference'
+}
+
+function statusForReference(canonical) {
+  return (
+    canonical.status ??
+    canonical.lifecycle_status ??
+    canonical.qualification_status ??
+    canonical.effectiveness_status ??
+    'referenced'
+  )
+}
+
+function displayNameForReference(targetObject, canonical, primaryValue) {
+  return (
+    canonical.title ??
+    canonical.supplier_name ??
+    canonical.document_number ??
+    canonical.capa_number ??
+    canonical.name ??
+    primaryValue ??
+    targetObject
+  )
+}
+
+function canonicalReferenceObject({
+  row,
+  rowIndex = 0,
+  mappingFields = {},
+  primaryKey = {},
+  sourceConnector,
+  sourceObject,
+  targetObject,
+  connectorType,
+}) {
+  const canonical = Object.fromEntries(
+    Object.entries(mappingFields).map(([targetField, sourceField]) => [targetField, row[sourceField] ?? '']),
+  )
+  const primaryTarget = primaryKey.targetField ?? Object.keys(mappingFields)[0] ?? 'id'
+  const primarySource = primaryKey.sourceField ?? mappingFields[primaryTarget] ?? primaryTarget
+  const primaryValue = row[primarySource] ?? canonical[primaryTarget]
+  const sourceId = String(primaryValue || `${targetObject}-${rowIndex + 1}`)
+  return {
+    id: `${targetObject}:${sourceId}`,
+    objectType: targetObject,
+    family: familyForTargetObject(targetObject),
+    displayName: String(displayNameForReference(targetObject, canonical, sourceId)),
+    status: String(statusForReference(canonical)),
+    sourceConnector,
+    sourceSystem: canonical.source_system ?? connectorType,
+    sourceObject,
+    sourceId,
+    createdAt: canonical.opened_at ?? canonical.effective_at ?? canonical.last_audit_at ?? new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    canonical,
+    raw: {
+      ...row,
+      TRACS_LOAD_SOURCE_CONNECTOR: sourceConnector,
+      TRACS_LOAD_SOURCE_OBJECT: sourceObject,
+    },
+  }
+}
+
+function targetObjectIdForTraceability(link, value) {
+  if (!value) return ''
+  const discriminator = `${link.relationship_type} ${link.target_field} ${link.source_field}`
+  if (discriminator.includes('quality_event') || discriminator.includes('complaint')) return `quality_event:${value}`
+  if (discriminator.includes('product')) return `product:${value}`
+  if (discriminator.includes('supplier')) return `supplier:${value}`
+  if (discriminator.includes('capa')) return `capa_reference:${value}`
+  if (discriminator.includes('document')) return `document_reference:${value}`
+  return String(value)
+}
+
+function linksForReferenceObject(object, traceabilityLinks = []) {
+  return traceabilityLinks
+    .map((link) => {
+      const sourceValue = object.raw[link.source_field] ?? object.canonical[link.source_field]
+      const targetValue = object.raw[link.target_field] ?? object.canonical[link.target_field]
+      const relationshipValue = targetValue || sourceValue
+      const targetObjectId = targetObjectIdForTraceability(link, relationshipValue)
+      if (!targetObjectId) return null
+      return {
+        id: `link:${object.id}:${link.relationship_type}:${relationshipValue}`,
+        sourceObjectId: object.id,
+        sourceObjectType: object.objectType,
+        targetObjectId,
+        targetObjectType: targetObjectId.split(':')[0],
+        targetLabel: String(relationshipValue),
+        relationshipType: link.relationship_type,
+        status: link.required && !relationshipValue ? 'warning' : 'pass',
+        evidence: `${object.id} maps through ${link.relationship_type} using ${link.source_field}.`,
+      }
+    })
+    .filter(Boolean)
+}
+
 export async function listQualityEvents() {
   const rows = await loadQualityEventRows()
   return rows.map(qualityEventFromRow)
@@ -321,7 +423,35 @@ export async function buildCanonicalLoadBundle({
   connectorType = 'csv',
   sourceObject = 'quality_events_sample.csv',
   targetObject = 'quality_event',
+  mappingFields,
+  primaryKey,
+  sourceRows,
+  traceabilityLinks,
 } = {}) {
+  if ((connectorType === 'external_reference' || connectorType === 'rest_api') && targetObject !== 'quality_event') {
+    const rows = Array.isArray(sourceRows) ? sourceRows : []
+    const objects = rows.map((row, rowIndex) =>
+      canonicalReferenceObject({
+        row,
+        rowIndex,
+        mappingFields,
+        primaryKey,
+        sourceConnector,
+        sourceObject,
+        targetObject,
+        connectorType,
+      }),
+    )
+    return {
+      objects,
+      links: objects.flatMap((object) => linksForReferenceObject(object, traceabilityLinks)),
+      events: [],
+      warnings: rows.length > 0
+        ? []
+        : ['External-reference canonical load executed without preview rows; no canonical reference objects were created.'],
+    }
+  }
+
   const rows = await loadQualityEventRows()
   const sourceSystemByType = {
     csv: 'manual_csv',

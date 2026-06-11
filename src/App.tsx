@@ -56,6 +56,7 @@ import type {
   BackendHealth,
   BackendRecord,
   CanonicalLoadResult,
+  CanonicalLoadRequest,
   CanonicalObject,
   ControlledTemplatePayload,
   ControlledTemplateStatus,
@@ -1375,21 +1376,48 @@ function App() {
 
   async function loadCanonicalFromMapping() {
     if (!config) return
-    const mapping = config.mappings.quality_event
-    const connector =
-      config.connectors.connectors[canonicalLoadConnectorId] ??
-      config.connectors.connectors[mapping.source_connector]
-    const connectorId = config.connectors.connectors[canonicalLoadConnectorId]
-      ? canonicalLoadConnectorId
-      : mapping.source_connector
-    const savedLoad = await backendClient.loadCanonicalFromMapping(
-      canonicalLoadProfileForConnector(connectorId, connector, mapping),
-    )
+    const mappingId = activeMappingId
+    const mapping = config.mappings[mappingId]
+    if (!mapping) return
+    const connectorId =
+      mappingId === 'quality_event' && config.connectors.connectors[canonicalLoadConnectorId]
+        ? canonicalLoadConnectorId
+        : mapping.source_connector
+    const connector = config.connectors.connectors[connectorId]
+    if (!connector) return
+    const isExternalReference = ['external_reference', 'rest_api'].includes(connector.type)
+    const latestMappingRun = mappingRuns[mappingId]?.[0]
+    if (isExternalReference && latestMappingRun?.status !== 'pass') {
+      record(
+        'canonical',
+        'load_blocked',
+        `${mappingId} canonical load blocked until a passing mapping validation run is retained.`,
+      )
+      return
+    }
+    let profile: CanonicalLoadRequest = canonicalLoadProfileForConnector(connectorId, connector, mapping)
+    if (isExternalReference) {
+      const preview = sourcePreviews[connectorId] ?? await backendClient.previewConnectorRows(connectorId, connector, 25)
+      setSourcePreviews((current) => ({ ...current, [connectorId]: preview }))
+      profile = {
+        ...profile,
+        mappingId,
+        targetObject: mapping.object,
+        mappingFields: mapping.fields,
+        primaryKey: {
+          targetField: mapping.primary_key.target_field,
+          sourceField: mapping.primary_key.source_field,
+        },
+        sourceRows: preview.rows,
+        traceabilityLinks: mapping.traceability_links,
+      }
+    }
+    const savedLoad = await backendClient.loadCanonicalFromMapping(profile)
     await Promise.all([refreshBackend(), refreshWorkflowSurface()])
     saveVersion(
       createSavedVersion({
         kind: 'canonical_load',
-        label: 'quality_event canonical load',
+        label: `${mappingId} canonical load`,
         status: savedLoad.record?.status ?? (savedLoad.warnings.length > 0 ? 'warning' : 'pass'),
         summary: savedLoad.evidence,
         payload: savedLoad,
@@ -1398,7 +1426,7 @@ function App() {
     record(
       'canonical',
       'load',
-      `${savedLoad.objectCount} canonical object(s) and ${savedLoad.linkCount} traceability link(s) loaded.`,
+      `${savedLoad.objectCount} canonical object(s) and ${savedLoad.linkCount} traceability link(s) loaded from ${mappingId}.`,
     )
   }
 
@@ -5287,6 +5315,8 @@ function MappingStudio({
         (Number.isFinite(secondTime) ? secondTime : Number.MAX_SAFE_INTEGER)
     })
   const retryEligibleRuns = extractionRuns.filter((run) => run.payload.retryEligible)
+  const latestMappingRun = mappingRuns[0]
+  const externalMappingApproved = activeMappingId === 'quality_event' || latestMappingRun?.status === 'pass'
 
   return (
     <>
@@ -5328,12 +5358,12 @@ function MappingStudio({
           </label>
           <button
             className="secondary-action"
-            disabled={activeMappingId !== 'quality_event'}
+            disabled={!externalMappingApproved}
             onClick={onLoadCanonical}
             type="button"
           >
             <Database size={15} />
-            Load Canonical
+            {activeMappingId === 'quality_event' ? 'Load Canonical' : 'Load Approved Canonical'}
           </button>
           <button className="primary-action" onClick={onValidate} type="button">
             <ClipboardCheck size={16} />
@@ -5500,6 +5530,23 @@ function MappingStudio({
           ) : (
             <div className="empty-state compact">Validate the mapping to capture evidence.</div>
           )}
+          {activeMappingId !== 'quality_event' ? (
+            <div className="mapping-run-history">
+              <h4>External-Reference Load Gate</h4>
+              <div className="mapping-run-row">
+                <div>
+                  <strong>{externalMappingApproved ? 'Approved for canonical load' : 'Validation approval required'}</strong>
+                  <span>{mapping.source_connector} / {mapping.source_object}</span>
+                  <small>
+                    {externalMappingApproved
+                      ? `Latest retained mapping validation is ${latestMappingRun?.status}.`
+                      : 'Run and retain a passing mapping validation before loading external-reference records.'}
+                  </small>
+                </div>
+                <StatusChip status={externalMappingApproved ? 'pass' : 'warning'} label={externalMappingApproved ? 'approved' : 'pending'} />
+              </div>
+            </div>
+          ) : null}
           {mappingRuns.length > 0 ? (
             <div className="mapping-run-history">
               <h4>Persisted Mapping Runs</h4>

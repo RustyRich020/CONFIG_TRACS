@@ -94,6 +94,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Adds source-specific external-reference mapping templates for CAPA, supplier, and document systems.
 - Promotes CAPA, supplier, and document external-reference mappings into active validation profiles.
 - Connects active CAPA, supplier, and document mapping profiles to credential-aware external-reference metadata and preview adapters.
+- Executes canonical loads for approved external-reference mapping profiles with retained object and traceability evidence.
 - Exports traceability graph packages from active filters and saved readiness evidence packet coverage.
 - Captures signed traceability graph export reviews with reviewer rationale and retention evidence.
 - Delivers traceability graph export packages to reviewer notification channels with persisted delivery evidence.
@@ -251,7 +252,7 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add canonical load execution for approved external-reference mappings.
-2. Add traceability delivery acknowledgement and reviewer response tracking.
-3. Add production cutover checklist export packages for infrastructure reviewers.
-4. Add notification renewal closure and superseded-approval evidence.
+1. Add traceability delivery acknowledgement and reviewer response tracking.
+2. Add production cutover checklist export packages for infrastructure reviewers.
+3. Add notification renewal closure and superseded-approval evidence.
+4. Add external-reference load exception disposition and replay controls.
