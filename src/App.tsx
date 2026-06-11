@@ -187,6 +187,24 @@ const templateCatalog = [
     purpose: 'Map source fields into canonical objects with required fields and transforms.',
   },
   {
+    name: 'CAPA External Reference Mapping',
+    file: 'external_reference_capa_mapping.template.yaml',
+    type: 'Mapping',
+    purpose: 'Map eQMS or CAPA API records into reference-only CAPA traceability objects.',
+  },
+  {
+    name: 'Supplier External Reference Mapping',
+    file: 'external_reference_supplier_mapping.template.yaml',
+    type: 'Mapping',
+    purpose: 'Map supplier master, qualification, scorecard, and risk evidence into canonical supplier records.',
+  },
+  {
+    name: 'Document External Reference Mapping',
+    file: 'external_reference_document_mapping.template.yaml',
+    type: 'Mapping',
+    purpose: 'Map document control or PLM document records into governed document references.',
+  },
+  {
     name: 'Readiness Check',
     file: 'readiness_check.template.yaml',
     type: 'Readiness',

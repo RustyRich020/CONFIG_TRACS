@@ -36,6 +36,32 @@ connectors:
       - status
       - owner
 
+  supplier_external:
+    type: external_reference
+    display_name: Supplier Quality Reference
+    target: supplier
+    integration_mode: reference_only
+    source_object: supplier_records
+    metadata_path: /metadata/suppliers
+    preview_path: /records/suppliers?limit={limit}
+    key_fields:
+      - supplier_id
+      - supplier_name
+      - qualification_status
+
+  document_external:
+    type: external_reference
+    display_name: Document Control Reference
+    target: document_reference
+    integration_mode: reference_only
+    source_object: document_records
+    metadata_path: /metadata/documents
+    preview_path: /records/documents?limit={limit}
+    key_fields:
+      - document_id
+      - document_number
+      - revision
+
   manual_csv_upload:
     type: csv
     display_name: Manual CSV Upload

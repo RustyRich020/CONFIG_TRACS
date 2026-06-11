@@ -1,0 +1,110 @@
+template:
+  template_id: external_reference_document_mapping_v1
+  display_name: Document External Reference Mapping
+  source_family: external_reference
+  target_object_family: traceability
+  target_object: document_reference
+  owner_role: Document Control Owner
+  approval_role: Quality Systems Owner
+  lifecycle_status: starter
+
+object: document_reference
+source_connector: document_external
+source_object: document_records
+
+primary_key:
+  target_field: document_id
+  source_field: document_id
+
+fields:
+  document_id: document_id
+  document_number: document_number
+  title: title
+  document_type: document_type
+  revision: revision
+  lifecycle_status: lifecycle_status
+  owner: owner
+  effective_at: effective_at
+  next_review_due_at: next_review_due_at
+  related_product_code: product_code
+  related_supplier_id: supplier_id
+  related_capa_id: capa_id
+  related_quality_event_id: quality_event_id
+  controlled_copy_url: controlled_copy_url
+  source_system: source_system
+  source_url: source_url
+
+required:
+  - document_id
+  - document_number
+  - title
+  - revision
+  - lifecycle_status
+
+transforms:
+  effective_at:
+    type: date
+    accepted_formats:
+      - yyyy-MM-dd
+      - MM/dd/yyyy
+      - yyyy-MM-ddTHH:mm:ssZ
+  next_review_due_at:
+    type: date
+    accepted_formats:
+      - yyyy-MM-dd
+      - MM/dd/yyyy
+  document_type:
+    type: enum
+    allowed_values:
+      - procedure
+      - work_instruction
+      - specification
+      - drawing
+      - quality_agreement
+      - audit_record
+      - validation_record
+      - report
+      - other
+  lifecycle_status:
+    type: enum
+    allowed_values:
+      - draft
+      - in_review
+      - approved
+      - effective
+      - superseded
+      - obsolete
+
+traceability_links:
+  - relationship_type: document_to_product
+    source_field: product_code
+    target_field: document_id
+    required: false
+  - relationship_type: document_to_supplier
+    source_field: supplier_id
+    target_field: document_id
+    required: false
+  - relationship_type: document_to_capa
+    source_field: capa_id
+    target_field: document_id
+    required: false
+  - relationship_type: document_to_quality_event
+    source_field: quality_event_id
+    target_field: document_id
+    required: false
+
+readiness_checks:
+  - id: document_revision_control_present
+    severity: blocking
+    evidence: document_number, revision, and lifecycle_status must be mapped.
+  - id: document_effective_date_present
+    severity: warning
+    evidence: effective_at should be mapped for controlled release evidence.
+  - id: document_traceability_link_present
+    severity: warning
+    evidence: at least one related product, supplier, CAPA, or quality event link should be available.
+
+notes:
+  - Use this template for document control systems, SharePoint libraries, PLM document records, and eQMS document APIs.
+  - Store links or immutable references, not uncontrolled document content, unless the destination repository is approved.
+  - Use controlled_copy_url only for governed repositories with access control and revision history.

@@ -88,6 +88,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Validates external-reference connector credentials with backend environment and token rotation checks.
 - Adds a traceability path explorer that shows event-to-object relationship paths and coverage.
 - Adds guarded notification delivery connectors for email, Teams, and SharePoint export folders with persisted delivery evidence.
+- Adds source-specific external-reference mapping templates for CAPA, supplier, and document systems.
 - Discovers external-reference metadata and bounded preview rows through a credential-aware backend adapter.
 - Filters traceability graphs by object family, status, and saved evidence packet coverage.
 - Adds a selectable SQLite record store adapter behind the existing API persistence contract.
@@ -216,7 +217,7 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add source-specific external-reference mapping templates for CAPA, supplier, and document systems.
-2. Add traceability graph export packages for evidence packets.
-3. Add a guarded JSON/SQLite-to-Postgres import utility after a target database is selected.
-4. Add tenant-approved live email and Teams smoke fixtures when real endpoints are available.
+1. Add traceability graph export packages for evidence packets.
+2. Add a guarded JSON/SQLite-to-Postgres import utility after a target database is selected.
+3. Add tenant-approved live email and Teams smoke fixtures when real endpoints are available.
+4. Promote external-reference mapping templates into active mapping validation profiles.
