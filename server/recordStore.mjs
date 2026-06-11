@@ -59,7 +59,7 @@ export const recordStoreSchema = {
   tables: [
     {
       name: 'tracs_records',
-      purpose: 'Canonical versioned record table for deployment profiles, connector runs, mapping runs, contracts, adapter checks, controlled templates, signed traceability export reviews, notification live-channel approvals, and Postgres import reconciliation summaries.',
+      purpose: 'Canonical versioned record table for deployment profiles, connector runs, mapping runs, contracts, adapter checks, controlled templates, signed traceability export reviews, notification live-channel approvals, Postgres import reconciliation summaries, and Postgres cutover approvals.',
       columns: [
         { name: 'id', type: 'text', constraints: 'primary key' },
         { name: 'kind', type: 'text', constraints: 'not null indexed' },

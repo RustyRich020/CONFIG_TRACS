@@ -175,6 +175,7 @@ export type SavedVersionKind =
   | 'notification_live_channel_approval'
   | 'traceability_export_review'
   | 'postgres_import_reconciliation'
+  | 'postgres_cutover_approval'
 
 export type SavedVersion = {
   id: string
@@ -206,6 +207,7 @@ export type BackendRecordKind =
   | 'notification_live_channel_approval'
   | 'traceability_export_review'
   | 'postgres_import_reconciliation'
+  | 'postgres_cutover_approval'
 
 export type BackendRecord<TPayload = unknown> = {
   id: string
@@ -291,6 +293,40 @@ export type PostgresImportReconciliation = {
     id: string
     label: string
     missing: string[]
+  }>
+  evidence: string
+}
+
+export type PostgresCutoverApprovalStatus = 'draft' | 'approved' | 'approved_with_conditions' | 'rejected'
+
+export type PostgresCutoverGate = {
+  id: string
+  label: string
+  status: StatusLevel
+  evidence: string
+}
+
+export type PostgresCutoverApproval = {
+  approvalId: string
+  signedAt: string
+  reviewer: string
+  status: PostgresCutoverApprovalStatus
+  targetStoreMode: string
+  sourceStoreMode: 'json' | 'sqlite' | 'mixed' | 'unknown'
+  plannedCutoverAt: string
+  rollbackWindow: string
+  rationale: string
+  conditions: string
+  gates: PostgresCutoverGate[]
+  latestReconciliation?: PostgresImportReconciliation
+  checklistGates: string[]
+  rollbackPlan: string[]
+  auditHistory: Array<{
+    action: 'cutover_gate_review'
+    actor: string
+    timestamp: string
+    status: PostgresCutoverApprovalStatus
+    summary: string
   }>
   evidence: string
 }

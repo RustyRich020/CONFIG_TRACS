@@ -358,6 +358,8 @@ The guarded import utility is implemented in `server/importRecordsToPostgres.mjs
 
 Each guarded import run persists a `postgres_import_reconciliation` record in Postgres. The payload captures source type, source file, dry-run/apply mode, read/valid/invalid counts, duplicate IDs, duplicate versions, importable/imported/skipped totals, record-kind distribution, sampled invalid records, and summary evidence. The Backend workspace renders these records as an import reconciliation dashboard so teams can compare migration outcomes before retiring JSON or SQLite storage.
 
+Production Postgres cutover approvals are persisted as `postgres_cutover_approval` records. The Backend workspace evaluates the active storage health, loaded migration checklist, latest import reconciliation run, applied-import evidence, and rollback plan before reviewer sign-off. Approval records retain reviewer, approval status, planned cutover timing, rollback window, conditions, gate-by-gate evidence, latest reconciliation payload, checklist gates, rollback steps, and audit history. A fully approved cutover should only be treated as production-ready when the gate status is `pass`; dry-run-only reconciliation keeps the approval conditional or warning until an applied import record is retained.
+
 ## GitHub Implementation Plan
 
 1. Create branch: `codex/backend-persistence-adapter-contracts`

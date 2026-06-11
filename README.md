@@ -101,6 +101,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Adds a selectable SQLite record store adapter behind the existing API persistence contract.
 - Adds an optional Postgres record store adapter and migration checklist for shared production persistence.
 - Adds Postgres import reconciliation summaries and Backend dashboard views for guarded migration runs.
+- Captures applied Postgres cutover approval gates with reviewer sign-off, reconciliation evidence, and rollback conditions.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
@@ -249,7 +250,7 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add applied migration approval gates for production Postgres cutover.
-2. Add notification approval expiry reminders and renewal routing.
-3. Add canonical load execution for approved external-reference mappings.
-4. Add traceability delivery acknowledgement and reviewer response tracking.
+1. Add notification approval expiry reminders and renewal routing.
+2. Add canonical load execution for approved external-reference mappings.
+3. Add traceability delivery acknowledgement and reviewer response tracking.
+4. Add production cutover checklist export packages for infrastructure reviewers.

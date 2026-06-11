@@ -73,6 +73,8 @@ import type {
   NotificationLiveChannelApprovalStatus,
   NotificationDeliveryPayload,
   NotificationDeliveryResult,
+  PostgresCutoverApproval,
+  PostgresCutoverApprovalStatus,
   PostgresMigrationChecklist,
   PostgresImportReconciliation,
   QualityEvent,
@@ -523,6 +525,77 @@ function notificationApprovalStatusLevel(status: NotificationLiveChannelApproval
   if (status === 'approved') return 'pass'
   if (status === 'rejected') return 'blocking'
   return 'warning'
+}
+
+function postgresCutoverApprovalStatusLevel(status: PostgresCutoverApprovalStatus, gateStatus: StatusLevel): StatusLevel {
+  if (status === 'rejected') return 'blocking'
+  if (status === 'approved') return gateStatus
+  if (status === 'approved_with_conditions') return gateStatus === 'blocking' ? 'blocking' : 'warning'
+  return 'warning'
+}
+
+function postgresCutoverApprovalLabel(status: PostgresCutoverApprovalStatus) {
+  return status === 'approved_with_conditions' ? 'Approved with conditions' : titleize(status)
+}
+
+function evaluatePostgresCutoverGates({
+  backendHealth,
+  latestReconciliation,
+  postgresMigrationChecklist,
+}: {
+  backendHealth: BackendHealth | null
+  latestReconciliation?: BackendRecord<PostgresImportReconciliation>
+  postgresMigrationChecklist: PostgresMigrationChecklist | null
+}) {
+  const gates = [
+    {
+      id: 'postgres_store_active',
+      label: 'Postgres store active',
+      status: backendHealth?.store?.mode === 'postgres' ? 'pass' : 'blocking',
+      evidence:
+        backendHealth?.store?.mode === 'postgres'
+          ? backendHealth.evidence
+          : 'Backend health must report store.mode=postgres before production cutover.',
+    },
+    {
+      id: 'schema_blueprint_loaded',
+      label: 'Storage schema confirmed',
+      status: postgresMigrationChecklist?.adapter === 'postgres' ? 'pass' : 'warning',
+      evidence: postgresMigrationChecklist
+        ? `${postgresMigrationChecklist.adapter} migration checklist loaded with ${(postgresMigrationChecklist.gates ?? []).length} gate(s).`
+        : 'Postgres migration checklist has not been loaded from the backend.',
+    },
+    {
+      id: 'reconciliation_evidence_retained',
+      label: 'Import reconciliation retained',
+      status: latestReconciliation ? latestReconciliation.status : 'blocking',
+      evidence: latestReconciliation
+        ? latestReconciliation.payload.evidence
+        : 'Run a guarded JSON or SQLite to Postgres import dry run before cutover approval.',
+    },
+    {
+      id: 'applied_import_or_conditions',
+      label: 'Applied import or conditional plan',
+      status: latestReconciliation?.payload.mode === 'apply' ? 'pass' : 'warning',
+      evidence:
+        latestReconciliation?.payload.mode === 'apply'
+          ? `${latestReconciliation.payload.imported} record(s) imported in the latest applied migration run.`
+          : 'Latest reconciliation is dry-run only; approval should remain conditional until apply evidence exists.',
+    },
+    {
+      id: 'rollback_window_documented',
+      label: 'Rollback window documented',
+      status: (postgresMigrationChecklist?.rollback?.length ?? 0) > 0 ? 'pass' : 'warning',
+      evidence:
+        (postgresMigrationChecklist?.rollback?.length ?? 0) > 0
+          ? `${postgresMigrationChecklist?.rollback?.length} rollback step(s) available from the storage contract.`
+          : 'Rollback steps are not available from the storage contract.',
+    },
+  ] satisfies PostgresCutoverApproval['gates']
+  return {
+    gates,
+    status: mostSevereStatus(gates.map((gate) => gate.status)),
+  }
 }
 
 function notificationApprovalExpiresAt(approvedAt: string) {
@@ -1530,6 +1603,90 @@ function App() {
     )
   }
 
+  async function savePostgresCutoverApproval({
+    conditions,
+    plannedCutoverAt,
+    rationale,
+    reviewer,
+    rollbackWindow,
+    status,
+  }: {
+    conditions: string
+    plannedCutoverAt: string
+    rationale: string
+    reviewer: string
+    rollbackWindow: string
+    status: PostgresCutoverApprovalStatus
+  }) {
+    const signedAt = new Date().toISOString()
+    const reviewerName = reviewer.trim() || 'Unassigned reviewer'
+    const reconciliationRecords = backendRecords.filter(
+      (record): record is BackendRecord<PostgresImportReconciliation> =>
+        record.kind === 'postgres_import_reconciliation',
+    )
+    const latestReconciliation = reconciliationRecords[0]
+    const gateReview = evaluatePostgresCutoverGates({
+      backendHealth,
+      latestReconciliation,
+      postgresMigrationChecklist,
+    })
+    const approvalStatus = postgresCutoverApprovalStatusLevel(status, gateReview.status)
+    const payload: PostgresCutoverApproval = {
+      approvalId: `postgres_cutover_approval:${signedAt}`,
+      signedAt,
+      reviewer: reviewerName,
+      status,
+      targetStoreMode: backendHealth?.store?.mode ?? 'unknown',
+      sourceStoreMode: latestReconciliation?.payload.source === 'sqlite'
+        ? 'sqlite'
+        : latestReconciliation?.payload.source === 'json'
+          ? 'json'
+          : latestReconciliation?.payload.source
+            ? 'mixed'
+            : 'unknown',
+      plannedCutoverAt,
+      rollbackWindow: rollbackWindow.trim() || 'One release window with JSON or SQLite storage retained read-only.',
+      rationale: rationale.trim() || 'No reviewer rationale recorded.',
+      conditions: conditions.trim(),
+      gates: gateReview.gates,
+      latestReconciliation: latestReconciliation?.payload,
+      checklistGates: postgresMigrationChecklist?.gates ?? [],
+      rollbackPlan: postgresMigrationChecklist?.rollback ?? [],
+      auditHistory: [
+        {
+          action: 'cutover_gate_review',
+          actor: reviewerName,
+          timestamp: signedAt,
+          status,
+          summary: `${reviewerName} recorded ${postgresCutoverApprovalLabel(status)} Postgres cutover approval with ${gateReview.status} gate status.`,
+        },
+      ],
+      evidence: `${reviewerName} recorded ${postgresCutoverApprovalLabel(status)} Postgres cutover approval. Gate status: ${gateReview.status}.`,
+    }
+    const saved = await backendClient.saveRecord({
+      kind: 'postgres_cutover_approval',
+      label: 'production Postgres cutover approval',
+      status: approvalStatus,
+      summary: payload.evidence,
+      payload,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'postgres_cutover_approval',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record(
+      'backend',
+      'postgres_cutover_approval',
+      `Postgres cutover approval saved as backend record v${saved.version}.`,
+    )
+  }
+
   async function saveNotificationLiveChannelApproval({
     approvedChannels,
     rationale,
@@ -1989,9 +2146,14 @@ function App() {
               (record): record is BackendRecord<NotificationLiveChannelApproval> =>
                 record.kind === 'notification_live_channel_approval',
             )}
+            postgresCutoverApprovalRecords={backendRecords.filter(
+              (record): record is BackendRecord<PostgresCutoverApproval> =>
+                record.kind === 'postgres_cutover_approval',
+            )}
             onRefresh={refreshBackend}
             onRunAdapterDryRun={runAdapterDryRun}
             onRunNotificationSmokeFixtures={runNotificationSmokeFixtures}
+            onSavePostgresCutoverApproval={savePostgresCutoverApproval}
             onSaveSnapshot={saveBackendSnapshot}
             onSaveNotificationLiveApproval={saveNotificationLiveChannelApproval}
             storageSchema={storageSchema}
@@ -2621,9 +2783,11 @@ function BackendPersistenceView({
   backendRecords,
   connectorEntries,
   notificationApprovalRecords,
+  postgresCutoverApprovalRecords,
   onRefresh,
   onRunAdapterDryRun,
   onRunNotificationSmokeFixtures,
+  onSavePostgresCutoverApproval,
   onSaveSnapshot,
   onSaveNotificationLiveApproval,
   postgresMigrationChecklist,
@@ -2635,9 +2799,18 @@ function BackendPersistenceView({
   backendRecords: BackendRecord[]
   connectorEntries: [string, AppConfig['connectors']['connectors'][string]][]
   notificationApprovalRecords: BackendRecord<NotificationLiveChannelApproval>[]
+  postgresCutoverApprovalRecords: BackendRecord<PostgresCutoverApproval>[]
   onRefresh: () => void
   onRunAdapterDryRun: (connectorId: string) => void
   onRunNotificationSmokeFixtures: () => void
+  onSavePostgresCutoverApproval: (request: {
+    conditions: string
+    plannedCutoverAt: string
+    rationale: string
+    reviewer: string
+    rollbackWindow: string
+    status: PostgresCutoverApprovalStatus
+  }) => void
   onSaveSnapshot: () => void
   onSaveNotificationLiveApproval: (request: {
     approvedChannels: NotificationLiveChannelApproval['approvedChannels']
@@ -2658,6 +2831,19 @@ function BackendPersistenceView({
     'email',
     'teams',
   ])
+  const [postgresReviewer, setPostgresReviewer] = useState('TRACS Platform Owner')
+  const [postgresApprovalStatus, setPostgresApprovalStatus] =
+    useState<PostgresCutoverApprovalStatus>('approved_with_conditions')
+  const [postgresCutoverAt, setPostgresCutoverAt] = useState('')
+  const [postgresRollbackWindow, setPostgresRollbackWindow] = useState(
+    'Keep JSON or SQLite storage read-only for one release window after Postgres cutover.',
+  )
+  const [postgresCutoverRationale, setPostgresCutoverRationale] = useState(
+    'Reviewed Postgres health, migration checklist, import reconciliation evidence, and rollback readiness.',
+  )
+  const [postgresCutoverConditions, setPostgresCutoverConditions] = useState(
+    'Apply-run reconciliation must be retained before production traffic is switched.',
+  )
   const recordCounts = backendRecords.reduce(
     (summary, record) => {
       summary[record.kind] = (summary[record.kind] ?? 0) + 1
@@ -2685,6 +2871,16 @@ function BackendPersistenceView({
     { read: 0, importable: 0, imported: 0, skipped: 0, invalid: 0 },
   )
   const latestNotificationApproval = notificationApprovalRecords[0]
+  const latestPostgresCutoverApproval = postgresCutoverApprovalRecords[0]
+  const postgresCutoverGateReview = evaluatePostgresCutoverGates({
+    backendHealth,
+    latestReconciliation,
+    postgresMigrationChecklist,
+  })
+  const postgresCutoverStatus = postgresCutoverApprovalStatusLevel(
+    postgresApprovalStatus,
+    postgresCutoverGateReview.status,
+  )
   const deliveryRecords = backendRecords.filter(
     (record): record is BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }> =>
       record.kind === 'notification_delivery',
@@ -3085,6 +3281,123 @@ function BackendPersistenceView({
         ) : (
           <div className="empty-state compact">No import reconciliation runs have been retained yet.</div>
         )}
+      </section>
+
+      <section className="panel notification-approval-panel">
+        <PanelHeader
+          icon={ShieldCheck}
+          title="Postgres Cutover Approval Gates"
+          subtitle="Reviewer sign-off before JSON or SQLite storage is retired for production Postgres persistence."
+        />
+        <div className="notification-approval-grid">
+          <div className="notification-approval-form">
+            <div className="trace-review-grid">
+              <label>
+                <span>Reviewer</span>
+                <input value={postgresReviewer} onChange={(event) => setPostgresReviewer(event.target.value)} />
+              </label>
+              <label>
+                <span>Approval status</span>
+                <select
+                  value={postgresApprovalStatus}
+                  onChange={(event) =>
+                    setPostgresApprovalStatus(event.target.value as PostgresCutoverApprovalStatus)
+                  }
+                >
+                  <option value="approved_with_conditions">Approved with conditions</option>
+                  <option value="approved">Approved</option>
+                  <option value="draft">Draft</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </label>
+              <label>
+                <span>Planned cutover</span>
+                <input
+                  value={postgresCutoverAt}
+                  onChange={(event) => setPostgresCutoverAt(event.target.value)}
+                  placeholder="2026-06-15 18:00 ET"
+                />
+              </label>
+              <label>
+                <span>Rollback window</span>
+                <input
+                  value={postgresRollbackWindow}
+                  onChange={(event) => setPostgresRollbackWindow(event.target.value)}
+                />
+              </label>
+              <label className="trace-review-rationale">
+                <span>Rationale</span>
+                <textarea
+                  value={postgresCutoverRationale}
+                  onChange={(event) => setPostgresCutoverRationale(event.target.value)}
+                />
+              </label>
+              <label className="trace-review-rationale">
+                <span>Conditions</span>
+                <textarea
+                  value={postgresCutoverConditions}
+                  onChange={(event) => setPostgresCutoverConditions(event.target.value)}
+                />
+              </label>
+            </div>
+            <div className="toolbar-actions notification-approval-actions">
+              <button
+                className="primary-action"
+                onClick={() =>
+                  onSavePostgresCutoverApproval({
+                    conditions: postgresCutoverConditions,
+                    plannedCutoverAt: postgresCutoverAt,
+                    rationale: postgresCutoverRationale,
+                    reviewer: postgresReviewer,
+                    rollbackWindow: postgresRollbackWindow,
+                    status: postgresApprovalStatus,
+                  })
+                }
+                type="button"
+              >
+                <ShieldCheck size={15} />
+                Save Cutover Approval
+              </button>
+            </div>
+          </div>
+          <div className="notification-approval-summary">
+            <div className="metadata-grid">
+              <Metadata label="Gate status" value={postgresCutoverGateReview.status} />
+              <Metadata label="Record status" value={postgresCutoverStatus} />
+              <Metadata label="Approvals" value={String(postgresCutoverApprovalRecords.length)} />
+              <Metadata label="Store" value={backendHealth?.store?.mode ?? 'unknown'} />
+              <Metadata label="Latest import" value={latestReconciliation ? titleize(latestReconciliation.payload.mode) : 'Not run'} />
+              <Metadata label="Latest approval" value={latestPostgresCutoverApproval ? postgresCutoverApprovalLabel(latestPostgresCutoverApproval.payload.status) : 'Not signed'} />
+            </div>
+            <div className="connector-run-history">
+              <h4>Gate evidence</h4>
+              {postgresCutoverGateReview.gates.map((gate) => (
+                <div className="connector-run-row" key={gate.id}>
+                  <div>
+                    <strong>{gate.label}</strong>
+                    <small>{gate.evidence}</small>
+                  </div>
+                  <StatusChip status={gate.status} label={gate.status} />
+                </div>
+              ))}
+            </div>
+            {latestPostgresCutoverApproval ? (
+              <div className="connector-run-history">
+                <h4>Latest cutover approval</h4>
+                <div className="connector-run-row">
+                  <div>
+                    <strong>{latestPostgresCutoverApproval.payload.reviewer}</strong>
+                    <span>
+                      v{latestPostgresCutoverApproval.version} / {new Date(latestPostgresCutoverApproval.createdAt).toLocaleString()}
+                    </span>
+                    <small>{latestPostgresCutoverApproval.payload.evidence}</small>
+                  </div>
+                  <StatusChip status={latestPostgresCutoverApproval.status} label={latestPostgresCutoverApproval.status} />
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
       </section>
 
       <section className="panel storage-schema-panel">
