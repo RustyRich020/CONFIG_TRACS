@@ -89,6 +89,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Adds a traceability path explorer that shows event-to-object relationship paths and coverage.
 - Adds guarded notification delivery connectors for email, Teams, and SharePoint export folders with persisted delivery evidence.
 - Adds tenant notification smoke fixtures for guarded email and Teams endpoint validation.
+- Requires reviewer sign-off records before tenant live notification channels can execute.
 - Adds source-specific external-reference mapping templates for CAPA, supplier, and document systems.
 - Promotes CAPA, supplier, and document external-reference mappings into active validation profiles.
 - Exports traceability graph packages from active filters and saved readiness evidence packet coverage.
@@ -121,6 +122,7 @@ Notification delivery uses backend environment references only and stays in dry-
 Live delivery controls:
 
 - Global live gate: `TRACS_NOTIFICATION_LIVE_DELIVERY=true`
+- Reviewer live-channel sign-off: save an approved `notification_live_channel_approval` record in Backend before enabling tenant live delivery
 - Email live send: `TRACS_GRAPH_TOKEN`, optional `TRACS_NOTIFICATION_EMAIL_SENDER`
 - Disable a channel while global live delivery is enabled: `TRACS_NOTIFICATION_EMAIL_LIVE=false`, `TRACS_NOTIFICATION_TEAMS_LIVE=false`, or `TRACS_NOTIFICATION_SHAREPOINT_FOLDER_LIVE=false`
 
@@ -245,7 +247,7 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add notification delivery reviewer sign-off before enabling tenant live channels.
-2. Add live external-reference preview adapters for active CAPA, supplier, and document profiles.
-3. Add traceability export package delivery to reviewer notification channels.
-4. Add applied migration approval gates for production Postgres cutover.
+1. Add live external-reference preview adapters for active CAPA, supplier, and document profiles.
+2. Add traceability export package delivery to reviewer notification channels.
+3. Add applied migration approval gates for production Postgres cutover.
+4. Add notification approval expiry reminders and renewal routing.

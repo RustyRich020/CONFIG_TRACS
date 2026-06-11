@@ -172,6 +172,7 @@ export type SavedVersionKind =
   | 'extraction_run'
   | 'credential_validation'
   | 'notification_delivery'
+  | 'notification_live_channel_approval'
   | 'traceability_export_review'
   | 'postgres_import_reconciliation'
 
@@ -202,6 +203,7 @@ export type BackendRecordKind =
   | 'extraction_run'
   | 'credential_validation'
   | 'notification_delivery'
+  | 'notification_live_channel_approval'
   | 'traceability_export_review'
   | 'postgres_import_reconciliation'
 
@@ -731,6 +733,27 @@ export type NotificationDeliveryPayload = {
   subject: string
   summary: string
   evidence: unknown
+}
+
+export type NotificationLiveChannelApprovalStatus = 'draft' | 'approved' | 'rejected'
+
+export type NotificationLiveChannelApproval = {
+  approvalId: string
+  approvedAt: string
+  reviewer: string
+  status: NotificationLiveChannelApprovalStatus
+  approvedChannels: Array<'email' | 'teams' | 'sharepoint_folder'>
+  rationale: string
+  requiredEvidence: string[]
+  expiresAt: string
+  auditHistory: Array<{
+    action: 'live_channel_signoff'
+    actor: string
+    timestamp: string
+    status: NotificationLiveChannelApprovalStatus
+    summary: string
+  }>
+  evidence: string
 }
 
 export type NotificationDeliveryResult = {

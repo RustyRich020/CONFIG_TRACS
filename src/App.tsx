@@ -69,6 +69,8 @@ import type {
   ExtractionJobPayload,
   ExtractionRunPayload,
   MappingValidationResult,
+  NotificationLiveChannelApproval,
+  NotificationLiveChannelApprovalStatus,
   NotificationDeliveryPayload,
   NotificationDeliveryResult,
   PostgresMigrationChecklist,
@@ -479,6 +481,18 @@ function notificationToDeliveryPayload(
     summary: notification.summary,
     evidence: notification,
   }
+}
+
+function notificationApprovalStatusLevel(status: NotificationLiveChannelApprovalStatus): StatusLevel {
+  if (status === 'approved') return 'pass'
+  if (status === 'rejected') return 'blocking'
+  return 'warning'
+}
+
+function notificationApprovalExpiresAt(approvedAt: string) {
+  const date = new Date(approvedAt)
+  date.setDate(date.getDate() + 90)
+  return date.toISOString()
 }
 
 function defaultEvidenceApproval(): ReadinessEvidenceApproval {
@@ -1417,6 +1431,67 @@ function App() {
     )
   }
 
+  async function saveNotificationLiveChannelApproval({
+    approvedChannels,
+    rationale,
+    reviewer,
+    status,
+  }: {
+    approvedChannels: NotificationLiveChannelApproval['approvedChannels']
+    rationale: string
+    reviewer: string
+    status: NotificationLiveChannelApprovalStatus
+  }) {
+    const approvedAt = new Date().toISOString()
+    const reviewerName = reviewer.trim() || 'Unassigned reviewer'
+    const payload: NotificationLiveChannelApproval = {
+      approvalId: `notification_live_channel_approval:${approvedAt}`,
+      approvedAt,
+      reviewer: reviewerName,
+      status,
+      approvedChannels,
+      rationale: rationale.trim() || 'No reviewer rationale recorded.',
+      requiredEvidence: [
+        'Dry-run notification_delivery evidence reviewed.',
+        'Tenant recipients, Teams webhook, or SharePoint folder target approved.',
+        'Live delivery environment variables will be enabled one channel at a time.',
+      ],
+      expiresAt: notificationApprovalExpiresAt(approvedAt),
+      auditHistory: [
+        {
+          action: 'live_channel_signoff',
+          actor: reviewerName,
+          timestamp: approvedAt,
+          status,
+          summary: `${reviewerName} recorded ${titleize(status)} sign-off for ${approvedChannels.length} notification channel(s).`,
+        },
+      ],
+      evidence: `${reviewerName} recorded ${titleize(status)} sign-off for ${approvedChannels.map(titleize).join(', ') || 'no live channels'}.`,
+    }
+    const saved = await backendClient.saveRecord({
+      kind: 'notification_live_channel_approval',
+      label: 'tenant notification live-channel approval',
+      status: notificationApprovalStatusLevel(status),
+      summary: payload.evidence,
+      payload,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'notification_live_channel_approval',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record(
+      'notification',
+      'live_channel_signoff',
+      `Notification live-channel approval saved as backend record v${saved.version}.`,
+    )
+  }
+
   async function saveReportCatalogItem(report: ReportCatalogItem, action: ReportCatalogSaveAction) {
     const freshness = reportFreshnessStatus(report.lastRefresh, report.maxAgeHours)
     const normalizedReport: ReportCatalogItem = {
@@ -1804,10 +1879,15 @@ function App() {
             backendHealth={backendHealth}
             backendRecords={backendRecords}
             connectorEntries={connectorEntries}
+            notificationApprovalRecords={backendRecords.filter(
+              (record): record is BackendRecord<NotificationLiveChannelApproval> =>
+                record.kind === 'notification_live_channel_approval',
+            )}
             onRefresh={refreshBackend}
             onRunAdapterDryRun={runAdapterDryRun}
             onRunNotificationSmokeFixtures={runNotificationSmokeFixtures}
             onSaveSnapshot={saveBackendSnapshot}
+            onSaveNotificationLiveApproval={saveNotificationLiveChannelApproval}
             storageSchema={storageSchema}
             postgresMigrationChecklist={postgresMigrationChecklist}
           />
@@ -2434,10 +2514,12 @@ function BackendPersistenceView({
   backendHealth,
   backendRecords,
   connectorEntries,
+  notificationApprovalRecords,
   onRefresh,
   onRunAdapterDryRun,
   onRunNotificationSmokeFixtures,
   onSaveSnapshot,
+  onSaveNotificationLiveApproval,
   postgresMigrationChecklist,
   storageSchema,
 }: {
@@ -2446,13 +2528,30 @@ function BackendPersistenceView({
   backendHealth: BackendHealth | null
   backendRecords: BackendRecord[]
   connectorEntries: [string, AppConfig['connectors']['connectors'][string]][]
+  notificationApprovalRecords: BackendRecord<NotificationLiveChannelApproval>[]
   onRefresh: () => void
   onRunAdapterDryRun: (connectorId: string) => void
   onRunNotificationSmokeFixtures: () => void
   onSaveSnapshot: () => void
+  onSaveNotificationLiveApproval: (request: {
+    approvedChannels: NotificationLiveChannelApproval['approvedChannels']
+    rationale: string
+    reviewer: string
+    status: NotificationLiveChannelApprovalStatus
+  }) => void
   postgresMigrationChecklist: PostgresMigrationChecklist | null
   storageSchema: RecordStoreSchema | null
 }) {
+  const [notificationReviewer, setNotificationReviewer] = useState('TRACS Tenant Reviewer')
+  const [notificationApprovalStatus, setNotificationApprovalStatus] =
+    useState<NotificationLiveChannelApprovalStatus>('approved')
+  const [notificationApprovalRationale, setNotificationApprovalRationale] = useState(
+    'Reviewed dry-run delivery evidence and approved staged tenant live-channel validation.',
+  )
+  const [notificationChannels, setNotificationChannels] = useState<NotificationLiveChannelApproval['approvedChannels']>([
+    'email',
+    'teams',
+  ])
   const recordCounts = backendRecords.reduce(
     (summary, record) => {
       summary[record.kind] = (summary[record.kind] ?? 0) + 1
@@ -2479,6 +2578,28 @@ function BackendPersistenceView({
     }),
     { read: 0, importable: 0, imported: 0, skipped: 0, invalid: 0 },
   )
+  const latestNotificationApproval = notificationApprovalRecords[0]
+  const deliveryRecords = backendRecords.filter(
+    (record): record is BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }> =>
+      record.kind === 'notification_delivery',
+  )
+  const deliveryEvidenceCounts = deliveryRecords.reduce(
+    (summary, record) => {
+      record.payload.result.channelResults.forEach((result) => {
+        summary[result.mode] = (summary[result.mode] ?? 0) + 1
+      })
+      return summary
+    },
+    {} as Record<NotificationDeliveryResult['channelResults'][number]['mode'], number>,
+  )
+
+  function toggleNotificationChannel(channel: NotificationLiveChannelApproval['approvedChannels'][number]) {
+    setNotificationChannels((current) =>
+      current.includes(channel)
+        ? current.filter((item) => item !== channel)
+        : [...current, channel],
+    )
+  }
 
   return (
     <>
@@ -2621,6 +2742,137 @@ function BackendPersistenceView({
             })}
           </div>
         </section>
+      </section>
+
+      <section className="panel notification-approval-panel">
+        <PanelHeader
+          icon={Bell}
+          title="Notification Live-Channel Sign-Off"
+          subtitle="Reviewer approval required before tenant live email, Teams, or SharePoint folder delivery can execute."
+        />
+        <div className="notification-approval-grid">
+          <div className="notification-approval-form">
+            <div className="trace-review-grid">
+              <label>
+                <span>Reviewer</span>
+                <input
+                  value={notificationReviewer}
+                  onChange={(event) => setNotificationReviewer(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Approval status</span>
+                <select
+                  value={notificationApprovalStatus}
+                  onChange={(event) =>
+                    setNotificationApprovalStatus(event.target.value as NotificationLiveChannelApprovalStatus)
+                  }
+                >
+                  <option value="approved">Approved</option>
+                  <option value="draft">Draft</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </label>
+              <label className="trace-review-rationale">
+                <span>Rationale</span>
+                <textarea
+                  value={notificationApprovalRationale}
+                  onChange={(event) => setNotificationApprovalRationale(event.target.value)}
+                />
+              </label>
+            </div>
+            <div className="notification-channel-toggle">
+              {(['email', 'teams', 'sharepoint_folder'] as const).map((channel) => (
+                <label key={channel}>
+                  <input
+                    checked={notificationChannels.includes(channel)}
+                    onChange={() => toggleNotificationChannel(channel)}
+                    type="checkbox"
+                  />
+                  <span>{titleize(channel)}</span>
+                </label>
+              ))}
+            </div>
+            <div className="toolbar-actions notification-approval-actions">
+              <button
+                className="secondary-action"
+                onClick={onRunNotificationSmokeFixtures}
+                type="button"
+              >
+                <Bell size={15} />
+                Run Dry-Run Evidence
+              </button>
+              <button
+                className="primary-action"
+                onClick={() =>
+                  onSaveNotificationLiveApproval({
+                    approvedChannels: notificationChannels,
+                    rationale: notificationApprovalRationale,
+                    reviewer: notificationReviewer,
+                    status: notificationApprovalStatus,
+                  })
+                }
+                type="button"
+              >
+                <ShieldCheck size={15} />
+                Save Sign-Off
+              </button>
+            </div>
+          </div>
+          <div className="notification-approval-summary">
+            <div className="metadata-grid">
+              <Metadata label="Approvals" value={String(notificationApprovalRecords.length)} />
+              <Metadata label="Dry-run channels" value={String(deliveryEvidenceCounts.dry_run ?? 0)} />
+              <Metadata label="Live channels" value={String(deliveryEvidenceCounts.live ?? 0)} />
+              <Metadata label="Skipped channels" value={String(deliveryEvidenceCounts.skipped ?? 0)} />
+              <Metadata
+                label="Latest status"
+                value={latestNotificationApproval ? titleize(latestNotificationApproval.payload.status) : 'Not signed'}
+              />
+              <Metadata
+                label="Expires"
+                value={
+                  latestNotificationApproval
+                    ? new Date(latestNotificationApproval.payload.expiresAt).toLocaleDateString()
+                    : 'No active approval'
+                }
+              />
+            </div>
+            {latestNotificationApproval ? (
+              <div className="connector-run-history">
+                <h4>Latest approval</h4>
+                <div className="connector-run-row">
+                  <div>
+                    <strong>{latestNotificationApproval.payload.reviewer}</strong>
+                    <span>
+                      {latestNotificationApproval.payload.approvedChannels.map(titleize).join(', ')} / v{latestNotificationApproval.version}
+                    </span>
+                    <small>{latestNotificationApproval.payload.rationale}</small>
+                  </div>
+                  <StatusChip status={latestNotificationApproval.status} label={latestNotificationApproval.status} />
+                </div>
+              </div>
+            ) : (
+              <div className="empty-state compact">No tenant live-channel approval has been saved yet.</div>
+            )}
+          </div>
+        </div>
+        {notificationApprovalRecords.length > 1 ? (
+          <div className="mapping-run-history">
+            <h4>Approval history</h4>
+            {notificationApprovalRecords.slice(1, 5).map((record) => (
+              <div className="mapping-run-row" key={record.id}>
+                <div>
+                  <strong>{record.payload.reviewer}</strong>
+                  <span>
+                    v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.approvedChannels.map(titleize).join(', ')}
+                  </span>
+                </div>
+                <StatusChip status={record.status} label={record.status} />
+              </div>
+            ))}
+          </div>
+        ) : null}
       </section>
 
       <section className="panel import-reconciliation-panel">

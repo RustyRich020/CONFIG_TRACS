@@ -81,6 +81,17 @@ async function listControlledTemplates() {
   return recordStore.listByKind('controlled_template')
 }
 
+async function activeNotificationLiveApproval() {
+  const approvals = await recordStore.latestByKind('notification_live_channel_approval')
+  return approvals.find((record) => {
+    const payload = record.payload
+    if (payload?.status !== 'approved') return false
+    if (!payload.expiresAt) return true
+    const expiresAt = Date.parse(payload.expiresAt)
+    return !Number.isFinite(expiresAt) || expiresAt >= Date.now()
+  })?.payload
+}
+
 async function reportCatalogForRead() {
   const reports = await listReportCatalog()
   const latestRecords = await recordStore.latestByKind('report_catalog_item')
@@ -596,7 +607,9 @@ async function handleRequest(req, res) {
 
     if (req.method === 'POST' && url.pathname === '/api/notifications/delivery') {
       const payload = await parseBody(req)
-      const result = await runNotificationDelivery(payload)
+      const result = await runNotificationDelivery(payload, {
+        liveApproval: await activeNotificationLiveApproval(),
+      })
       const record = await recordStore.saveRecord({
         kind: 'notification_delivery',
         label: payload.subject ?? payload.deliveryId ?? 'notification delivery',
@@ -615,6 +628,7 @@ async function handleRequest(req, res) {
       const body = await parseBody(req)
       const smoke = await runNotificationSmokeFixtures({
         channels: Array.isArray(body.channels) && body.channels.length > 0 ? body.channels : ['email', 'teams'],
+        liveApproval: await activeNotificationLiveApproval(),
       })
       const records = []
       for (const entry of smoke.results) {

@@ -28,6 +28,14 @@ function liveDeliveryEnabled(channel) {
   return process.env[`TRACS_NOTIFICATION_${channelKey}_LIVE`] !== 'false'
 }
 
+function liveChannelApproved(channel, liveApproval) {
+  if (!liveApproval || liveApproval.status !== 'approved') return false
+  if (liveApproval.expiresAt && Number.isFinite(Date.parse(liveApproval.expiresAt))) {
+    if (Date.parse(liveApproval.expiresAt) < Date.now()) return false
+  }
+  return Array.isArray(liveApproval.approvedChannels) && liveApproval.approvedChannels.includes(channel)
+}
+
 function missingEnvironment(names) {
   return names.filter((name) => !process.env[name])
 }
@@ -138,7 +146,7 @@ async function deliverSharePointFolder(payload, deliveredAt) {
   }
 }
 
-async function deliverChannel(channel, payload, deliveredAt, forceDryRun) {
+async function deliverChannel(channel, payload, deliveredAt, forceDryRun, liveApproval) {
   const profile = channelEnvironment[channel]
   if (!profile) {
     return {
@@ -164,6 +172,16 @@ async function deliverChannel(channel, payload, deliveredAt, forceDryRun) {
         dryRunMissing.length > 0
           ? `${profile.displayName} delivery dry-run prepared; missing environment reference(s): ${dryRunMissing.join(', ')}.`
           : `${profile.displayName} delivery dry-run prepared using ${profile.dryRunTargetEnv}. Set TRACS_NOTIFICATION_LIVE_DELIVERY=true to send.`,
+    }
+  }
+
+  if (!liveChannelApproved(channel, liveApproval)) {
+    return {
+      channel,
+      status: 'warning',
+      mode: 'skipped',
+      target: 'live approval required',
+      evidence: `${profile.displayName} live delivery was skipped because no active reviewer sign-off record approves this channel. Save a notification live-channel approval before enabling tenant live delivery.`,
     }
   }
 
@@ -202,11 +220,11 @@ async function deliverChannel(channel, payload, deliveredAt, forceDryRun) {
   }
 }
 
-export async function runNotificationDelivery(payload, { forceDryRun = false } = {}) {
+export async function runNotificationDelivery(payload, { forceDryRun = false, liveApproval } = {}) {
   const deliveredAt = new Date().toISOString()
   const channels = payload.channels?.length ? payload.channels : ['email', 'teams', 'sharepoint_folder']
   const channelResults = await Promise.all(
-    channels.map((channel) => deliverChannel(channel, payload, deliveredAt, forceDryRun)),
+    channels.map((channel) => deliverChannel(channel, payload, deliveredAt, forceDryRun, liveApproval)),
   )
   const status = channelResults.some((result) => result.status === 'blocking')
     ? 'blocking'
@@ -215,6 +233,7 @@ export async function runNotificationDelivery(payload, { forceDryRun = false } =
       : 'pass'
   const liveChannels = channelResults.filter((result) => result.mode === 'live').length
   const dryRunChannels = channelResults.filter((result) => result.mode === 'dry_run').length
+  const skippedChannels = channelResults.filter((result) => result.mode === 'skipped').length
 
   return {
     deliveryId: payload.deliveryId ?? `notification_delivery:${deliveredAt}`,
@@ -223,8 +242,8 @@ export async function runNotificationDelivery(payload, { forceDryRun = false } =
     channelResults,
     evidence:
       liveChannels > 0
-        ? `${liveChannels} live notification channel(s) executed and ${dryRunChannels} dry-run channel(s) prepared for ${payload.source ?? 'unknown source'}.`
-        : `${channels.length} notification channel dry-run(s) prepared for ${payload.source ?? 'unknown source'} without sending external messages.`,
+        ? `${liveChannels} live notification channel(s) executed, ${dryRunChannels} dry-run channel(s) prepared, and ${skippedChannels} channel(s) skipped for ${payload.source ?? 'unknown source'}.`
+        : `${dryRunChannels} notification channel dry-run(s) prepared and ${skippedChannels} channel(s) skipped for ${payload.source ?? 'unknown source'} without sending external messages.`,
   }
 }
 
@@ -260,7 +279,7 @@ export async function runNotificationSmokeFixtures(options = {}) {
   for (const fixture of fixtures) {
     results.push({
       fixture,
-      result: await runNotificationDelivery(fixture),
+      result: await runNotificationDelivery(fixture, { liveApproval: options.liveApproval }),
     })
   }
   const status = results.some((entry) => entry.result.status === 'blocking')
