@@ -1633,7 +1633,9 @@
 
 .trace-filter-panel,
 .trace-graph-panel,
-.trace-evidence-panel {
+.trace-evidence-panel,
+.trace-review-panel,
+.trace-review-history-panel {
   margin-top: 16px;
 }
 
@@ -1665,6 +1667,49 @@
   color: #1e3030;
   background: #ffffff;
   font-size: 12px;
+}
+
+.trace-review-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(160px, 0.7fr) minmax(160px, 0.7fr);
+  gap: 12px;
+  padding: 14px;
+  border-bottom: 1px solid #edf2f1;
+}
+
+.trace-review-grid label {
+  display: grid;
+  gap: 6px;
+}
+
+.trace-review-grid span {
+  color: #617171;
+  font-size: 11px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.trace-review-grid input,
+.trace-review-grid select,
+.trace-review-grid textarea {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid #dce7e5;
+  border-radius: 8px;
+  color: #1e3030;
+  background: #ffffff;
+  font: inherit;
+  font-size: 12px;
+}
+
+.trace-review-grid textarea {
+  min-height: 74px;
+  resize: vertical;
+}
+
+.trace-review-rationale {
+  grid-column: 1 / -1;
 }
 
 .trace-graph-canvas {
@@ -1959,7 +2004,8 @@
 }
 
 .mapping-run-row strong,
-.mapping-run-row span {
+.mapping-run-row span,
+.mapping-run-row small {
   display: block;
 }
 
@@ -1972,6 +2018,13 @@
   margin-top: 3px;
   color: #718080;
   font-size: 11px;
+}
+
+.mapping-run-row small {
+  margin-top: 4px;
+  color: #879493;
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .tested-count {
@@ -2500,6 +2553,7 @@
 
   .trace-path-summary,
   .trace-filter-grid,
+  .trace-review-grid,
   .trace-graph-canvas,
   .trace-graph-edge,
   .trace-path-row {

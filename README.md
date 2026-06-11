@@ -92,6 +92,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Adds source-specific external-reference mapping templates for CAPA, supplier, and document systems.
 - Promotes CAPA, supplier, and document external-reference mappings into active validation profiles.
 - Exports traceability graph packages from active filters and saved readiness evidence packet coverage.
+- Captures signed traceability graph export reviews with reviewer rationale and retention evidence.
 - Discovers external-reference metadata and bounded preview rows through a credential-aware backend adapter.
 - Filters traceability graphs by object family, status, and saved evidence packet coverage.
 - Adds a selectable SQLite record store adapter behind the existing API persistence contract.
@@ -243,7 +244,7 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add signed traceability export review and retention records.
-2. Add import reconciliation dashboards for Postgres migration runs.
-3. Add notification delivery reviewer sign-off before enabling tenant live channels.
-4. Add live external-reference preview adapters for active CAPA, supplier, and document profiles.
+1. Add import reconciliation dashboards for Postgres migration runs.
+2. Add notification delivery reviewer sign-off before enabling tenant live channels.
+3. Add live external-reference preview adapters for active CAPA, supplier, and document profiles.
+4. Add traceability export package delivery to reviewer notification channels.

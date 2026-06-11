@@ -172,6 +172,7 @@ export type SavedVersionKind =
   | 'extraction_run'
   | 'credential_validation'
   | 'notification_delivery'
+  | 'traceability_export_review'
 
 export type SavedVersion = {
   id: string
@@ -200,6 +201,7 @@ export type BackendRecordKind =
   | 'extraction_run'
   | 'credential_validation'
   | 'notification_delivery'
+  | 'traceability_export_review'
 
 export type BackendRecord<TPayload = unknown> = {
   id: string
@@ -476,6 +478,40 @@ export type TraceabilityGraphExportPackage = {
     evidencePackets: number
     selectedEvidencePacket?: string
   }
+  evidence: string
+}
+
+export type TraceabilityExportReviewStatus =
+  | 'draft'
+  | 'approved'
+  | 'approved_with_conditions'
+  | 'rejected'
+
+export type TraceabilityExportRetentionClass =
+  | 'standard_7_year'
+  | 'project_lifetime'
+  | 'legal_hold'
+
+export type TraceabilityExportReview = {
+  reviewId: string
+  packageId: string
+  signedAt: string
+  reviewer: string
+  status: TraceabilityExportReviewStatus
+  rationale: string
+  retention: {
+    class: TraceabilityExportRetentionClass
+    retainUntil: string
+    evidence: string
+  }
+  package: TraceabilityGraphExportPackage
+  auditHistory: Array<{
+    action: 'signed_export_review'
+    actor: string
+    timestamp: string
+    status: TraceabilityExportReviewStatus
+    summary: string
+  }>
   evidence: string
 }
 

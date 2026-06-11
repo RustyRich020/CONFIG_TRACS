@@ -96,6 +96,8 @@ The Traceability workspace derives filterable graph views from canonical objects
 
 Traceability graph export packages are generated from the active Traceability workspace filters. Each package includes the selected quality event, graph nodes, filtered traceability links, relationship summary, selected readiness evidence packet records, coverage counts, and export provenance. Per-packet exports bind a graph package to a saved `readiness_evidence_packet`, while the toolbar export captures the full active graph filter state for offline review.
 
+Signed traceability export reviews are persisted as `traceability_export_review` records through the generic `POST /api/records` boundary. Each retained record binds reviewer, review status, rationale, retention class, retain-until evidence, audit history, and the exact traceability graph export package that was downloaded for governance review.
+
 Connector-backed extraction jobs are persisted as `extraction_job` records and executed into `extraction_run` records. The v1 job runner reuses the canonical load contract so each run produces canonical objects, traceability links, a `canonical_load` record, and a governed extraction-run wrapper that captures request profile, warnings, status, and load result evidence. Job records also carry schedule mode, cadence, next-run target, max retries, retry delay, and retry-on-warning policy. Run records capture attempt number and whether the current status is retry eligible. Mapping Studio now derives a frontend run queue and schedule calendar from those persisted job/run records; it does not create an always-on scheduler process yet.
 
 Report catalog records now use YAML config as seed data and `report_catalog_item` backend records as governed overrides. The Reports workspace can save draft catalog edits, run publish gates, record reviewer sign-off, route reports to reviewer stages, export notification payloads, and persist notification history on sign-off. Publish gates block release when freshness is stale or declared source dependencies are not present in the canonical object registry. Sign-off history is append-only inside each versioned report catalog payload and captures reviewer, status, rationale, signed timestamp, and publish state.
@@ -344,7 +346,7 @@ Migration checklist:
 5. Export JSON or SQLite records before import; do not move secrets or frontend environment values into the record payloads.
 6. Import records through the same `/api/records` boundary or a reviewed migration script that preserves `kind`, `label`, `status`, `summary`, and payload evidence.
 7. Keep JSON or SQLite storage read-only for one release window as rollback evidence.
-8. Reconcile record counts, recent evidence packets, report sign-offs, and extraction-run records before deleting legacy storage.
+8. Reconcile record counts, recent evidence packets, traceability export reviews, report sign-offs, and extraction-run records before deleting legacy storage.
 
 The guarded import utility is implemented in `server/importRecordsToPostgres.mjs`. It reads JSON or SQLite `tracs_records`, validates required record fields, checks duplicate IDs, checks duplicate `kind + label + version` tuples, and defaults to dry-run mode. `--apply` is required before it inserts records into Postgres. Imported records preserve source IDs, versions, timestamps, status, summary, label, kind, and payload JSON so historical evidence remains traceable.
 

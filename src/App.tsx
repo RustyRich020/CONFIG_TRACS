@@ -84,6 +84,9 @@ import type {
   RecordStoreSchema,
   SavedVersion,
   StatusLevel,
+  TraceabilityExportRetentionClass,
+  TraceabilityExportReview,
+  TraceabilityExportReviewStatus,
   TraceabilityGraphExportPackage,
   TraceabilityLink,
 } from './types'
@@ -329,6 +332,28 @@ function reportApprovalLabel(status?: ReportCatalogItem['approvalStatus']) {
 
 function reportRouteLabel(stage?: ReportCatalogItem['reviewerRouteStage']) {
   return stage ? titleize(stage) : 'Owner Review'
+}
+
+function traceabilityReviewStatusLevel(status: TraceabilityExportReviewStatus): StatusLevel {
+  if (status === 'approved') return 'pass'
+  if (status === 'rejected') return 'blocking'
+  return 'warning'
+}
+
+function traceabilityRetentionLabel(retentionClass: TraceabilityExportRetentionClass) {
+  if (retentionClass === 'standard_7_year') return 'Standard 7 Year'
+  if (retentionClass === 'project_lifetime') return 'Project Lifetime'
+  return 'Legal Hold'
+}
+
+function traceabilityRetentionUntil(
+  retentionClass: TraceabilityExportRetentionClass,
+  signedAt: string,
+) {
+  if (retentionClass === 'legal_hold') return 'indefinite'
+  const date = new Date(signedAt)
+  date.setFullYear(date.getFullYear() + (retentionClass === 'standard_7_year' ? 7 : 15))
+  return date.toISOString()
 }
 
 function createReportApprovalNotification(report: ReportCatalogItem) {
@@ -1284,6 +1309,75 @@ function App() {
     )
   }
 
+  async function saveTraceabilityExportReview({
+    graphPackage,
+    reviewer,
+    status,
+    rationale,
+    retentionClass,
+  }: {
+    graphPackage: TraceabilityGraphExportPackage
+    reviewer: string
+    status: TraceabilityExportReviewStatus
+    rationale: string
+    retentionClass: TraceabilityExportRetentionClass
+  }) {
+    const signedAt = new Date().toISOString()
+    const reviewerName = reviewer.trim() || 'Unassigned reviewer'
+    const retainUntil = traceabilityRetentionUntil(retentionClass, signedAt)
+    const retentionLabel = traceabilityRetentionLabel(retentionClass)
+    const payload: TraceabilityExportReview = {
+      reviewId: `traceability_export_review:${graphPackage.packageId}:${signedAt}`,
+      packageId: graphPackage.packageId,
+      signedAt,
+      reviewer: reviewerName,
+      status,
+      rationale: rationale.trim() || 'No reviewer rationale recorded.',
+      retention: {
+        class: retentionClass,
+        retainUntil,
+        evidence:
+          retainUntil === 'indefinite'
+            ? `${retentionLabel} retention selected; retain until legal hold is released.`
+            : `${retentionLabel} retention selected; retain until ${new Date(retainUntil).toLocaleDateString()}.`,
+      },
+      package: graphPackage,
+      auditHistory: [
+        {
+          action: 'signed_export_review',
+          actor: reviewerName,
+          timestamp: signedAt,
+          status,
+          summary: `${reviewerName} signed traceability export ${graphPackage.packageId} as ${titleize(status)}.`,
+        },
+      ],
+      evidence: `${graphPackage.evidence} Signed by ${reviewerName} as ${titleize(status)}. ${retentionLabel} retention applied.`,
+    }
+    const saved = await backendClient.saveRecord({
+      kind: 'traceability_export_review',
+      label: graphPackage.packageId,
+      status: traceabilityReviewStatusLevel(status),
+      summary: payload.evidence,
+      payload,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'traceability_export_review',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record(
+      'traceability',
+      'sign_export_review',
+      `Traceability export review saved as backend record v${saved.version}.`,
+    )
+    return saved
+  }
+
   async function deliverNotifications(payload: NotificationDeliveryPayload) {
     const result = await backendClient.deliverNotification(payload)
     await refreshBackend()
@@ -1664,6 +1758,11 @@ function App() {
             events={qualityEvents}
             links={traceabilityLinks}
             onSelectEvent={setSelectedQualityEventId}
+            onSaveExportReview={saveTraceabilityExportReview}
+            reviewRecords={backendRecords.filter(
+              (record): record is BackendRecord<TraceabilityExportReview> =>
+                record.kind === 'traceability_export_review',
+            )}
             selectedEventId={selectedQualityEventId}
           />
         ) : activeView === 'Reports' ? (
@@ -2953,6 +3052,8 @@ function TraceabilityView({
   events,
   links,
   onSelectEvent,
+  onSaveExportReview,
+  reviewRecords,
   selectedEventId,
 }: {
   canonicalObjects: CanonicalObject[]
@@ -2960,11 +3061,26 @@ function TraceabilityView({
   events: QualityEvent[]
   links: TraceabilityLink[]
   onSelectEvent: (eventId: string) => void
+  onSaveExportReview: (request: {
+    graphPackage: TraceabilityGraphExportPackage
+    reviewer: string
+    status: TraceabilityExportReviewStatus
+    rationale: string
+    retentionClass: TraceabilityExportRetentionClass
+  }) => Promise<BackendRecord<TraceabilityExportReview>>
+  reviewRecords: BackendRecord<TraceabilityExportReview>[]
   selectedEventId: string | null
 }) {
   const [familyFilter, setFamilyFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState<StatusLevel | 'all'>('all')
   const [packetFilter, setPacketFilter] = useState('all')
+  const [reviewer, setReviewer] = useState('TRACS Quality Reviewer')
+  const [reviewStatus, setReviewStatus] = useState<TraceabilityExportReviewStatus>('approved')
+  const [retentionClass, setRetentionClass] =
+    useState<TraceabilityExportRetentionClass>('standard_7_year')
+  const [reviewRationale, setReviewRationale] = useState(
+    'Traceability export reviewed for active filters, evidence packet coverage, and retained governance handoff.',
+  )
   const selectedEvent = events.find((event) => event.id === selectedEventId) ?? events[0]
   const canonicalById = useMemo(
     () => new Map(canonicalObjects.map((object) => [object.id, object])),
@@ -3056,8 +3172,15 @@ function TraceabilityView({
       evidence: `${filteredLinks.length} filtered traceability link(s), ${graphNodes.length} graph node(s), and ${selectedEvidencePackets.length} evidence packet(s) exported for ${selectedEvent?.canonical.event_id ?? 'the active traceability selection'}.`,
     }
   }
-  function exportGraphPackage(evidencePacket?: BackendRecord<ReadinessEvidencePacket>) {
+  async function exportGraphPackage(evidencePacket?: BackendRecord<ReadinessEvidencePacket>) {
     const packagePayload = createGraphExportPackage(evidencePacket)
+    await onSaveExportReview({
+      graphPackage: packagePayload,
+      reviewer,
+      status: reviewStatus,
+      rationale: reviewRationale,
+      retentionClass,
+    })
     const packetSuffix = evidencePacket ? `-${evidencePacket.id.slice(0, 8)}` : ''
     downloadJson(`tracs-traceability-graph-package${packetSuffix}.json`, packagePayload)
   }
@@ -3132,6 +3255,55 @@ function TraceabilityView({
               ))}
             </select>
           </label>
+        </div>
+      </section>
+
+      <section className="panel trace-review-panel">
+        <PanelHeader
+          icon={ClipboardCheck}
+          title="Export Review & Retention"
+          subtitle="Sign traceability graph exports and retain reviewer evidence as versioned backend records."
+        />
+        <div className="trace-review-grid">
+          <label>
+            <span>Reviewer</span>
+            <input value={reviewer} onChange={(event) => setReviewer(event.target.value)} />
+          </label>
+          <label>
+            <span>Review status</span>
+            <select
+              value={reviewStatus}
+              onChange={(event) => setReviewStatus(event.target.value as TraceabilityExportReviewStatus)}
+            >
+              <option value="approved">Approved</option>
+              <option value="approved_with_conditions">Approved with conditions</option>
+              <option value="draft">Draft</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </label>
+          <label>
+            <span>Retention</span>
+            <select
+              value={retentionClass}
+              onChange={(event) => setRetentionClass(event.target.value as TraceabilityExportRetentionClass)}
+            >
+              <option value="standard_7_year">Standard 7 year</option>
+              <option value="project_lifetime">Project lifetime</option>
+              <option value="legal_hold">Legal hold</option>
+            </select>
+          </label>
+          <label className="trace-review-rationale">
+            <span>Rationale</span>
+            <textarea value={reviewRationale} onChange={(event) => setReviewRationale(event.target.value)} />
+          </label>
+        </div>
+        <div className="trace-path-summary">
+          <Metadata label="Review records" value={String(reviewRecords.length)} />
+          <Metadata label="Current status" value={titleize(reviewStatus)} />
+          <Metadata
+            label="Retention rule"
+            value={traceabilityRetentionLabel(retentionClass)}
+          />
         </div>
       </section>
 
@@ -3300,6 +3472,36 @@ function TraceabilityView({
           </div>
         ) : (
           <div className="empty-state">No saved evidence packets include traceability-link evidence yet.</div>
+        )}
+      </section>
+
+      <section className="panel trace-review-history-panel">
+        <PanelHeader
+          icon={History}
+          title="Signed Export Retention Records"
+          subtitle="Versioned traceability graph export reviews with reviewer signature and retention evidence."
+        />
+        {reviewRecords.length > 0 ? (
+          <div className="mapping-run-history">
+            {reviewRecords.slice(0, 6).map((record) => (
+              <div className="mapping-run-row" key={record.id}>
+                <div>
+                  <strong>{record.payload.package.selectedEvent?.canonical.event_id ?? 'All traceability'}</strong>
+                  <span>
+                    v{record.version} / {record.payload.reviewer} / {new Date(record.payload.signedAt).toLocaleString()}
+                  </span>
+                  <small>
+                    {record.payload.package.coverage.filteredLinks} link(s), {record.payload.package.coverage.evidencePackets} packet(s) / retain until {record.payload.retention.retainUntil === 'indefinite'
+                      ? 'legal hold release'
+                      : new Date(record.payload.retention.retainUntil).toLocaleDateString()}
+                  </small>
+                </div>
+                <StatusChip status={record.status} label={titleize(record.payload.status)} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state">No signed traceability export reviews have been retained yet.</div>
         )}
       </section>
     </>
