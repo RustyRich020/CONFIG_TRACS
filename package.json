@@ -7,6 +7,8 @@
     "api": "node server/tracs-api.mjs",
     "api:sqlite": "node --experimental-sqlite server/tracs-api.mjs",
     "api:postgres": "node server/tracs-api.mjs",
+    "postgres:up": "docker compose -f docker-compose.postgres.yml up -d",
+    "postgres:down": "docker compose -f docker-compose.postgres.yml down",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",

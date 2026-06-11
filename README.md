@@ -160,6 +160,16 @@ $env:TRACS_POSTGRES_URL='postgres://user:password@host:5432/database?sslmode=req
 npm run api:postgres
 ```
 
+For a local Docker-backed Postgres smoke test:
+
+```bash
+npm run postgres:up
+$env:TRACS_RECORD_STORE='postgres'
+$env:TRACS_POSTGRES_URL='postgres://tracs_app:tracs_dev_password@127.0.0.1:55432/tracs'
+$env:TRACS_POSTGRES_SSL='false'
+npm run api:postgres
+```
+
 Optional Postgres controls:
 
 - `TRACS_POSTGRES_POOL_MAX`: connection pool cap, default `5`
