@@ -563,6 +563,25 @@ function canonicalLoadProfileForConnector(
   }
 }
 
+function schemaForMappingProfile(mappingId: string, mapping: AppConfig['mappings'][string], csvText: string) {
+  if (mappingId === 'quality_event') return inferCsvSchema(csvText)
+  const sourceFields = Array.from(new Set(Object.values(mapping.fields)))
+  return {
+    rowCount: 1,
+    columns: sourceFields.map((field) => ({
+      name: field,
+      nonEmptyCount: 1,
+      sampleValues: [`${field}_sample`],
+      inferredType:
+        field.endsWith('_at') || field.includes('date') || field.includes('due')
+          ? 'date'
+          : field.includes('count') || field.includes('rate') || field.endsWith('_ppm')
+            ? 'number'
+            : 'text',
+    })),
+  } satisfies CsvSchemaInference
+}
+
 function App() {
   const [config, setConfig] = useState<AppConfig | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -576,7 +595,8 @@ function App() {
   const [selectedConnectorId, setSelectedConnectorId] = useState<string | null>(null)
   const [csvText, setCsvText] = useState('')
   const [csvSchema, setCsvSchema] = useState<CsvSchemaInference | null>(null)
-  const [mappingResult, setMappingResult] = useState<MappingValidationResult | null>(null)
+  const [activeMappingId, setActiveMappingId] = useState('quality_event')
+  const [mappingResults, setMappingResults] = useState<Record<string, MappingValidationResult>>({})
   const [savedVersions, setSavedVersions] = useState<SavedVersion[]>(() => loadSavedVersions())
   const [backendHealth, setBackendHealth] = useState<BackendHealth | null>(null)
   const [backendRecords, setBackendRecords] = useState<BackendRecord[]>([])
@@ -622,7 +642,9 @@ function App() {
             setCsvText(sample)
             const schema = inferCsvSchema(sample)
             setCsvSchema(schema)
-            setMappingResult(validateMappingAgainstSchema(loaded.mappings.quality_event, schema))
+            setMappingResults({
+              quality_event: validateMappingAgainstSchema(loaded.mappings.quality_event, schema),
+            })
         })
         refreshBackend()
         refreshAssetRegistry()
@@ -1015,13 +1037,14 @@ function App() {
 
   async function runMappingValidation() {
     if (!config) return
-    const mappingId = 'quality_event'
-    const schema = inferCsvSchema(csvText)
-    const mapping = config.mappings.quality_event
+    const mappingId = activeMappingId
+    const mapping = config.mappings[mappingId]
+    if (!mapping) return
+    const schema = schemaForMappingProfile(mappingId, mapping, csvText)
     const result = validateMappingAgainstSchema(mapping, schema)
     const summary = `${result.mappedFields.filter((field) => field.present).length}/${result.mappedFields.length} mapped fields present.`
     setCsvSchema(schema)
-    setMappingResult(result)
+    setMappingResults((current) => ({ ...current, [mappingId]: result }))
     const savedRun = await backendClient.saveMappingRun({
       mappingId,
       mapping,
@@ -1044,7 +1067,7 @@ function App() {
     saveVersion(
       createSavedVersion({
         kind: 'mapping_version',
-        label: 'quality_event mapping manifest',
+        label: `${mappingId} mapping manifest`,
         status: result.status,
         summary: `${Object.keys(mapping.fields).length} mapped fields versioned from active manifest.`,
         payload: mapping,
@@ -1053,8 +1076,23 @@ function App() {
     record(
       'mapping',
       'validate',
-      `quality_event mapping validation completed with ${result.status} status.`,
+      `${mappingId} mapping validation completed with ${result.status} status.`,
     )
+  }
+
+  async function selectMappingProfile(mappingId: string) {
+    setActiveMappingId(mappingId)
+    if (!config) return
+    const mapping = config.mappings[mappingId]
+    if (!mapping) return
+    const schema = schemaForMappingProfile(mappingId, mapping, csvText)
+    setCsvSchema(schema)
+    setMappingResults((current) => ({
+      ...current,
+      [mappingId]: current[mappingId] ?? validateMappingAgainstSchema(mapping, schema),
+    }))
+    const runs = await backendClient.listMappingRuns(mappingId)
+    setMappingRuns((current) => ({ ...current, [mappingId]: runs }))
   }
 
   async function loadCanonicalFromMapping() {
@@ -1594,13 +1632,16 @@ function App() {
               (record): record is BackendRecord<CanonicalLoadResult> =>
                 record.kind === 'canonical_load',
             )}
-            mapping={config.mappings.quality_event}
-            mappingResult={mappingResult}
-            mappingRuns={mappingRuns.quality_event ?? []}
+            activeMappingId={activeMappingId}
+            mapping={config.mappings[activeMappingId] ?? config.mappings.quality_event}
+            mappingIds={Object.keys(config.mappings)}
+            mappingResult={mappingResults[activeMappingId] ?? null}
+            mappingRuns={mappingRuns[activeMappingId] ?? []}
             onCsvTextChange={setCsvText}
             onCreateExtractionJob={saveExtractionJob}
             onLoadConnectorChange={setCanonicalLoadConnectorId}
             onLoadCanonical={loadCanonicalFromMapping}
+            onMappingChange={selectMappingProfile}
             onRunExtractionJob={runExtractionJob}
             onValidate={runMappingValidation}
           />
@@ -3783,6 +3824,7 @@ function SavedVersionsView({ savedVersions }: { savedVersions: SavedVersion[] })
 }
 
 function MappingStudio({
+  activeMappingId,
   canonicalLoadConnectorId,
   connectorEntries,
   csvSchema,
@@ -3791,15 +3833,18 @@ function MappingStudio({
   extractionRuns,
   latestCanonicalLoad,
   mapping,
+  mappingIds,
   mappingResult,
   mappingRuns,
   onCsvTextChange,
   onCreateExtractionJob,
   onLoadConnectorChange,
   onLoadCanonical,
+  onMappingChange,
   onRunExtractionJob,
   onValidate,
 }: {
+  activeMappingId: string
   canonicalLoadConnectorId: string
   connectorEntries: Array<[string, AppConfig['connectors']['connectors'][string]]>
   csvSchema: CsvSchemaInference | null
@@ -3808,6 +3853,7 @@ function MappingStudio({
   extractionRuns: BackendRecord<ExtractionRunPayload>[]
   latestCanonicalLoad?: BackendRecord<CanonicalLoadResult>
   mapping: AppConfig['mappings'][string]
+  mappingIds: string[]
   mappingResult: MappingValidationResult | null
   mappingRuns: BackendRecord[]
   onCsvTextChange: (value: string) => void
@@ -3822,6 +3868,7 @@ function MappingStudio({
   }) => void
   onLoadConnectorChange: (value: string) => void
   onLoadCanonical: () => void
+  onMappingChange: (value: string) => void
   onRunExtractionJob: (job: BackendRecord<ExtractionJobPayload>) => void
   onValidate: () => void
 }) {
@@ -3852,13 +3899,24 @@ function MappingStudio({
         <div>
           <h2>Mapping Studio</h2>
           <p>
-            Validate the configured quality_event manifest and load canonical records from configured connector profiles.
+            Validate active source-to-canonical mapping profiles and load quality-event canonical records from configured connector profiles.
           </p>
         </div>
         <div className="toolbar-actions">
           <label className="load-source-control">
+            <span>Mapping profile</span>
+            <select value={activeMappingId} onChange={(event) => onMappingChange(event.target.value)}>
+              {mappingIds.map((mappingId) => (
+                <option key={mappingId} value={mappingId}>
+                  {titleize(mappingId)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="load-source-control">
             <span>Load source</span>
             <select
+              disabled={activeMappingId !== 'quality_event'}
               value={canonicalLoadConnectorId}
               onChange={(event) => onLoadConnectorChange(event.target.value)}
             >
@@ -3873,7 +3931,12 @@ function MappingStudio({
                 ))}
             </select>
           </label>
-          <button className="secondary-action" onClick={onLoadCanonical} type="button">
+          <button
+            className="secondary-action"
+            disabled={activeMappingId !== 'quality_event'}
+            onClick={onLoadCanonical}
+            type="button"
+          >
             <Database size={15} />
             Load Canonical
           </button>
@@ -3888,17 +3951,34 @@ function MappingStudio({
         <section className="panel mapping-source-panel">
           <PanelHeader
             icon={ScrollText}
-            title="CSV Schema Inference"
-            subtitle="Manual upload adapter starter using the included quality event sample."
+            title={activeMappingId === 'quality_event' ? 'CSV Schema Inference' : 'Profile Source Schema'}
+            subtitle={
+              activeMappingId === 'quality_event'
+                ? 'Manual upload adapter starter using the included quality event sample.'
+                : 'External-reference profiles validate against source fields declared in the active mapping manifest.'
+            }
           />
-          <div className="mapping-editor">
-            <textarea
-              aria-label="CSV sample"
-              value={csvText}
-              onChange={(event) => onCsvTextChange(event.target.value)}
-              spellCheck={false}
-            />
-          </div>
+          {activeMappingId === 'quality_event' ? (
+            <div className="mapping-editor">
+              <textarea
+                aria-label="CSV sample"
+                value={csvText}
+                onChange={(event) => onCsvTextChange(event.target.value)}
+                spellCheck={false}
+              />
+            </div>
+          ) : (
+            <div className="mapping-run-history">
+              <div className="mapping-run-row">
+                <div>
+                  <strong>{mapping.source_connector}</strong>
+                  <span>{mapping.source_object} / {mapping.object}</span>
+                  <small>{Object.keys(mapping.fields).length} declared source field mapping(s)</small>
+                </div>
+                <StatusChip status="warning" label="profile" />
+              </div>
+            </div>
+          )}
           {csvSchema ? (
             <div className="schema-summary">
               <strong>{csvSchema.rowCount}</strong>

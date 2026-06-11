@@ -31,7 +31,18 @@ function requireKeys(name: string, value: Record<string, unknown> | undefined) {
 }
 
 export async function loadAppConfig(): Promise<AppConfig> {
-  const [environment, industriesRaw, solutionsRaw, familiesRaw, connectors, qualityEventMapping, rulesRaw] =
+  const [
+    environment,
+    industriesRaw,
+    solutionsRaw,
+    familiesRaw,
+    connectors,
+    qualityEventMapping,
+    capaReferenceMapping,
+    supplierMapping,
+    documentReferenceMapping,
+    rulesRaw,
+  ] =
     await Promise.all([
       loadYaml<EnvironmentConfig>('/config/environments/qa.yaml'),
       loadYaml<RawIndustries>('/config/industries/industries.yaml'),
@@ -39,6 +50,9 @@ export async function loadAppConfig(): Promise<AppConfig> {
       loadYaml<RawFamilies>('/config/mappings/domain_object_families.yaml'),
       loadYaml<ConnectorManifest>('/config/connectors/connectors.yaml'),
       loadYaml<MappingManifest>('/config/mappings/quality_event.yaml'),
+      loadYaml<MappingManifest>('/config/mappings/capa_reference.yaml'),
+      loadYaml<MappingManifest>('/config/mappings/supplier.yaml'),
+      loadYaml<MappingManifest>('/config/mappings/document_reference.yaml'),
       loadYaml<RawRules>('/config/rules/readiness_checks.yaml'),
     ])
 
@@ -63,6 +77,9 @@ export async function loadAppConfig(): Promise<AppConfig> {
     connectors,
     mappings: {
       quality_event: qualityEventMapping,
+      capa_reference: capaReferenceMapping,
+      supplier: supplierMapping,
+      document_reference: documentReferenceMapping,
     },
     readinessRules: rulesRaw.checks ?? [],
   }

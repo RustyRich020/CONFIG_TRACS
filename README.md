@@ -90,6 +90,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Adds guarded notification delivery connectors for email, Teams, and SharePoint export folders with persisted delivery evidence.
 - Adds tenant notification smoke fixtures for guarded email and Teams endpoint validation.
 - Adds source-specific external-reference mapping templates for CAPA, supplier, and document systems.
+- Promotes CAPA, supplier, and document external-reference mappings into active validation profiles.
 - Exports traceability graph packages from active filters and saved readiness evidence packet coverage.
 - Discovers external-reference metadata and bounded preview rows through a credential-aware backend adapter.
 - Filters traceability graphs by object family, status, and saved evidence packet coverage.
@@ -233,6 +234,7 @@ npm run build
 - `public/config/industries/industries.yaml`: industry profile definitions.
 - `public/config/solutions/solution_domains.yaml`: solution domain definitions.
 - `public/config/mappings/domain_object_families.yaml`: canonical object family definitions.
+- `public/config/mappings/capa_reference.yaml`, `supplier.yaml`, `document_reference.yaml`: active external-reference validation profiles.
 - `public/config/templates/`: reusable starter templates for the next build phases.
 - `public/config/reports/report_catalog.yaml`: governed BI/report catalog with source dependencies and freshness thresholds.
 - `public/samples/quality_events_sample.csv`: CSV/manual upload fixture for Mapping Studio.
@@ -241,7 +243,7 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Promote external-reference mapping templates into active mapping validation profiles.
-2. Add signed traceability export review and retention records.
-3. Add import reconciliation dashboards for Postgres migration runs.
-4. Add notification delivery reviewer sign-off before enabling tenant live channels.
+1. Add signed traceability export review and retention records.
+2. Add import reconciliation dashboards for Postgres migration runs.
+3. Add notification delivery reviewer sign-off before enabling tenant live channels.
+4. Add live external-reference preview adapters for active CAPA, supplier, and document profiles.

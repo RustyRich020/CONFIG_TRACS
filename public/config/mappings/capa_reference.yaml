@@ -1,0 +1,120 @@
+template:
+  template_id: external_reference_capa_mapping_v1
+  display_name: CAPA External Reference Mapping
+  source_family: external_reference
+  target_object_family: quality
+  target_object: capa_reference
+  owner_role: Quality Systems Owner
+  approval_role: Quality Manager
+  lifecycle_status: starter
+
+object: capa_reference
+source_connector: capa_external
+source_object: capa_records
+
+primary_key:
+  target_field: capa_id
+  source_field: capa_id
+
+fields:
+  capa_id: capa_id
+  capa_number: capa_number
+  title: title
+  status: status
+  owner: owner
+  quality_event_id: complaint_id
+  related_event_id: quality_event_id
+  severity: severity
+  risk_level: risk_level
+  opened_at: opened_at
+  due_at: due_at
+  closed_at: closed_at
+  root_cause: root_cause
+  corrective_action: corrective_action
+  preventive_action: preventive_action
+  effectiveness_status: effectiveness_status
+  source_system: source_system
+  source_url: source_url
+
+required:
+  - capa_id
+  - status
+  - owner
+  - opened_at
+
+transforms:
+  opened_at:
+    type: date
+    accepted_formats:
+      - yyyy-MM-dd
+      - yyyy-MM-ddTHH:mm:ssZ
+      - MM/dd/yyyy
+  due_at:
+    type: date
+    accepted_formats:
+      - yyyy-MM-dd
+      - MM/dd/yyyy
+  closed_at:
+    type: date
+    accepted_formats:
+      - yyyy-MM-dd
+      - MM/dd/yyyy
+  status:
+    type: enum
+    allowed_values:
+      - draft
+      - opened
+      - investigation
+      - action_plan
+      - implementation
+      - effectiveness_check
+      - closed
+      - cancelled
+  severity:
+    type: enum
+    allowed_values:
+      - low
+      - medium
+      - high
+      - critical
+  risk_level:
+    type: enum
+    allowed_values:
+      - low
+      - medium
+      - high
+      - unacceptable
+  effectiveness_status:
+    type: enum
+    allowed_values:
+      - not_started
+      - pending
+      - effective
+      - ineffective
+      - not_required
+
+traceability_links:
+  - relationship_type: quality_event_to_capa
+    source_field: quality_event_id
+    target_field: capa_id
+    required: false
+  - relationship_type: complaint_to_capa
+    source_field: complaint_id
+    target_field: capa_id
+    required: false
+
+readiness_checks:
+  - id: capa_primary_key_present
+    severity: blocking
+    evidence: capa_id must be present and stable across API refreshes.
+  - id: capa_status_normalized
+    severity: warning
+    evidence: source status must map into the TRACS CAPA lifecycle enum.
+  - id: capa_event_linkage
+    severity: warning
+    evidence: complaint_id or quality_event_id should link CAPA back to quality events.
+
+notes:
+  - Use this template for eQMS, CAPA, deviation, or corrective-action systems exposed as REST or reference APIs.
+  - Do not commit API tokens or endpoint secrets in this mapping file.
+  - Keep CAPA records reference-only until ownership and closed-loop workflow authority are approved.

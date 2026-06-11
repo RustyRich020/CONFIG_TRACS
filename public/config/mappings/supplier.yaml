@@ -1,0 +1,120 @@
+template:
+  template_id: external_reference_supplier_mapping_v1
+  display_name: Supplier External Reference Mapping
+  source_family: external_reference
+  target_object_family: supply_chain
+  target_object: supplier
+  owner_role: Supplier Quality Owner
+  approval_role: Supply Chain Manager
+  lifecycle_status: starter
+
+object: supplier
+source_connector: supplier_external
+source_object: supplier_records
+
+primary_key:
+  target_field: supplier_id
+  source_field: supplier_id
+
+fields:
+  supplier_id: supplier_id
+  supplier_number: supplier_number
+  supplier_name: supplier_name
+  status: status
+  supplier_type: supplier_type
+  risk_tier: risk_tier
+  qualification_status: qualification_status
+  quality_agreement_status: quality_agreement_status
+  primary_contact: primary_contact
+  country: country
+  site_count: site_count
+  last_audit_at: last_audit_at
+  next_audit_due_at: next_audit_due_at
+  scorecard_status: scorecard_status
+  defect_rate_ppm: defect_rate_ppm
+  source_system: source_system
+  source_url: source_url
+
+required:
+  - supplier_id
+  - supplier_name
+  - status
+  - qualification_status
+
+transforms:
+  last_audit_at:
+    type: date
+    accepted_formats:
+      - yyyy-MM-dd
+      - MM/dd/yyyy
+  next_audit_due_at:
+    type: date
+    accepted_formats:
+      - yyyy-MM-dd
+      - MM/dd/yyyy
+  status:
+    type: enum
+    allowed_values:
+      - active
+      - inactive
+      - blocked
+      - probation
+      - pending
+  supplier_type:
+    type: enum
+    allowed_values:
+      - material
+      - component
+      - service
+      - logistics
+      - contract_manufacturer
+      - other
+  risk_tier:
+    type: enum
+    allowed_values:
+      - low
+      - medium
+      - high
+      - critical
+  qualification_status:
+    type: enum
+    allowed_values:
+      - not_started
+      - pending
+      - qualified
+      - conditionally_qualified
+      - disqualified
+  quality_agreement_status:
+    type: enum
+    allowed_values:
+      - not_required
+      - missing
+      - pending
+      - approved
+      - expired
+
+traceability_links:
+  - relationship_type: supplier_to_quality_event
+    source_field: supplier_id
+    target_field: supplier_id
+    required: false
+  - relationship_type: supplier_to_document
+    source_field: supplier_id
+    target_field: supplier_id
+    required: false
+
+readiness_checks:
+  - id: supplier_identity_present
+    severity: blocking
+    evidence: supplier_id and supplier_name must be populated.
+  - id: supplier_qualification_status_present
+    severity: blocking
+    evidence: qualification_status must be mapped for supplier quality workflows.
+  - id: supplier_risk_tier_present
+    severity: warning
+    evidence: risk_tier should be mapped for audit cadence and report gating.
+
+notes:
+  - Use this template for supplier master data, approved supplier lists, supplier scorecards, and supplier quality systems.
+  - Pair this mapping with document-reference mappings when quality agreements or audit files are stored outside the supplier system.
+  - Keep direct supplier remediation workflows outside TRACS until owner approval is documented.
