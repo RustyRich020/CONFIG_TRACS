@@ -22,6 +22,7 @@ import type {
   LocalAsset,
   NotificationDeliveryPayload,
   NotificationDeliveryResult,
+  NotificationSmokeFixtureResult,
   PostgresMigrationChecklist,
   QualityEvent,
   ReportCatalogItem,
@@ -704,6 +705,35 @@ export class LocalBackendClient {
     return { ...result, record }
   }
 
+  async runNotificationSmokeFixtures(): Promise<NotificationSmokeFixtureResult> {
+    const generatedAt = new Date().toISOString()
+    const fixtures: NotificationDeliveryPayload[] = (['email', 'teams'] as const).map((channel) => ({
+      deliveryId: `notification_smoke:${channel}:${generatedAt}`,
+      generatedAt,
+      source: 'report_catalog',
+      channels: [channel],
+      recipients: ['tenant-approved-recipient@example.com'],
+      subject: `TRACS ${channel} delivery smoke fixture`,
+      summary: 'Browser-local smoke fixture prepared without external delivery.',
+      evidence: { fixtureType: 'tenant_notification_smoke', channel, generatedAt },
+    }))
+    const results = await Promise.all(fixtures.map(async (fixture) => ({
+      fixture,
+      result: await this.deliverNotification(fixture),
+    })))
+    return {
+      smokeId: `notification_smoke:${generatedAt}`,
+      status: results.some((entry) => entry.result.status === 'blocking')
+        ? 'blocking'
+        : results.some((entry) => entry.result.status === 'warning')
+          ? 'warning'
+          : 'pass',
+      fixtures,
+      results,
+      evidence: `${results.length} notification smoke fixture(s) prepared in browser-local fallback mode.`,
+    }
+  }
+
   async discoverConnectorMetadata(
     connectorId: string,
     connector: AppConfig['connectors']['connectors'][string],
@@ -1221,6 +1251,20 @@ class ApiBackendClient {
       )
     } catch {
       return this.localFallback.deliverNotification(payload)
+    }
+  }
+
+  async runNotificationSmokeFixtures(): Promise<NotificationSmokeFixtureResult> {
+    try {
+      return await this.request<NotificationSmokeFixtureResult>(
+        '/api/notifications/live-smoke-fixtures',
+        {
+          method: 'POST',
+          body: JSON.stringify({ channels: ['email', 'teams'] }),
+        },
+      )
+    } catch {
+      return this.localFallback.runNotificationSmokeFixtures()
     }
   }
 

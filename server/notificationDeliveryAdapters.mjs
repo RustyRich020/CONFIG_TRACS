@@ -231,3 +231,48 @@ export async function runNotificationDelivery(payload, { forceDryRun = false } =
 export function runNotificationDeliveryDryRun(payload) {
   return runNotificationDelivery(payload, { forceDryRun: true })
 }
+
+export function createNotificationSmokeFixtures({ channels = ['email', 'teams'] } = {}) {
+  const generatedAt = new Date().toISOString()
+  return channels.map((channel) => ({
+    deliveryId: `notification_smoke:${channel}:${generatedAt}`,
+    generatedAt,
+    source: 'report_catalog',
+    channels: [channel],
+    recipients: process.env.TRACS_NOTIFICATION_EMAIL_TARGET
+      ? [process.env.TRACS_NOTIFICATION_EMAIL_TARGET]
+      : ['tenant-approved-recipient@example.com'],
+    subject: `TRACS ${channel} delivery smoke fixture`,
+    summary:
+      'Tenant-approved smoke fixture for validating guarded notification delivery. Live sends require TRACS_NOTIFICATION_LIVE_DELIVERY=true and channel-specific endpoint variables.',
+    evidence: {
+      fixtureType: 'tenant_notification_smoke',
+      channel,
+      liveGate: process.env.TRACS_NOTIFICATION_LIVE_DELIVERY === 'true',
+      generatedAt,
+    },
+  }))
+}
+
+export async function runNotificationSmokeFixtures(options = {}) {
+  const fixtures = createNotificationSmokeFixtures(options)
+  const results = []
+  for (const fixture of fixtures) {
+    results.push({
+      fixture,
+      result: await runNotificationDelivery(fixture),
+    })
+  }
+  const status = results.some((entry) => entry.result.status === 'blocking')
+    ? 'blocking'
+    : results.some((entry) => entry.result.status === 'warning')
+      ? 'warning'
+      : 'pass'
+  return {
+    smokeId: `notification_smoke:${new Date().toISOString()}`,
+    status,
+    fixtures,
+    results,
+    evidence: `${results.length} tenant notification smoke fixture(s) executed through guarded delivery adapters.`,
+  }
+}

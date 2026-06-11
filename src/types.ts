@@ -684,3 +684,15 @@ export type NotificationDeliveryResult = {
   }>
   evidence: string
 }
+
+export type NotificationSmokeFixtureResult = {
+  smokeId: string
+  status: StatusLevel
+  fixtures: NotificationDeliveryPayload[]
+  results: Array<{
+    fixture: NotificationDeliveryPayload
+    result: NotificationDeliveryResult
+  }>
+  records?: BackendRecord[]
+  evidence: string
+}

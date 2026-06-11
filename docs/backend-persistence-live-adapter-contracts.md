@@ -50,6 +50,7 @@ POST /api/integration-contracts
 POST /api/deployment-snapshots
 POST /api/notifications/delivery
 POST /api/notifications/delivery-dry-run
+POST /api/notifications/live-smoke-fixtures
 POST /api/adapter-dry-runs
 ```
 
@@ -80,6 +81,8 @@ The Template Library editor uses `PUT /api/templates/{recordId}` to save lifecyc
 The Evidence workspace saves readiness evidence packets through the generic `POST /api/records` record boundary with kind `readiness_evidence_packet`. Packets include canonical load records, report freshness results, open readiness exceptions, approval state, reviewer routing, route due date, reviewer rationale, next-review date, per-exception dispositions, and approval audit history. The same governed payload can be downloaded as JSON for governance review.
 
 Report approval and evidence packet notification exports are JSON handoff contracts generated in the frontend. They include route stage, recipients, due dates, status, evidence summaries, and source dependencies. `POST /api/notifications/delivery` runs guarded email, Teams, and SharePoint folder delivery connectors and persists `notification_delivery` records with per-channel evidence. Delivery remains dry-run unless `TRACS_NOTIFICATION_LIVE_DELIVERY=true` is set in the backend environment. Email live delivery uses Microsoft Graph with `TRACS_GRAPH_TOKEN`, `TRACS_NOTIFICATION_EMAIL_TARGET`, and optional `TRACS_NOTIFICATION_EMAIL_SENDER`; Teams live delivery posts to `TRACS_NOTIFICATION_TEAMS_WEBHOOK_URL`; SharePoint folder live delivery writes a JSON handoff file under `TRACS_NOTIFICATION_SHAREPOINT_FOLDER`. `POST /api/notifications/delivery-dry-run` remains available for forced dry-run validation.
+
+Tenant notification smoke fixtures use `POST /api/notifications/live-smoke-fixtures` to run email and Teams fixture payloads through the same guarded delivery adapter. The route persists `notification_delivery` records for each fixture. Without `TRACS_NOTIFICATION_LIVE_DELIVERY=true`, fixture records stay dry-run; with the live gate enabled, each channel still requires its endpoint and can be disabled independently with `TRACS_NOTIFICATION_EMAIL_LIVE=false` or `TRACS_NOTIFICATION_TEAMS_LIVE=false`. The reviewable fixture contract lives at `public/config/templates/notification_smoke_fixture.template.yaml`.
 
 The API persistence layer now routes through `server/recordStore.mjs`, which supports the default JSON file store, an opt-in SQLite store, and an opt-in Postgres store. Set `TRACS_RECORD_STORE=sqlite` and optionally `TRACS_SQLITE_FILE=data/tracs-records.sqlite` before `npm run api:sqlite` to persist versioned records in SQLite while keeping the same API routes. Set `TRACS_RECORD_STORE=postgres` and `TRACS_POSTGRES_URL` before `npm run api:postgres` to use production-grade shared persistence. `GET /api/storage/schema` returns the `tracs_records` and `tracs_record_links` blueprint that both database adapters implement. `GET /api/storage/postgres-migration-checklist` returns the environment, validation, rollback, and migration gates for promoting JSON or SQLite records into Postgres.
 

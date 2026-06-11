@@ -18,7 +18,11 @@ import {
   validateConnectorCredentials,
 } from './credentialMetadataAdapters.mjs'
 import { discoverCsvMetadata, previewCsvRows } from './csvAdapter.mjs'
-import { runNotificationDelivery, runNotificationDeliveryDryRun } from './notificationDeliveryAdapters.mjs'
+import {
+  runNotificationDelivery,
+  runNotificationDeliveryDryRun,
+  runNotificationSmokeFixtures,
+} from './notificationDeliveryAdapters.mjs'
 import {
   createFileRecordStore,
   createPostgresRecordStore,
@@ -604,6 +608,31 @@ async function handleRequest(req, res) {
         },
       })
       jsonResponse(res, 200, { ...result, record })
+      return
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/notifications/live-smoke-fixtures') {
+      const body = await parseBody(req)
+      const smoke = await runNotificationSmokeFixtures({
+        channels: Array.isArray(body.channels) && body.channels.length > 0 ? body.channels : ['email', 'teams'],
+      })
+      const records = []
+      for (const entry of smoke.results) {
+        records.push(
+          await recordStore.saveRecord({
+            kind: 'notification_delivery',
+            label: entry.fixture.subject,
+            status: entry.result.status,
+            summary: entry.result.evidence,
+            payload: {
+              request: entry.fixture,
+              result: entry.result,
+              smokeId: smoke.smokeId,
+            },
+          }),
+        )
+      }
+      jsonResponse(res, 200, { ...smoke, records })
       return
     }
 

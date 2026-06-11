@@ -212,6 +212,12 @@ const templateCatalog = [
     purpose: 'Define blocking or warning checks with expected evidence and remediation.',
   },
   {
+    name: 'Notification Smoke Fixture',
+    file: 'notification_smoke_fixture.template.yaml',
+    type: 'Notification',
+    purpose: 'Review tenant approval gates for guarded email and Teams delivery smoke checks.',
+  },
+  {
     name: 'Integration Contract',
     file: 'integration_contract.template.md',
     type: 'Governance',
@@ -1259,6 +1265,25 @@ function App() {
     )
   }
 
+  async function runNotificationSmokeFixtures() {
+    const result = await backendClient.runNotificationSmokeFixtures()
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'notification_delivery',
+        label: 'tenant notification smoke fixtures',
+        status: result.status,
+        summary: result.evidence,
+        payload: result,
+      }),
+    )
+    record(
+      'notification',
+      'smoke_fixtures',
+      `Tenant notification smoke fixtures completed with ${result.status} status.`,
+    )
+  }
+
   async function saveReportCatalogItem(report: ReportCatalogItem, action: ReportCatalogSaveAction) {
     const freshness = reportFreshnessStatus(report.lastRefresh, report.maxAgeHours)
     const normalizedReport: ReportCatalogItem = {
@@ -1640,6 +1665,7 @@ function App() {
             connectorEntries={connectorEntries}
             onRefresh={refreshBackend}
             onRunAdapterDryRun={runAdapterDryRun}
+            onRunNotificationSmokeFixtures={runNotificationSmokeFixtures}
             onSaveSnapshot={saveBackendSnapshot}
             storageSchema={storageSchema}
             postgresMigrationChecklist={postgresMigrationChecklist}
@@ -2269,6 +2295,7 @@ function BackendPersistenceView({
   connectorEntries,
   onRefresh,
   onRunAdapterDryRun,
+  onRunNotificationSmokeFixtures,
   onSaveSnapshot,
   postgresMigrationChecklist,
   storageSchema,
@@ -2280,6 +2307,7 @@ function BackendPersistenceView({
   connectorEntries: [string, AppConfig['connectors']['connectors'][string]][]
   onRefresh: () => void
   onRunAdapterDryRun: (connectorId: string) => void
+  onRunNotificationSmokeFixtures: () => void
   onSaveSnapshot: () => void
   postgresMigrationChecklist: PostgresMigrationChecklist | null
   storageSchema: RecordStoreSchema | null
@@ -2305,6 +2333,10 @@ function BackendPersistenceView({
           <button className="secondary-action" onClick={onRefresh} type="button">
             <Activity size={15} />
             Refresh
+          </button>
+          <button className="secondary-action" onClick={onRunNotificationSmokeFixtures} type="button">
+            <Bell size={15} />
+            Smoke Fixtures
           </button>
           <button className="primary-action" onClick={onSaveSnapshot} type="button">
             <ServerCog size={16} />

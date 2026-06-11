@@ -1,0 +1,46 @@
+notification_smoke_fixture:
+  fixture_id: tenant_notification_smoke_v1
+  display_name: Tenant Notification Smoke Fixture
+  lifecycle_status: starter
+  owner_role: Quality Systems Owner
+  approval_role: IT Messaging Owner
+  purpose: Validate guarded email and Teams notification delivery without exposing secrets in committed configuration.
+
+channels:
+  email:
+    delivery_route: /api/notifications/live-smoke-fixtures
+    live_gate: TRACS_NOTIFICATION_LIVE_DELIVERY
+    channel_gate: TRACS_NOTIFICATION_EMAIL_LIVE
+    required_environment:
+      - TRACS_NOTIFICATION_EMAIL_TARGET
+      - TRACS_GRAPH_TOKEN
+    optional_environment:
+      - TRACS_NOTIFICATION_EMAIL_SENDER
+    expected_result_without_live_gate: dry_run
+    expected_result_with_live_gate: live_or_skipped_with_evidence
+
+  teams:
+    delivery_route: /api/notifications/live-smoke-fixtures
+    live_gate: TRACS_NOTIFICATION_LIVE_DELIVERY
+    channel_gate: TRACS_NOTIFICATION_TEAMS_LIVE
+    required_environment:
+      - TRACS_NOTIFICATION_TEAMS_WEBHOOK_URL
+    expected_result_without_live_gate: dry_run
+    expected_result_with_live_gate: live_or_skipped_with_evidence
+
+approval_controls:
+  - Confirm smoke recipients or Teams webhook are tenant-approved before setting TRACS_NOTIFICATION_LIVE_DELIVERY=true.
+  - Keep token values and webhook URLs in backend secret storage only.
+  - Run the route once in dry-run mode and review persisted notification_delivery evidence.
+  - Enable one live channel at a time during first tenant validation.
+  - Disable a channel with TRACS_NOTIFICATION_EMAIL_LIVE=false or TRACS_NOTIFICATION_TEAMS_LIVE=false if global live delivery is enabled.
+
+sample_payload:
+  source: report_catalog
+  subject: TRACS tenant notification smoke fixture
+  summary: Guarded notification delivery validation for approved tenant endpoints.
+  recipients:
+    - tenant-approved-recipient@example.com
+  channels:
+    - email
+    - teams
