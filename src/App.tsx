@@ -712,6 +712,7 @@ function deliverySourceLabel(source: NotificationDeliveryPayload['source']) {
   if (source === 'postgres_cutover_acknowledgement') return 'Cutover acknowledgement'
   if (source === 'postgres_cutover_owner_reminder') return 'Cutover owner reminder'
   if (source === 'postgres_cutover_closure_package') return 'Cutover closure package'
+  if (source === 'postgres_cutover_final_handoff_closure_package') return 'Final handoff closure package'
   if (source === 'traceability_response_closure') return 'Traceability closure'
   return titleize(source)
 }
@@ -3368,6 +3369,29 @@ function App() {
     return saved
   }
 
+  async function deliverPostgresCutoverFinalHandoffClosurePackage({
+    download,
+    packagePayload,
+  }: {
+    download: boolean
+    packagePayload: PostgresCutoverFinalHandoffClosurePackage
+  }) {
+    const saved = await savePostgresCutoverFinalHandoffClosurePackage({ download, packagePayload })
+    if (!saved) return
+    await deliverNotifications(
+      notificationToDeliveryPayload(
+        'postgres_cutover_final_handoff_closure_package',
+        'Production cutover final handoff acknowledgement closure package',
+        {
+          notificationId: saved.payload.packageId,
+          recipients: saved.payload.closureReviewers,
+          summary: `${saved.payload.closureReviewers.join(', ')} final handoff acknowledgement closure package includes ${saved.payload.metrics.totalAcknowledgements} acknowledgement record(s), ${saved.payload.metrics.retainedActions} retained action(s), ${saved.payload.deliveryEvidence.length} delivery evidence record(s), and ${saved.payload.requiredActions.length} required action(s).`,
+          package: saved.payload,
+        },
+      ),
+    )
+  }
+
   async function saveNotificationLiveChannelApproval({
     approvedChannels,
     rationale,
@@ -4636,6 +4660,7 @@ function App() {
             onDeliverPostgresCutoverAcknowledgement={deliverPostgresCutoverAcknowledgement}
             onDeliverPostgresCutoverOwnerReminder={deliverPostgresCutoverOwnerReminder}
             onDeliverPostgresCutoverClosurePackage={deliverPostgresCutoverClosurePackage}
+            onDeliverPostgresCutoverFinalHandoffClosurePackage={deliverPostgresCutoverFinalHandoffClosurePackage}
             onDeliverClosureSlaExportPackage={deliverClosureSlaExportPackage}
             onDeliverClosureSlaFollowUpClosureExportPackage={deliverClosureSlaFollowUpClosureExportPackage}
             onDeliverNotificationRetryQueueExportPackage={deliverNotificationRetryQueueExportPackage}
@@ -5317,6 +5342,7 @@ function BackendPersistenceView({
   onDeliverPostgresCutoverAcknowledgement,
   onDeliverPostgresCutoverOwnerReminder,
   onDeliverPostgresCutoverClosurePackage,
+  onDeliverPostgresCutoverFinalHandoffClosurePackage,
   onDeliverClosureSlaExportPackage,
   onDeliverClosureSlaFollowUpClosureExportPackage,
   onDeliverNotificationRetryQueueExportPackage,
@@ -5411,6 +5437,10 @@ function BackendPersistenceView({
     download: boolean
     finalHandoffNotes: string
     finalHandoffReviewers: string[]
+  }) => void
+  onDeliverPostgresCutoverFinalHandoffClosurePackage: (request: {
+    download: boolean
+    packagePayload: PostgresCutoverFinalHandoffClosurePackage
   }) => void
   onDeliverClosureSlaExportPackage: (request: {
     download: boolean
@@ -5930,6 +5960,7 @@ function BackendPersistenceView({
     'postgres_cutover_acknowledgement',
     'postgres_cutover_owner_reminder',
     'postgres_cutover_closure_package',
+    'postgres_cutover_final_handoff_closure_package',
   ]
   const retryableDeliveryRecords = deliveryRecords.filter(
     (record) =>
@@ -6118,6 +6149,9 @@ function BackendPersistenceView({
   )
   const postgresCutoverClosurePackageDeliveryRecords = deliveryRecords.filter(
     (record) => record.payload.request.source === 'postgres_cutover_closure_package',
+  )
+  const postgresFinalHandoffClosurePackageDeliveryRecords = deliveryRecords.filter(
+    (record) => record.payload.request.source === 'postgres_cutover_final_handoff_closure_package',
   )
   const latestPostgresCutoverClosurePackageDelivery = postgresCutoverClosurePackageDeliveryRecords[0]
   const deliveryEvidenceCounts = deliveryRecords.reduce(
@@ -8995,6 +9029,19 @@ function BackendPersistenceView({
               <Download size={15} />
               Save & Download Handoff Closure Package
             </button>
+            <button
+              className="primary-action"
+              onClick={() =>
+                onDeliverPostgresCutoverFinalHandoffClosurePackage({
+                  download: false,
+                  packagePayload: buildPostgresFinalHandoffClosurePackage(),
+                })
+              }
+              type="button"
+            >
+              <Bell size={15} />
+              Save & Notify Closure Reviewers
+            </button>
           </div>
           <div className="metadata-grid">
             <Metadata label="Closure packages" value={String(postgresCutoverFinalHandoffClosurePackageRecords.length)} />
@@ -9003,6 +9050,7 @@ function BackendPersistenceView({
             <Metadata label="Retained actions" value={String(postgresFinalHandoffClosureMetrics.retainedActions)} />
             <Metadata label="Required actions" value={String(postgresFinalHandoffClosurePackageRequiredActions().length)} />
             <Metadata label="Delivery records" value={String(postgresCutoverClosurePackageDeliveryRecords.length)} />
+            <Metadata label="Package deliveries" value={String(postgresFinalHandoffClosurePackageDeliveryRecords.length)} />
           </div>
           {latestPostgresCutoverFinalHandoffClosurePackage ? (
             <div className="retry-aging-list">
@@ -9031,6 +9079,23 @@ function BackendPersistenceView({
           ) : (
             <div className="empty-state compact">No final handoff acknowledgement closure package has been retained yet.</div>
           )}
+          {postgresFinalHandoffClosurePackageDeliveryRecords.length > 0 ? (
+            <div className="retry-aging-list">
+              <h4>Final handoff closure package delivery evidence</h4>
+              {postgresFinalHandoffClosurePackageDeliveryRecords.slice(0, 3).map((record) => (
+                <div className="connector-run-row" key={record.id}>
+                  <div>
+                    <strong>{record.payload.request.subject}</strong>
+                    <span>
+                      v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
+                    </span>
+                    <small>{record.payload.result.evidence}</small>
+                  </div>
+                  <StatusChip status={record.status} label={record.status} />
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
         {postgresCutoverClosurePackageRecords.length > 1 ? (
           <div className="mapping-run-history">
@@ -9076,6 +9141,7 @@ function BackendPersistenceView({
                   <option value="postgres_cutover_acknowledgement">Cutover acknowledgement</option>
                   <option value="postgres_cutover_owner_reminder">Cutover owner reminder</option>
                   <option value="postgres_cutover_closure_package">Cutover closure package</option>
+                  <option value="postgres_cutover_final_handoff_closure_package">Final handoff closure package</option>
                 </select>
               </label>
               <label>

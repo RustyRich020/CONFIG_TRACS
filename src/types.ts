@@ -1192,6 +1192,7 @@ export type NotificationDeliveryPayload = {
     | 'postgres_cutover_acknowledgement'
     | 'postgres_cutover_owner_reminder'
     | 'postgres_cutover_closure_package'
+    | 'postgres_cutover_final_handoff_closure_package'
   channels: Array<'email' | 'teams' | 'sharepoint_folder'>
   recipients: string[]
   subject: string
