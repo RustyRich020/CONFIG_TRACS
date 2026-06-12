@@ -86,6 +86,8 @@ import type {
   PostgresCutoverAcknowledgement,
   PostgresCutoverAcknowledgementStatus,
   PostgresCutoverChecklistPackage,
+  PostgresCutoverOwnerReminder,
+  PostgresCutoverOwnerReminderStatus,
   PostgresMigrationChecklist,
   PostgresImportReconciliation,
   QualityEvent,
@@ -689,6 +691,20 @@ function postgresCutoverAcknowledgementStatusLevel(status: PostgresCutoverAcknow
 function postgresCutoverAcknowledgementLabel(status: PostgresCutoverAcknowledgementStatus) {
   if (status === 'acknowledged_with_actions') return 'Acknowledged with actions'
   return titleize(status)
+}
+
+function postgresCutoverOwnerReminderStatusLevel(status: PostgresCutoverOwnerReminderStatus): StatusLevel {
+  if (status === 'closed' || status === 'sent') return 'pass'
+  if (status === 'deferred') return 'blocking'
+  return 'warning'
+}
+
+function postgresCutoverOwnerReminderLabel(status: PostgresCutoverOwnerReminderStatus) {
+  if (status === 'draft') return 'Draft'
+  if (status === 'routed') return 'Routed'
+  if (status === 'sent') return 'Sent'
+  if (status === 'deferred') return 'Deferred'
+  return 'Closed'
 }
 
 function evaluatePostgresCutoverGates({
@@ -2357,6 +2373,139 @@ function App() {
     )
   }
 
+  async function savePostgresCutoverOwnerReminder({
+    dueAt,
+    escalationPath,
+    owners,
+    reminderAt,
+    renewalNotes,
+    status,
+  }: {
+    dueAt: string
+    escalationPath: string
+    owners: string[]
+    reminderAt: string
+    renewalNotes: string
+    status: PostgresCutoverOwnerReminderStatus
+  }) {
+    const routedAt = new Date().toISOString()
+    const latestPackage = backendRecords.find(
+      (record): record is BackendRecord<PostgresCutoverChecklistPackage> =>
+        record.kind === 'postgres_cutover_checklist_package',
+    )
+    const latestAcknowledgement = backendRecords.find(
+      (record): record is BackendRecord<PostgresCutoverAcknowledgement> =>
+        record.kind === 'postgres_cutover_acknowledgement',
+    )
+    const reconciliationRecords = backendRecords.filter(
+      (record): record is BackendRecord<PostgresImportReconciliation> =>
+        record.kind === 'postgres_import_reconciliation',
+    )
+    const latestReconciliation = reconciliationRecords[0]
+    const gateReview = evaluatePostgresCutoverGates({
+      backendHealth,
+      latestReconciliation,
+      postgresMigrationChecklist,
+    })
+    const reminderOwners = owners.length > 0
+      ? owners
+      : latestPackage?.payload.reviewerAudience.length
+        ? latestPackage.payload.reviewerAudience
+        : ['Production Cutover Owner']
+    const requiredActions = [
+      ...(latestPackage?.payload.requiredActions ?? []),
+      ...(latestAcknowledgement?.payload.requiredActions ?? []),
+      latestAcknowledgement ? null : 'Retain infrastructure acknowledgement before production cutover owner renewal closure.',
+      latestAcknowledgement?.payload.backupConfirmed
+        ? null
+        : 'Confirm managed Postgres backup retention before production cutover.',
+      latestAcknowledgement?.payload.rollbackConfirmed
+        ? null
+        : 'Confirm rollback owner and rollback window before production cutover.',
+    ]
+      .filter((action): action is string => Boolean(action))
+      .filter((action, index, actions) => actions.indexOf(action) === index)
+    const reminderStatus = postgresCutoverOwnerReminderStatusLevel(status)
+    const payload: PostgresCutoverOwnerReminder = {
+      reminderId: `postgres_cutover_owner_reminder:${routedAt}`,
+      routedAt,
+      reminderAt,
+      dueAt,
+      owners: reminderOwners,
+      status,
+      packageRecordId: latestPackage?.id,
+      packageId: latestPackage?.payload.packageId,
+      packageVersion: latestPackage?.version,
+      acknowledgementId: latestAcknowledgement?.payload.acknowledgementId,
+      acknowledgementStatus: latestAcknowledgement?.payload.status,
+      gateStatus: latestPackage?.payload.gateReview.status ?? gateReview.status,
+      productionReadiness: latestAcknowledgement?.payload.productionReadiness,
+      requiredActions,
+      escalationPath: escalationPath.trim() || 'Escalate to TRACS Platform Owner if renewal is not acknowledged by the due date.',
+      renewalNotes: renewalNotes.trim() || 'No production cutover owner renewal notes recorded.',
+      auditHistory: [
+        {
+          action: status === 'sent' ? 'cutover_owner_reminder_sent' : 'cutover_owner_reminder_routed',
+          actor: 'TRACS Backend',
+          timestamp: routedAt,
+          status,
+          summary: `Production cutover owner reminder ${postgresCutoverOwnerReminderLabel(status).toLowerCase()} for ${reminderOwners.join(', ')}.`,
+        },
+      ],
+      evidence: `Production cutover owner reminder ${postgresCutoverOwnerReminderLabel(status).toLowerCase()} for ${reminderOwners.join(', ')} with ${requiredActions.length} required action(s).`,
+    }
+    const saved = await backendClient.saveRecord({
+      kind: 'postgres_cutover_owner_reminder',
+      label: 'production cutover owner renewal reminder',
+      status: reminderStatus,
+      summary: payload.evidence,
+      payload,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'postgres_cutover_owner_reminder',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record(
+      'backend',
+      'postgres_cutover_owner_reminder',
+      `Postgres cutover owner reminder saved as backend record v${saved.version}.`,
+    )
+    return saved
+  }
+
+  async function deliverPostgresCutoverOwnerReminder(request: {
+    dueAt: string
+    escalationPath: string
+    owners: string[]
+    reminderAt: string
+    renewalNotes: string
+    status: PostgresCutoverOwnerReminderStatus
+  }) {
+    const saved = await savePostgresCutoverOwnerReminder({
+      ...request,
+      status: request.status === 'closed' ? request.status : 'sent',
+    })
+    if (!saved) return
+    await deliverNotifications(
+      notificationToDeliveryPayload(
+        'postgres_cutover_owner_reminder',
+        'Production cutover owner renewal reminder',
+        {
+          notificationId: saved.payload.reminderId,
+          recipients: saved.payload.owners,
+          summary: `${saved.payload.owners.join(', ')} production cutover reminder has ${saved.payload.requiredActions.length} required action(s) due by ${saved.payload.dueAt || 'unscheduled due date'}.`,
+          reminder: saved.payload,
+        },
+      ),
+    )
+  }
+
   async function saveNotificationLiveChannelApproval({
     approvedChannels,
     rationale,
@@ -3194,6 +3343,10 @@ function App() {
               (record): record is BackendRecord<PostgresCutoverAcknowledgement> =>
                 record.kind === 'postgres_cutover_acknowledgement',
             )}
+            postgresCutoverOwnerReminderRecords={backendRecords.filter(
+              (record): record is BackendRecord<PostgresCutoverOwnerReminder> =>
+                record.kind === 'postgres_cutover_owner_reminder',
+            )}
             postgresCutoverPackageRecords={backendRecords.filter(
               (record): record is BackendRecord<PostgresCutoverChecklistPackage> =>
                 record.kind === 'postgres_cutover_checklist_package',
@@ -3204,11 +3357,13 @@ function App() {
             onDeliverNotificationApprovalRenewalRoute={deliverNotificationApprovalRenewalRoute}
             onDeliverNotificationClosureExportPackage={deliverNotificationClosureExportPackage}
             onDeliverPostgresCutoverAcknowledgement={deliverPostgresCutoverAcknowledgement}
+            onDeliverPostgresCutoverOwnerReminder={deliverPostgresCutoverOwnerReminder}
             onSaveNotificationApprovalRenewalClosure={saveNotificationApprovalRenewalClosure}
             onSaveNotificationClosureExportPackage={saveNotificationClosureExportPackage}
             onSaveClosureSlaExportPackage={saveClosureSlaExportPackage}
             onSaveNotificationApprovalRenewalRoute={saveNotificationApprovalRenewalRoute}
             onSavePostgresCutoverAcknowledgement={savePostgresCutoverAcknowledgement}
+            onSavePostgresCutoverOwnerReminder={savePostgresCutoverOwnerReminder}
             onSavePostgresCutoverApproval={savePostgresCutoverApproval}
             onSavePostgresCutoverChecklistPackage={savePostgresCutoverChecklistPackage}
             onSaveSnapshot={saveBackendSnapshot}
@@ -3847,6 +4002,7 @@ function BackendPersistenceView({
   traceabilityClosureRouteRecords,
   postgresCutoverApprovalRecords,
   postgresCutoverAcknowledgementRecords,
+  postgresCutoverOwnerReminderRecords,
   postgresCutoverPackageRecords,
   onRefresh,
   onRunAdapterDryRun,
@@ -3854,11 +4010,13 @@ function BackendPersistenceView({
   onDeliverNotificationApprovalRenewalRoute,
   onDeliverNotificationClosureExportPackage,
   onDeliverPostgresCutoverAcknowledgement,
+  onDeliverPostgresCutoverOwnerReminder,
   onSaveNotificationApprovalRenewalClosure,
   onSaveClosureSlaExportPackage,
   onSaveNotificationClosureExportPackage,
   onSaveNotificationApprovalRenewalRoute,
   onSavePostgresCutoverAcknowledgement,
+  onSavePostgresCutoverOwnerReminder,
   onSavePostgresCutoverApproval,
   onSavePostgresCutoverChecklistPackage,
   onSaveSnapshot,
@@ -3879,6 +4037,7 @@ function BackendPersistenceView({
   traceabilityClosureRouteRecords: BackendRecord<TraceabilityResponseClosureRoute>[]
   postgresCutoverApprovalRecords: BackendRecord<PostgresCutoverApproval>[]
   postgresCutoverAcknowledgementRecords: BackendRecord<PostgresCutoverAcknowledgement>[]
+  postgresCutoverOwnerReminderRecords: BackendRecord<PostgresCutoverOwnerReminder>[]
   postgresCutoverPackageRecords: BackendRecord<PostgresCutoverChecklistPackage>[]
   onRefresh: () => void
   onRunAdapterDryRun: (connectorId: string) => void
@@ -3906,6 +4065,14 @@ function BackendPersistenceView({
     reviewerRole: PostgresCutoverAcknowledgement['reviewerRole']
     rollbackConfirmed: boolean
     status: PostgresCutoverAcknowledgementStatus
+  }) => void
+  onDeliverPostgresCutoverOwnerReminder: (request: {
+    dueAt: string
+    escalationPath: string
+    owners: string[]
+    reminderAt: string
+    renewalNotes: string
+    status: PostgresCutoverOwnerReminderStatus
   }) => void
   onSaveNotificationApprovalRenewalClosure: (request: {
     closureNotes: string
@@ -3939,6 +4106,14 @@ function BackendPersistenceView({
     reviewerRole: PostgresCutoverAcknowledgement['reviewerRole']
     rollbackConfirmed: boolean
     status: PostgresCutoverAcknowledgementStatus
+  }) => void
+  onSavePostgresCutoverOwnerReminder: (request: {
+    dueAt: string
+    escalationPath: string
+    owners: string[]
+    reminderAt: string
+    renewalNotes: string
+    status: PostgresCutoverOwnerReminderStatus
   }) => void
   onSavePostgresCutoverApproval: (request: {
     conditions: string
@@ -4035,6 +4210,23 @@ function BackendPersistenceView({
   )
   const [postgresAcknowledgementNotes, setPostgresAcknowledgementNotes] = useState(
     'Infrastructure review acknowledges the cutover package and retains required action ownership before production enablement.',
+  )
+  const [postgresCutoverReminderOwners, setPostgresCutoverReminderOwners] = useState(
+    'Infrastructure Owner, Database Administrator, Security Reviewer',
+  )
+  const [postgresCutoverReminderStatus, setPostgresCutoverReminderStatus] =
+    useState<PostgresCutoverOwnerReminderStatus>('routed')
+  const [postgresCutoverReminderAt, setPostgresCutoverReminderAt] = useState(new Date().toISOString().slice(0, 10))
+  const [postgresCutoverReminderDueAt, setPostgresCutoverReminderDueAt] = useState(() => {
+    const date = new Date()
+    date.setDate(date.getDate() + 3)
+    return date.toISOString().slice(0, 10)
+  })
+  const [postgresCutoverEscalationPath, setPostgresCutoverEscalationPath] = useState(
+    'Escalate unresolved backup, rollback, and production readiness actions to the TRACS Platform Owner before enabling shared persistence.',
+  )
+  const [postgresCutoverReminderNotes, setPostgresCutoverReminderNotes] = useState(
+    'Renewal reminder confirms owner accountability for cutover package actions before production enablement.',
   )
   const recordCounts = backendRecords.reduce(
     (summary, record) => {
@@ -4138,6 +4330,7 @@ function BackendPersistenceView({
   const latestPostgresCutoverApproval = postgresCutoverApprovalRecords[0]
   const latestPostgresCutoverPackage = postgresCutoverPackageRecords[0]
   const latestPostgresCutoverAcknowledgement = postgresCutoverAcknowledgementRecords[0]
+  const latestPostgresCutoverOwnerReminder = postgresCutoverOwnerReminderRecords[0]
   const postgresCutoverGateReview = evaluatePostgresCutoverGates({
     backendHealth,
     latestReconciliation,
@@ -4156,6 +4349,9 @@ function BackendPersistenceView({
   )
   const postgresAcknowledgementDeliveryRecords = deliveryRecords.filter(
     (record) => record.payload.request.source === 'postgres_cutover_acknowledgement',
+  )
+  const postgresCutoverOwnerReminderDeliveryRecords = deliveryRecords.filter(
+    (record) => record.payload.request.source === 'postgres_cutover_owner_reminder',
   )
   const deliveryEvidenceCounts = deliveryRecords.reduce(
     (summary, record) => {
@@ -4264,6 +4460,22 @@ function BackendPersistenceView({
       reviewerRole: postgresAcknowledgementRole,
       rollbackConfirmed: postgresRollbackConfirmed,
       status: postgresAcknowledgementStatus,
+    }
+  }
+  function postgresCutoverReminderOwnerList() {
+    return postgresCutoverReminderOwners
+      .split(',')
+      .map((owner) => owner.trim())
+      .filter(Boolean)
+  }
+  function postgresCutoverOwnerReminderRequest() {
+    return {
+      dueAt: postgresCutoverReminderDueAt,
+      escalationPath: postgresCutoverEscalationPath,
+      owners: postgresCutoverReminderOwnerList(),
+      reminderAt: postgresCutoverReminderAt,
+      renewalNotes: postgresCutoverReminderNotes,
+      status: postgresCutoverReminderStatus,
     }
   }
 
@@ -5489,6 +5701,170 @@ function BackendPersistenceView({
                   <small>{record.payload.acknowledgementNotes}</small>
                 </div>
                 <StatusChip status={record.status} label={postgresCutoverAcknowledgementLabel(record.payload.status)} />
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </section>
+
+      <section className="panel notification-approval-panel">
+        <PanelHeader
+          icon={Bell}
+          title="Production Cutover Owner Renewal Reminders"
+          subtitle="Route renewal reminders to cutover owners when package actions, backup readiness, or rollback evidence require follow-up."
+        />
+        <div className="notification-approval-grid">
+          <div className="notification-approval-form">
+            <div className="trace-review-grid">
+              <label className="trace-review-rationale">
+                <span>Cutover owners</span>
+                <textarea
+                  value={postgresCutoverReminderOwners}
+                  onChange={(event) => setPostgresCutoverReminderOwners(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Reminder status</span>
+                <select
+                  value={postgresCutoverReminderStatus}
+                  onChange={(event) =>
+                    setPostgresCutoverReminderStatus(event.target.value as PostgresCutoverOwnerReminderStatus)
+                  }
+                >
+                  <option value="routed">Routed</option>
+                  <option value="sent">Sent</option>
+                  <option value="draft">Draft</option>
+                  <option value="deferred">Deferred</option>
+                  <option value="closed">Closed</option>
+                </select>
+              </label>
+              <label>
+                <span>Reminder date</span>
+                <input
+                  type="date"
+                  value={postgresCutoverReminderAt}
+                  onChange={(event) => setPostgresCutoverReminderAt(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Due date</span>
+                <input
+                  type="date"
+                  value={postgresCutoverReminderDueAt}
+                  onChange={(event) => setPostgresCutoverReminderDueAt(event.target.value)}
+                />
+              </label>
+              <label className="trace-review-rationale">
+                <span>Escalation path</span>
+                <textarea
+                  value={postgresCutoverEscalationPath}
+                  onChange={(event) => setPostgresCutoverEscalationPath(event.target.value)}
+                />
+              </label>
+              <label className="trace-review-rationale">
+                <span>Renewal notes</span>
+                <textarea
+                  value={postgresCutoverReminderNotes}
+                  onChange={(event) => setPostgresCutoverReminderNotes(event.target.value)}
+                />
+              </label>
+            </div>
+            <div className="toolbar-actions notification-approval-actions">
+              <button
+                className="secondary-action"
+                onClick={() => onSavePostgresCutoverOwnerReminder(postgresCutoverOwnerReminderRequest())}
+                type="button"
+              >
+                <ClipboardCheck size={15} />
+                Save Reminder
+              </button>
+              <button
+                className="primary-action"
+                onClick={() => onDeliverPostgresCutoverOwnerReminder(postgresCutoverOwnerReminderRequest())}
+                type="button"
+              >
+                <Bell size={15} />
+                Save & Notify Owners
+              </button>
+            </div>
+          </div>
+          <div className="notification-approval-summary">
+            <div className="metadata-grid">
+              <Metadata label="Reminders" value={String(postgresCutoverOwnerReminderRecords.length)} />
+              <Metadata label="Deliveries" value={String(postgresCutoverOwnerReminderDeliveryRecords.length)} />
+              <Metadata label="Owners" value={String(postgresCutoverReminderOwnerList().length)} />
+              <Metadata
+                label="Latest reminder"
+                value={latestPostgresCutoverOwnerReminder ? postgresCutoverOwnerReminderLabel(latestPostgresCutoverOwnerReminder.payload.status) : 'Not routed'}
+              />
+              <Metadata
+                label="Linked package"
+                value={latestPostgresCutoverOwnerReminder?.payload.packageVersion ? `v${latestPostgresCutoverOwnerReminder.payload.packageVersion}` : 'Not linked'}
+              />
+              <Metadata
+                label="Acknowledgement"
+                value={latestPostgresCutoverOwnerReminder?.payload.acknowledgementStatus ? postgresCutoverAcknowledgementLabel(latestPostgresCutoverOwnerReminder.payload.acknowledgementStatus) : 'Not linked'}
+              />
+            </div>
+            {latestPostgresCutoverOwnerReminder ? (
+              <div className="connector-run-history">
+                <h4>Latest owner reminder</h4>
+                <div className="connector-run-row">
+                  <div>
+                    <strong>{latestPostgresCutoverOwnerReminder.payload.owners.join(', ')}</strong>
+                    <span>
+                      v{latestPostgresCutoverOwnerReminder.version} / due {latestPostgresCutoverOwnerReminder.payload.dueAt || 'not scheduled'}
+                    </span>
+                    <small>{latestPostgresCutoverOwnerReminder.payload.evidence}</small>
+                  </div>
+                  <StatusChip
+                    status={latestPostgresCutoverOwnerReminder.status}
+                    label={postgresCutoverOwnerReminderLabel(latestPostgresCutoverOwnerReminder.payload.status)}
+                  />
+                </div>
+                {latestPostgresCutoverOwnerReminder.payload.requiredActions.length > 0 ? (
+                  <div className="storage-column-list">
+                    {latestPostgresCutoverOwnerReminder.payload.requiredActions.map((action) => (
+                      <span key={action}>{action}</span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="empty-state compact">No production cutover owner reminders have been retained yet.</div>
+            )}
+            {postgresCutoverOwnerReminderDeliveryRecords.length > 0 ? (
+              <div className="connector-run-history">
+                <h4>Owner reminder delivery evidence</h4>
+                {postgresCutoverOwnerReminderDeliveryRecords.slice(0, 3).map((record) => (
+                  <div className="connector-run-row" key={record.id}>
+                    <div>
+                      <strong>{record.payload.request.subject}</strong>
+                      <span>
+                        v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
+                      </span>
+                      <small>{record.payload.result.evidence}</small>
+                    </div>
+                    <StatusChip status={record.status} label={record.status} />
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
+        {postgresCutoverOwnerReminderRecords.length > 1 ? (
+          <div className="mapping-run-history">
+            <h4>Owner reminder history</h4>
+            {postgresCutoverOwnerReminderRecords.slice(1, 5).map((record) => (
+              <div className="mapping-run-row" key={record.id}>
+                <div>
+                  <strong>{record.payload.owners.join(', ')}</strong>
+                  <span>
+                    v{record.version} / {postgresCutoverOwnerReminderLabel(record.payload.status)} / due {record.payload.dueAt || 'not scheduled'}
+                  </span>
+                  <small>{record.payload.renewalNotes}</small>
+                </div>
+                <StatusChip status={record.status} label={postgresCutoverOwnerReminderLabel(record.payload.status)} />
               </div>
             ))}
           </div>

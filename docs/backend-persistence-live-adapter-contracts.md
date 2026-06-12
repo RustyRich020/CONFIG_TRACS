@@ -386,6 +386,8 @@ Infrastructure reviewer acknowledgements are persisted as `postgres_cutover_ackn
 
 Infrastructure acknowledgement notifications reuse the guarded notification delivery adapter with source `postgres_cutover_acknowledgement`. The Backend workspace can save an acknowledgement and deliver it to the reviewer audience retained on the latest Postgres cutover checklist package, producing `notification_delivery` evidence for email, Teams, and SharePoint folder channels without mutating the acknowledgement or package records.
 
+Production cutover owner renewal reminders are persisted as `postgres_cutover_owner_reminder` records. Each reminder links to the latest cutover checklist package and acknowledgement when available, retains owner audience, reminder date, due date, status, required actions, escalation path, renewal notes, package version, acknowledgement status, gate status, and audit evidence. The Backend workspace can also deliver the reminder through the guarded notification adapter with source `postgres_cutover_owner_reminder`, producing notification evidence without mutating the linked package or acknowledgement records.
+
 ## GitHub Implementation Plan
 
 1. Create branch: `codex/backend-persistence-adapter-contracts`

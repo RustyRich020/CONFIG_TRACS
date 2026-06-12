@@ -191,6 +191,7 @@ export type SavedVersionKind =
   | 'postgres_cutover_approval'
   | 'postgres_cutover_checklist_package'
   | 'postgres_cutover_acknowledgement'
+  | 'postgres_cutover_owner_reminder'
 
 export type SavedVersion = {
   id: string
@@ -232,6 +233,7 @@ export type BackendRecordKind =
   | 'postgres_cutover_approval'
   | 'postgres_cutover_checklist_package'
   | 'postgres_cutover_acknowledgement'
+  | 'postgres_cutover_owner_reminder'
 
 export type BackendRecord<TPayload = unknown> = {
   id: string
@@ -410,6 +412,40 @@ export type PostgresCutoverAcknowledgement = {
     actor: string
     timestamp: string
     status: PostgresCutoverAcknowledgementStatus
+    summary: string
+  }>
+  evidence: string
+}
+
+export type PostgresCutoverOwnerReminderStatus =
+  | 'draft'
+  | 'routed'
+  | 'sent'
+  | 'deferred'
+  | 'closed'
+
+export type PostgresCutoverOwnerReminder = {
+  reminderId: string
+  routedAt: string
+  reminderAt: string
+  dueAt: string
+  owners: string[]
+  status: PostgresCutoverOwnerReminderStatus
+  packageRecordId?: string
+  packageId?: string
+  packageVersion?: number
+  acknowledgementId?: string
+  acknowledgementStatus?: PostgresCutoverAcknowledgementStatus
+  gateStatus: StatusLevel
+  productionReadiness?: PostgresCutoverAcknowledgement['productionReadiness']
+  requiredActions: string[]
+  escalationPath: string
+  renewalNotes: string
+  auditHistory: Array<{
+    action: 'cutover_owner_reminder_routed' | 'cutover_owner_reminder_sent'
+    actor: string
+    timestamp: string
+    status: PostgresCutoverOwnerReminderStatus
     summary: string
   }>
   evidence: string
@@ -977,6 +1013,7 @@ export type NotificationDeliveryPayload = {
     | 'notification_approval_renewal'
     | 'notification_closure_export_package'
     | 'postgres_cutover_acknowledgement'
+    | 'postgres_cutover_owner_reminder'
   channels: Array<'email' | 'teams' | 'sharepoint_folder'>
   recipients: string[]
   subject: string
