@@ -1014,6 +1014,7 @@ export type NotificationDeliveryPayload = {
     | 'traceability_response_closure'
     | 'notification_approval_renewal'
     | 'notification_closure_export_package'
+    | 'closure_sla_export_package'
     | 'postgres_cutover_acknowledgement'
     | 'postgres_cutover_owner_reminder'
   channels: Array<'email' | 'teams' | 'sharepoint_folder'>

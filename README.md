@@ -117,6 +117,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Delivers infrastructure acknowledgement notifications to Postgres cutover reviewer channels.
 - Routes production cutover owner renewal reminders with package, acknowledgement, action, and delivery evidence.
 - Adds delivery retry controls for closure and cutover notifications with retained retry policy and attempt evidence.
+- Delivers closure SLA governance export packages to reviewer notification channels with retained delivery evidence.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
@@ -265,6 +266,6 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add governance package notification delivery for closure SLA exports.
-2. Add production cutover reminder closure and superseded package evidence.
-3. Add retry queue aging and retry due-date dashboard metrics.
+1. Add production cutover reminder closure and superseded package evidence.
+2. Add retry queue aging and retry due-date dashboard metrics.
+3. Add closure SLA delivery acknowledgement and governance reviewer response tracking.
