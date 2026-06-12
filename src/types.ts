@@ -180,6 +180,7 @@ export type SavedVersionKind =
   | 'notification_delivery'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
+  | 'notification_approval_renewal_closure'
   | 'traceability_export_review'
   | 'traceability_delivery_response'
   | 'postgres_import_reconciliation'
@@ -215,6 +216,7 @@ export type BackendRecordKind =
   | 'notification_delivery'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
+  | 'notification_approval_renewal_closure'
   | 'traceability_export_review'
   | 'traceability_delivery_response'
   | 'postgres_import_reconciliation'
@@ -889,6 +891,36 @@ export type NotificationApprovalRenewalRoute = {
     actor: string
     timestamp: string
     routeStage: string
+    summary: string
+  }>
+  evidence: string
+}
+
+export type NotificationApprovalRenewalClosureStatus =
+  | 'closed'
+  | 'closed_with_conditions'
+  | 'rejected'
+
+export type NotificationApprovalRenewalClosure = {
+  closureId: string
+  closedAt: string
+  reviewer: string
+  status: NotificationApprovalRenewalClosureStatus
+  renewalRouteId?: string
+  renewalRouteStage?: NotificationApprovalRenewalRoute['routeStage']
+  renewedApprovalId?: string
+  renewedApprovalExpiresAt?: string
+  supersededApprovalId?: string
+  supersededApprovalExpiresAt?: string
+  approvedChannels: Array<'email' | 'teams' | 'sharepoint_folder'>
+  closureNotes: string
+  supersededEvidence: string[]
+  requiredEvidence: string[]
+  auditHistory: Array<{
+    action: 'renewal_closed'
+    actor: string
+    timestamp: string
+    status: NotificationApprovalRenewalClosureStatus
     summary: string
   }>
   evidence: string

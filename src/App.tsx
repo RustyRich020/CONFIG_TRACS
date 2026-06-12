@@ -72,6 +72,8 @@ import type {
   MappingValidationResult,
   NotificationLiveChannelApproval,
   NotificationApprovalRenewalRoute,
+  NotificationApprovalRenewalClosure,
+  NotificationApprovalRenewalClosureStatus,
   NotificationLiveChannelApprovalStatus,
   NotificationDeliveryPayload,
   NotificationDeliveryResult,
@@ -540,6 +542,16 @@ function notificationApprovalStatusLevel(status: NotificationLiveChannelApproval
   if (status === 'approved') return 'pass'
   if (status === 'rejected') return 'blocking'
   return 'warning'
+}
+
+function notificationRenewalClosureStatusLevel(status: NotificationApprovalRenewalClosureStatus): StatusLevel {
+  if (status === 'closed') return 'pass'
+  if (status === 'rejected') return 'blocking'
+  return 'warning'
+}
+
+function notificationRenewalClosureLabel(status: NotificationApprovalRenewalClosureStatus) {
+  return status === 'closed_with_conditions' ? 'Closed with conditions' : titleize(status)
 }
 
 function notificationApprovalExpiryStatus(approval?: BackendRecord<NotificationLiveChannelApproval>) {
@@ -2108,6 +2120,93 @@ function App() {
     })
   }
 
+  async function saveNotificationApprovalRenewalClosure({
+    closureNotes,
+    reviewer,
+    status,
+  }: {
+    closureNotes: string
+    reviewer: string
+    status: NotificationApprovalRenewalClosureStatus
+  }) {
+    const closedAt = new Date().toISOString()
+    const reviewerName = reviewer.trim() || 'Unassigned reviewer'
+    const approvalRecords = backendRecords.filter(
+      (record): record is BackendRecord<NotificationLiveChannelApproval> =>
+        record.kind === 'notification_live_channel_approval',
+    )
+    const renewalRecords = backendRecords.filter(
+      (record): record is BackendRecord<NotificationApprovalRenewalRoute> =>
+        record.kind === 'notification_approval_renewal',
+    )
+    const renewedApproval = approvalRecords[0]
+    const supersededApproval = approvalRecords[1]
+    const latestRenewal = renewalRecords[0]
+    const supersededEvidence = [
+      supersededApproval
+        ? `Superseded approval ${supersededApproval.payload.approvalId} expired ${new Date(supersededApproval.payload.expiresAt).toLocaleDateString()} and covered ${supersededApproval.payload.approvedChannels.map(titleize).join(', ')}.`
+        : 'No prior approval record was available to supersede.',
+      renewedApproval
+        ? `Renewed approval ${renewedApproval.payload.approvalId} expires ${new Date(renewedApproval.payload.expiresAt).toLocaleDateString()} and covers ${renewedApproval.payload.approvedChannels.map(titleize).join(', ')}.`
+        : 'No renewed approval record was available.',
+      latestRenewal
+        ? `Renewal route ${latestRenewal.payload.routeId} was retained at ${titleize(latestRenewal.payload.routeStage)}.`
+        : 'No renewal route record was available.',
+    ]
+    const payload: NotificationApprovalRenewalClosure = {
+      closureId: `notification_approval_renewal_closure:${closedAt}`,
+      closedAt,
+      reviewer: reviewerName,
+      status,
+      renewalRouteId: latestRenewal?.payload.routeId,
+      renewalRouteStage: latestRenewal?.payload.routeStage,
+      renewedApprovalId: renewedApproval?.payload.approvalId,
+      renewedApprovalExpiresAt: renewedApproval?.payload.expiresAt,
+      supersededApprovalId: supersededApproval?.payload.approvalId,
+      supersededApprovalExpiresAt: supersededApproval?.payload.expiresAt,
+      approvedChannels: renewedApproval?.payload.approvedChannels ?? [],
+      closureNotes: closureNotes.trim() || 'No renewal closure notes recorded.',
+      supersededEvidence,
+      requiredEvidence: [
+        'Renewed notification_live_channel_approval record retained.',
+        'Prior approval identified as superseded or explicitly noted unavailable.',
+        'Renewal route record reviewed before closure.',
+      ],
+      auditHistory: [
+        {
+          action: 'renewal_closed',
+          actor: reviewerName,
+          timestamp: closedAt,
+          status,
+          summary: `${reviewerName} recorded ${notificationRenewalClosureLabel(status)} for notification approval renewal.`,
+        },
+      ],
+      evidence: `${reviewerName} recorded ${notificationRenewalClosureLabel(status)} for notification approval renewal. ${supersededApproval ? 'Superseded approval evidence retained.' : 'No superseded approval was available.'}`,
+    }
+    const saved = await backendClient.saveRecord({
+      kind: 'notification_approval_renewal_closure',
+      label: 'notification live-channel approval renewal closure',
+      status: notificationRenewalClosureStatusLevel(status),
+      summary: payload.evidence,
+      payload,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'notification_approval_renewal_closure',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record(
+      'notification',
+      'renewal_closed',
+      `Notification approval renewal closure saved as backend record v${saved.version}.`,
+    )
+  }
+
   async function saveReportCatalogItem(report: ReportCatalogItem, action: ReportCatalogSaveAction) {
     const freshness = reportFreshnessStatus(report.lastRefresh, report.maxAgeHours)
     const normalizedReport: ReportCatalogItem = {
@@ -2515,6 +2614,10 @@ function App() {
               (record): record is BackendRecord<NotificationApprovalRenewalRoute> =>
                 record.kind === 'notification_approval_renewal',
             )}
+            notificationRenewalClosureRecords={backendRecords.filter(
+              (record): record is BackendRecord<NotificationApprovalRenewalClosure> =>
+                record.kind === 'notification_approval_renewal_closure',
+            )}
             postgresCutoverApprovalRecords={backendRecords.filter(
               (record): record is BackendRecord<PostgresCutoverApproval> =>
                 record.kind === 'postgres_cutover_approval',
@@ -2527,6 +2630,7 @@ function App() {
             onRunAdapterDryRun={runAdapterDryRun}
             onRunNotificationSmokeFixtures={runNotificationSmokeFixtures}
             onDeliverNotificationApprovalRenewalRoute={deliverNotificationApprovalRenewalRoute}
+            onSaveNotificationApprovalRenewalClosure={saveNotificationApprovalRenewalClosure}
             onSaveNotificationApprovalRenewalRoute={saveNotificationApprovalRenewalRoute}
             onSavePostgresCutoverApproval={savePostgresCutoverApproval}
             onSavePostgresCutoverChecklistPackage={savePostgresCutoverChecklistPackage}
@@ -3160,12 +3264,14 @@ function BackendPersistenceView({
   connectorEntries,
   notificationApprovalRecords,
   notificationRenewalRecords,
+  notificationRenewalClosureRecords,
   postgresCutoverApprovalRecords,
   postgresCutoverPackageRecords,
   onRefresh,
   onRunAdapterDryRun,
   onRunNotificationSmokeFixtures,
   onDeliverNotificationApprovalRenewalRoute,
+  onSaveNotificationApprovalRenewalClosure,
   onSaveNotificationApprovalRenewalRoute,
   onSavePostgresCutoverApproval,
   onSavePostgresCutoverChecklistPackage,
@@ -3181,6 +3287,7 @@ function BackendPersistenceView({
   connectorEntries: [string, AppConfig['connectors']['connectors'][string]][]
   notificationApprovalRecords: BackendRecord<NotificationLiveChannelApproval>[]
   notificationRenewalRecords: BackendRecord<NotificationApprovalRenewalRoute>[]
+  notificationRenewalClosureRecords: BackendRecord<NotificationApprovalRenewalClosure>[]
   postgresCutoverApprovalRecords: BackendRecord<PostgresCutoverApproval>[]
   postgresCutoverPackageRecords: BackendRecord<PostgresCutoverChecklistPackage>[]
   onRefresh: () => void
@@ -3193,6 +3300,11 @@ function BackendPersistenceView({
     reminderAt: string
     reviewers: string[]
     routeStage: NotificationApprovalRenewalRoute['routeStage']
+  }) => void
+  onSaveNotificationApprovalRenewalClosure: (request: {
+    closureNotes: string
+    reviewer: string
+    status: NotificationApprovalRenewalClosureStatus
   }) => void
   onSaveNotificationApprovalRenewalRoute: (request: {
     channels: NotificationApprovalRenewalRoute['channels']
@@ -3244,6 +3356,12 @@ function BackendPersistenceView({
   const [renewalRationale, setRenewalRationale] = useState(
     'Route renewal before tenant live-channel approval expires; rerun smoke fixture evidence before reapproval.',
   )
+  const [renewalClosureReviewer, setRenewalClosureReviewer] = useState('TRACS Tenant Reviewer')
+  const [renewalClosureStatus, setRenewalClosureStatus] =
+    useState<NotificationApprovalRenewalClosureStatus>('closed')
+  const [renewalClosureNotes, setRenewalClosureNotes] = useState(
+    'Renewal completed; previous live-channel approval is superseded by the retained renewed approval record.',
+  )
   const [postgresReviewer, setPostgresReviewer] = useState('TRACS Platform Owner')
   const [postgresApprovalStatus, setPostgresApprovalStatus] =
     useState<PostgresCutoverApprovalStatus>('approved_with_conditions')
@@ -3287,6 +3405,8 @@ function BackendPersistenceView({
     { read: 0, importable: 0, imported: 0, skipped: 0, invalid: 0 },
   )
   const latestNotificationRenewal = notificationRenewalRecords[0]
+  const latestNotificationRenewalClosure = notificationRenewalClosureRecords[0]
+  const supersededNotificationApproval = notificationApprovalRecords[1]
   const latestPostgresCutoverApproval = postgresCutoverApprovalRecords[0]
   const latestPostgresCutoverPackage = postgresCutoverPackageRecords[0]
   const postgresCutoverGateReview = evaluatePostgresCutoverGates({
@@ -3715,6 +3835,87 @@ function BackendPersistenceView({
             ))}
           </div>
         ) : null}
+        <div className="notification-approval-grid renewal-routing-grid">
+          <div className="notification-approval-form">
+            <div className="trace-review-grid">
+              <label>
+                <span>Closure reviewer</span>
+                <input value={renewalClosureReviewer} onChange={(event) => setRenewalClosureReviewer(event.target.value)} />
+              </label>
+              <label>
+                <span>Closure status</span>
+                <select
+                  value={renewalClosureStatus}
+                  onChange={(event) =>
+                    setRenewalClosureStatus(event.target.value as NotificationApprovalRenewalClosureStatus)
+                  }
+                >
+                  <option value="closed">Closed</option>
+                  <option value="closed_with_conditions">Closed with conditions</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </label>
+              <label className="trace-review-rationale">
+                <span>Closure notes</span>
+                <textarea value={renewalClosureNotes} onChange={(event) => setRenewalClosureNotes(event.target.value)} />
+              </label>
+            </div>
+            <div className="toolbar-actions notification-approval-actions">
+              <button
+                className="primary-action"
+                onClick={() =>
+                  onSaveNotificationApprovalRenewalClosure({
+                    closureNotes: renewalClosureNotes,
+                    reviewer: renewalClosureReviewer,
+                    status: renewalClosureStatus,
+                  })
+                }
+                type="button"
+              >
+                <ShieldCheck size={15} />
+                Close Renewal
+              </button>
+            </div>
+          </div>
+          <div className="notification-approval-summary">
+            <div className="metadata-grid">
+              <Metadata label="Closures" value={String(notificationRenewalClosureRecords.length)} />
+              <Metadata
+                label="Superseded approval"
+                value={supersededNotificationApproval ? new Date(supersededNotificationApproval.payload.expiresAt).toLocaleDateString() : 'Not available'}
+              />
+              <Metadata
+                label="Renewed approval"
+                value={latestNotificationApproval ? new Date(latestNotificationApproval.payload.expiresAt).toLocaleDateString() : 'Not signed'}
+              />
+              <Metadata
+                label="Latest closure"
+                value={
+                  latestNotificationRenewalClosure
+                    ? notificationRenewalClosureLabel(latestNotificationRenewalClosure.payload.status)
+                    : 'Not closed'
+                }
+              />
+            </div>
+            {latestNotificationRenewalClosure ? (
+              <div className="connector-run-history">
+                <h4>Latest renewal closure</h4>
+                <div className="connector-run-row">
+                  <div>
+                    <strong>{latestNotificationRenewalClosure.payload.reviewer}</strong>
+                    <span>
+                      v{latestNotificationRenewalClosure.version} / {new Date(latestNotificationRenewalClosure.createdAt).toLocaleString()}
+                    </span>
+                    <small>{latestNotificationRenewalClosure.payload.evidence}</small>
+                  </div>
+                  <StatusChip status={latestNotificationRenewalClosure.status} label={latestNotificationRenewalClosure.status} />
+                </div>
+              </div>
+            ) : (
+              <div className="empty-state compact">No renewal closure has been retained yet.</div>
+            )}
+          </div>
+        </div>
       </section>
 
       <section className="panel import-reconciliation-panel">

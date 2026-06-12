@@ -91,6 +91,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Adds tenant notification smoke fixtures for guarded email and Teams endpoint validation.
 - Requires reviewer sign-off records before tenant live notification channels can execute.
 - Routes notification approval expiry reminders before tenant live-channel sign-off records lapse.
+- Closes notification approval renewals with superseded approval evidence.
 - Adds source-specific external-reference mapping templates for CAPA, supplier, and document systems.
 - Promotes CAPA, supplier, and document external-reference mappings into active validation profiles.
 - Connects active CAPA, supplier, and document mapping profiles to credential-aware external-reference metadata and preview adapters.
@@ -254,7 +255,7 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add notification renewal closure and superseded-approval evidence.
-2. Add external-reference load exception disposition and replay controls.
-3. Add traceability response closure notifications and follow-up routing.
-4. Add infrastructure reviewer acknowledgement records for cutover packages.
+1. Add external-reference load exception disposition and replay controls.
+2. Add traceability response closure notifications and follow-up routing.
+3. Add infrastructure reviewer acknowledgement records for cutover packages.
+4. Add notification closure export packages for messaging owners.
