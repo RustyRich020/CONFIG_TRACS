@@ -706,6 +706,7 @@ function retryAgeLabel(minutes: number) {
 function deliverySourceLabel(source: NotificationDeliveryPayload['source']) {
   if (source === 'notification_closure_export_package') return 'Closure package'
   if (source === 'notification_retry_queue_export_package') return 'Retry queue package'
+  if (source === 'notification_retry_queue_acknowledgement_closure_package') return 'Retry queue acknowledgement closure package'
   if (source === 'closure_sla_export_package') return 'Closure SLA package'
   if (source === 'closure_sla_response_follow_up') return 'Closure SLA follow-up'
   if (source === 'closure_sla_follow_up_closure_export_package') return 'Closure SLA follow-up closure package'
@@ -2529,6 +2530,29 @@ function App() {
       `Notification retry queue acknowledgement closure package saved as backend record v${saved.version}.`,
     )
     return saved
+  }
+
+  async function deliverNotificationRetryQueueAcknowledgementClosurePackage({
+    download,
+    packagePayload,
+  }: {
+    download: boolean
+    packagePayload: NotificationRetryQueueAcknowledgementClosurePackage
+  }) {
+    const saved = await saveNotificationRetryQueueAcknowledgementClosurePackage({ download, packagePayload })
+    if (!saved) return
+    await deliverNotifications(
+      notificationToDeliveryPayload(
+        'notification_retry_queue_acknowledgement_closure_package',
+        'Notification retry queue acknowledgement closure package',
+        {
+          notificationId: saved.payload.packageId,
+          recipients: saved.payload.closureReviewers,
+          summary: `${saved.payload.closureReviewers.join(', ')} retry queue acknowledgement closure package includes ${saved.payload.metrics.totalAcknowledgements} acknowledgement record(s), ${saved.payload.metrics.retainedActions} retained action(s), ${saved.payload.deliveryEvidence.length} delivery evidence record(s), and ${saved.payload.requiredActions.length} required action(s).`,
+          package: saved.payload,
+        },
+      ),
+    )
   }
 
   async function runNotificationSmokeFixtures() {
@@ -4664,6 +4688,7 @@ function App() {
             onDeliverClosureSlaExportPackage={deliverClosureSlaExportPackage}
             onDeliverClosureSlaFollowUpClosureExportPackage={deliverClosureSlaFollowUpClosureExportPackage}
             onDeliverNotificationRetryQueueExportPackage={deliverNotificationRetryQueueExportPackage}
+            onDeliverNotificationRetryQueueAcknowledgementClosurePackage={deliverNotificationRetryQueueAcknowledgementClosurePackage}
             onSaveClosureSlaDeliveryAcknowledgement={saveClosureSlaDeliveryAcknowledgement}
             onSaveClosureSlaResponseFollowUpRoute={saveClosureSlaResponseFollowUpRoute}
             onSaveClosureSlaResponseFollowUpClosure={saveClosureSlaResponseFollowUpClosure}
@@ -5346,6 +5371,7 @@ function BackendPersistenceView({
   onDeliverClosureSlaExportPackage,
   onDeliverClosureSlaFollowUpClosureExportPackage,
   onDeliverNotificationRetryQueueExportPackage,
+  onDeliverNotificationRetryQueueAcknowledgementClosurePackage,
   onSaveClosureSlaDeliveryAcknowledgement,
   onSaveClosureSlaResponseFollowUpClosure,
   onSaveClosureSlaFollowUpClosureExportPackage,
@@ -5453,6 +5479,10 @@ function BackendPersistenceView({
   onDeliverNotificationRetryQueueExportPackage: (request: {
     download: boolean
     packagePayload: NotificationRetryQueueExportPackage
+  }) => void
+  onDeliverNotificationRetryQueueAcknowledgementClosurePackage: (request: {
+    download: boolean
+    packagePayload: NotificationRetryQueueAcknowledgementClosurePackage
   }) => void
   onSaveClosureSlaDeliveryAcknowledgement: (request: {
     deliveryRecord: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>
@@ -5954,6 +5984,7 @@ function BackendPersistenceView({
   const retryControlledSources: NotificationDeliveryPayload['source'][] = [
     'notification_closure_export_package',
     'notification_retry_queue_export_package',
+    'notification_retry_queue_acknowledgement_closure_package',
     'closure_sla_export_package',
     'closure_sla_response_follow_up',
     'closure_sla_follow_up_closure_export_package',
@@ -6053,6 +6084,9 @@ function BackendPersistenceView({
   const retryQueueActiveSources = new Set(notificationDeliveryRetryRecords.map((record) => record.payload.source))
   const retryQueuePackageDeliveryRecords = deliveryRecords.filter(
     (record) => record.payload.request.source === 'notification_retry_queue_export_package',
+  )
+  const retryQueueAcknowledgementClosurePackageDeliveryRecords = deliveryRecords.filter(
+    (record) => record.payload.request.source === 'notification_retry_queue_acknowledgement_closure_package',
   )
   const retryQueueAcknowledgedDeliveryIds = new Set(
     notificationRetryQueueAcknowledgementRecords.map((record) => record.payload.deliveryRecordId),
@@ -9135,6 +9169,7 @@ function BackendPersistenceView({
                 >
                   <option value="notification_closure_export_package">Closure package</option>
                   <option value="notification_retry_queue_export_package">Retry queue package</option>
+                  <option value="notification_retry_queue_acknowledgement_closure_package">Retry queue acknowledgement closure package</option>
                   <option value="closure_sla_export_package">Closure SLA package</option>
                   <option value="closure_sla_response_follow_up">Closure SLA follow-up</option>
                   <option value="closure_sla_follow_up_closure_export_package">Closure SLA follow-up closure package</option>
@@ -9573,6 +9608,19 @@ function BackendPersistenceView({
                     <Download size={15} />
                     Save & Download Retry Queue Closure Package
                   </button>
+                  <button
+                    className="primary-action"
+                    onClick={() =>
+                      onDeliverNotificationRetryQueueAcknowledgementClosurePackage({
+                        download: false,
+                        packagePayload: buildRetryQueueAcknowledgementClosurePackage(),
+                      })
+                    }
+                    type="button"
+                  >
+                    <Bell size={15} />
+                    Save & Notify Closure Reviewers
+                  </button>
                 </div>
                 <div className="metadata-grid">
                   <Metadata label="Closure packages" value={String(notificationRetryQueueAcknowledgementClosurePackageRecords.length)} />
@@ -9581,6 +9629,7 @@ function BackendPersistenceView({
                   <Metadata label="Retained actions" value={String(retryQueueAcknowledgementClosureMetrics.retainedActions)} />
                   <Metadata label="Required actions" value={String(retryQueueAcknowledgementClosurePackageRequiredActions().length)} />
                   <Metadata label="Delivery records" value={String(retryQueuePackageDeliveryRecords.length)} />
+                  <Metadata label="Package deliveries" value={String(retryQueueAcknowledgementClosurePackageDeliveryRecords.length)} />
                 </div>
                 {latestRetryQueueAcknowledgementClosurePackage ? (
                   <div className="retry-aging-list">
@@ -9609,6 +9658,23 @@ function BackendPersistenceView({
                 ) : (
                   <div className="empty-state compact">No retry queue acknowledgement closure package has been retained yet.</div>
                 )}
+                {retryQueueAcknowledgementClosurePackageDeliveryRecords.length > 0 ? (
+                  <div className="retry-aging-list">
+                    <h4>Retry queue closure package delivery evidence</h4>
+                    {retryQueueAcknowledgementClosurePackageDeliveryRecords.slice(0, 3).map((record) => (
+                      <div className="connector-run-row" key={record.id}>
+                        <div>
+                          <strong>{record.payload.request.subject}</strong>
+                          <span>
+                            v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
+                          </span>
+                          <small>{record.payload.result.evidence}</small>
+                        </div>
+                        <StatusChip status={record.status} label={record.status} />
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </div>
             {retryControlsForSource.length > 0 ? (

@@ -1186,6 +1186,7 @@ export type NotificationDeliveryPayload = {
     | 'notification_approval_renewal'
     | 'notification_closure_export_package'
     | 'notification_retry_queue_export_package'
+    | 'notification_retry_queue_acknowledgement_closure_package'
     | 'closure_sla_export_package'
     | 'closure_sla_response_follow_up'
     | 'closure_sla_follow_up_closure_export_package'
