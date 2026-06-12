@@ -190,6 +190,7 @@ export type SavedVersionKind =
   | 'closure_sla_delivery_acknowledgement'
   | 'closure_sla_response_follow_up_route'
   | 'closure_sla_response_follow_up_closure'
+  | 'closure_sla_follow_up_closure_export_package'
   | 'traceability_export_review'
   | 'traceability_delivery_response'
   | 'traceability_response_closure_route'
@@ -241,6 +242,7 @@ export type BackendRecordKind =
   | 'closure_sla_delivery_acknowledgement'
   | 'closure_sla_response_follow_up_route'
   | 'closure_sla_response_follow_up_closure'
+  | 'closure_sla_follow_up_closure_export_package'
   | 'traceability_export_review'
   | 'traceability_delivery_response'
   | 'traceability_response_closure_route'
@@ -1532,6 +1534,35 @@ export type ClosureSlaResponseFollowUpClosure = {
     status: ClosureSlaResponseFollowUpClosureStatus
     summary: string
   }>
+  evidence: string
+}
+
+export type ClosureSlaFollowUpClosureExportPackage = {
+  packageId: string
+  generatedAt: string
+  governanceReviewers: string[]
+  status: StatusLevel
+  metrics: {
+    totalClosures: number
+    closed: number
+    closedWithActions: number
+    rejected: number
+    retainedActions: number
+    supersededRoutes: number
+  }
+  closureRecords: Array<BackendRecord<ClosureSlaResponseFollowUpClosure>>
+  notificationEvidence: Array<BackendRecord<{
+    request: NotificationDeliveryPayload
+    result: NotificationDeliveryResult
+  }>>
+  requiredActions: string[]
+  reviewerNotes: string
+  sourceRecordCounts: {
+    closureRecords: number
+    followUpRoutes: number
+    acknowledgementRecords: number
+    notificationDeliveries: number
+  }
   evidence: string
 }
 
