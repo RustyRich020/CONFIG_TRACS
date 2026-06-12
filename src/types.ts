@@ -188,6 +188,7 @@ export type SavedVersionKind =
   | 'closure_sla_export_package'
   | 'closure_sla_delivery_acknowledgement'
   | 'closure_sla_response_follow_up_route'
+  | 'closure_sla_response_follow_up_closure'
   | 'traceability_export_review'
   | 'traceability_delivery_response'
   | 'traceability_response_closure_route'
@@ -236,6 +237,7 @@ export type BackendRecordKind =
   | 'closure_sla_export_package'
   | 'closure_sla_delivery_acknowledgement'
   | 'closure_sla_response_follow_up_route'
+  | 'closure_sla_response_follow_up_closure'
   | 'traceability_export_review'
   | 'traceability_delivery_response'
   | 'traceability_response_closure_route'
@@ -1411,6 +1413,48 @@ export type ClosureSlaResponseFollowUpRoute = {
     timestamp: string
     status: ClosureSlaResponseFollowUpStatus
     followUpStage: string
+    summary: string
+  }>
+  evidence: string
+}
+
+export type ClosureSlaResponseFollowUpClosureStatus =
+  | 'closed'
+  | 'closed_with_actions'
+  | 'rejected'
+
+export type ClosureSlaResponseFollowUpClosure = {
+  closureId: string
+  closedAt: string
+  reviewer: string
+  status: ClosureSlaResponseFollowUpClosureStatus
+  routeRecordId?: string
+  routeId?: string
+  routeStatus?: ClosureSlaResponseFollowUpStatus
+  followUpStage?: ClosureSlaResponseFollowUpRoute['followUpStage']
+  acknowledgementRecordId?: string
+  acknowledgementId?: string
+  deliverySubject?: string
+  packageId?: string
+  packageVersion?: number
+  routedOwners: string[]
+  retainedActions: string[]
+  closureNotes: string
+  supersededRoutes: Array<{
+    routeId: string
+    routeVersion: number
+    routedAt: string
+    status: ClosureSlaResponseFollowUpStatus
+    followUpStage: ClosureSlaResponseFollowUpRoute['followUpStage']
+    evidence: string
+  }>
+  supersededEvidence: string[]
+  sourceMetrics?: ClosureSlaExportPackage['metrics']
+  auditHistory: Array<{
+    action: 'closure_sla_follow_up_closed'
+    actor: string
+    timestamp: string
+    status: ClosureSlaResponseFollowUpClosureStatus
     summary: string
   }>
   evidence: string
