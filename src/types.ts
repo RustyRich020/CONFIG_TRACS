@@ -192,6 +192,7 @@ export type SavedVersionKind =
   | 'closure_sla_response_follow_up_route'
   | 'closure_sla_response_follow_up_closure'
   | 'closure_sla_follow_up_closure_export_package'
+  | 'closure_sla_follow_up_closure_package_acknowledgement'
   | 'traceability_export_review'
   | 'traceability_delivery_response'
   | 'traceability_response_closure_route'
@@ -246,6 +247,7 @@ export type BackendRecordKind =
   | 'closure_sla_response_follow_up_route'
   | 'closure_sla_response_follow_up_closure'
   | 'closure_sla_follow_up_closure_export_package'
+  | 'closure_sla_follow_up_closure_package_acknowledgement'
   | 'traceability_export_review'
   | 'traceability_delivery_response'
   | 'traceability_response_closure_route'
@@ -1644,6 +1646,36 @@ export type ClosureSlaFollowUpClosureExportPackage = {
     acknowledgementRecords: number
     notificationDeliveries: number
   }
+  evidence: string
+}
+
+export type ClosureSlaFollowUpClosurePackageAcknowledgement = {
+  acknowledgementId: string
+  acknowledgedAt: string
+  deliveryRecordId: string
+  deliveryId: string
+  deliverySubject: string
+  packageId?: string
+  packageRecordId?: string
+  packageVersion?: number
+  reviewer: string
+  status: ClosureSlaDeliveryAcknowledgementStatus
+  closureReady: boolean
+  responseNotes: string
+  requestedActions: string[]
+  channelSummary: string
+  packageStatus?: StatusLevel
+  sourceMetrics?: ClosureSlaFollowUpClosureExportPackage['metrics']
+  sourceRequiredActions: string[]
+  sourceClosureRecordCount: number
+  auditHistory: Array<{
+    action: 'closure_sla_follow_up_closure_package_acknowledged'
+    actor: string
+    timestamp: string
+    status: ClosureSlaDeliveryAcknowledgementStatus
+    closureReady: boolean
+    summary: string
+  }>
   evidence: string
 }
 

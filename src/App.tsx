@@ -61,6 +61,7 @@ import type {
   ClosureSlaDeliveryAcknowledgement,
   ClosureSlaDeliveryAcknowledgementStatus,
   ClosureSlaExportPackage,
+  ClosureSlaFollowUpClosurePackageAcknowledgement,
   ClosureSlaFollowUpClosureExportPackage,
   ClosureSlaResponseFollowUpClosure,
   ClosureSlaResponseFollowUpClosureStatus,
@@ -4177,6 +4178,93 @@ function App() {
     )
   }
 
+  async function saveClosureSlaFollowUpClosurePackageAcknowledgement({
+    closureReady,
+    deliveryRecord,
+    requestedActions,
+    responseNotes,
+    reviewer,
+    status,
+  }: {
+    closureReady: boolean
+    deliveryRecord: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>
+    requestedActions: string[]
+    responseNotes: string
+    reviewer: string
+    status: ClosureSlaDeliveryAcknowledgementStatus
+  }) {
+    const acknowledgedAt = new Date().toISOString()
+    const reviewerName = reviewer.trim() || 'Governance Reviewer'
+    const deliveryPackage = (deliveryRecord.payload.request.evidence as { package?: ClosureSlaFollowUpClosureExportPackage })?.package
+    const packageRecord = backendRecords.find(
+      (record): record is BackendRecord<ClosureSlaFollowUpClosureExportPackage> => {
+        if (record.kind !== 'closure_sla_follow_up_closure_export_package') return false
+        return (record.payload as ClosureSlaFollowUpClosureExportPackage).packageId === deliveryPackage?.packageId
+      },
+    )
+    const sourceActions = deliveryPackage?.requiredActions ?? []
+    const retainedActions = [...sourceActions, ...requestedActions]
+      .map((action) => action.trim())
+      .filter((action, index, actions) => action.length > 0 && actions.indexOf(action) === index)
+    const channelSummary = deliveryRecord.payload.result.channelResults
+      .map((result) => `${titleize(result.channel)} ${result.mode}/${result.status}`)
+      .join(', ')
+    const payload: ClosureSlaFollowUpClosurePackageAcknowledgement = {
+      acknowledgementId: `closure_sla_follow_up_closure_package_ack:${deliveryRecord.id}:${acknowledgedAt}`,
+      acknowledgedAt,
+      deliveryRecordId: deliveryRecord.id,
+      deliveryId: deliveryRecord.payload.result.deliveryId,
+      deliverySubject: deliveryRecord.payload.request.subject,
+      packageId: deliveryPackage?.packageId,
+      packageRecordId: packageRecord?.id,
+      packageVersion: packageRecord?.version,
+      reviewer: reviewerName,
+      status,
+      closureReady,
+      responseNotes: responseNotes.trim() || 'No Closure SLA follow-up closure package acknowledgement notes recorded.',
+      requestedActions: retainedActions,
+      channelSummary,
+      packageStatus: deliveryPackage?.status,
+      sourceMetrics: deliveryPackage?.metrics,
+      sourceRequiredActions: sourceActions,
+      sourceClosureRecordCount: deliveryPackage?.closureRecords.length ?? 0,
+      auditHistory: [
+        {
+          action: 'closure_sla_follow_up_closure_package_acknowledged',
+          actor: reviewerName,
+          timestamp: acknowledgedAt,
+          status,
+          closureReady,
+          summary: `${reviewerName} recorded ${closureSlaDeliveryAcknowledgementLabel(status)} for ${deliveryRecord.payload.request.subject}.`,
+        },
+      ],
+      evidence: `${reviewerName} recorded ${closureSlaDeliveryAcknowledgementLabel(status)} for ${deliveryRecord.payload.request.subject}. ${retainedActions.length} requested action(s) retained.`,
+    }
+    const saved = await backendClient.saveRecord({
+      kind: 'closure_sla_follow_up_closure_package_acknowledgement',
+      label: deliveryRecord.payload.request.subject,
+      status: closureSlaDeliveryAcknowledgementStatusLevel(status),
+      summary: payload.evidence,
+      payload,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'closure_sla_follow_up_closure_package_acknowledgement',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record(
+      'notification',
+      'closure_sla_follow_up_closure_package_acknowledgement',
+      `Closure SLA follow-up closure package acknowledgement saved as backend record v${saved.version}.`,
+    )
+    return saved
+  }
+
   async function saveReportCatalogItem(report: ReportCatalogItem, action: ReportCatalogSaveAction) {
     const freshness = reportFreshnessStatus(report.lastRefresh, report.maxAgeHours)
     const normalizedReport: ReportCatalogItem = {
@@ -4640,6 +4728,10 @@ function App() {
               (record): record is BackendRecord<ClosureSlaFollowUpClosureExportPackage> =>
                 record.kind === 'closure_sla_follow_up_closure_export_package',
             )}
+            closureSlaFollowUpClosurePackageAcknowledgementRecords={backendRecords.filter(
+              (record): record is BackendRecord<ClosureSlaFollowUpClosurePackageAcknowledgement> =>
+                record.kind === 'closure_sla_follow_up_closure_package_acknowledgement',
+            )}
             traceabilityClosureRouteRecords={backendRecords.filter(
               (record): record is BackendRecord<TraceabilityResponseClosureRoute> =>
                 record.kind === 'traceability_response_closure_route',
@@ -4693,6 +4785,7 @@ function App() {
             onSaveClosureSlaResponseFollowUpRoute={saveClosureSlaResponseFollowUpRoute}
             onSaveClosureSlaResponseFollowUpClosure={saveClosureSlaResponseFollowUpClosure}
             onSaveClosureSlaFollowUpClosureExportPackage={saveClosureSlaFollowUpClosureExportPackage}
+            onSaveClosureSlaFollowUpClosurePackageAcknowledgement={saveClosureSlaFollowUpClosurePackageAcknowledgement}
             onSaveNotificationDeliveryRetryControl={saveNotificationDeliveryRetryControl}
             onSaveNotificationRetryQueueExportPackage={saveNotificationRetryQueueExportPackage}
             onSaveNotificationRetryQueueAcknowledgement={saveNotificationRetryQueueAcknowledgement}
@@ -5338,6 +5431,7 @@ function BackendPersistenceView({
   backendRecords,
   closureSlaDeliveryAcknowledgementRecords,
   closureSlaExportPackageRecords,
+  closureSlaFollowUpClosurePackageAcknowledgementRecords,
   closureSlaFollowUpClosureExportPackageRecords,
   closureSlaResponseFollowUpClosureRecords,
   closureSlaResponseFollowUpRouteRecords,
@@ -5375,6 +5469,7 @@ function BackendPersistenceView({
   onSaveClosureSlaDeliveryAcknowledgement,
   onSaveClosureSlaResponseFollowUpClosure,
   onSaveClosureSlaFollowUpClosureExportPackage,
+  onSaveClosureSlaFollowUpClosurePackageAcknowledgement,
   onSaveClosureSlaResponseFollowUpRoute,
   onSaveNotificationDeliveryRetryControl,
   onSaveNotificationRetryQueueAcknowledgement,
@@ -5403,6 +5498,7 @@ function BackendPersistenceView({
   backendRecords: BackendRecord[]
   closureSlaDeliveryAcknowledgementRecords: BackendRecord<ClosureSlaDeliveryAcknowledgement>[]
   closureSlaExportPackageRecords: BackendRecord<ClosureSlaExportPackage>[]
+  closureSlaFollowUpClosurePackageAcknowledgementRecords: BackendRecord<ClosureSlaFollowUpClosurePackageAcknowledgement>[]
   closureSlaFollowUpClosureExportPackageRecords: BackendRecord<ClosureSlaFollowUpClosureExportPackage>[]
   closureSlaResponseFollowUpClosureRecords: BackendRecord<ClosureSlaResponseFollowUpClosure>[]
   closureSlaResponseFollowUpRouteRecords: BackendRecord<ClosureSlaResponseFollowUpRoute>[]
@@ -5515,6 +5611,14 @@ function BackendPersistenceView({
   onSaveClosureSlaFollowUpClosureExportPackage: (request: {
     download: boolean
     packagePayload: ClosureSlaFollowUpClosureExportPackage
+  }) => void
+  onSaveClosureSlaFollowUpClosurePackageAcknowledgement: (request: {
+    closureReady: boolean
+    deliveryRecord: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>
+    requestedActions: string[]
+    responseNotes: string
+    reviewer: string
+    status: ClosureSlaDeliveryAcknowledgementStatus
   }) => void
   onSaveNotificationDeliveryRetryControl: (request: {
     deliveryRecord: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>
@@ -5711,6 +5815,18 @@ function BackendPersistenceView({
   )
   const [closureSlaClosurePackageNotes, setClosureSlaClosurePackageNotes] = useState(
     'Package retained Closure SLA follow-up closure records, notification evidence, superseded routes, and retained action disposition for governance review.',
+  )
+  const [closureSlaClosurePackageAckReviewer, setClosureSlaClosurePackageAckReviewer] = useState(
+    'Quality Governance Reviewer',
+  )
+  const [closureSlaClosurePackageAckStatus, setClosureSlaClosurePackageAckStatus] =
+    useState<ClosureSlaDeliveryAcknowledgementStatus>('acknowledged')
+  const [closureSlaClosurePackageAckReady, setClosureSlaClosurePackageAckReady] = useState(false)
+  const [closureSlaClosurePackageAckNotes, setClosureSlaClosurePackageAckNotes] = useState(
+    'Governance reviewer acknowledged the delivered Closure SLA follow-up closure package and retained closeout response evidence.',
+  )
+  const [closureSlaClosurePackageAckActions, setClosureSlaClosurePackageAckActions] = useState(
+    'Disposition retained Closure SLA follow-up closure actions before governance closeout.',
   )
   const [postgresReviewer, setPostgresReviewer] = useState('TRACS Platform Owner')
   const [postgresApprovalStatus, setPostgresApprovalStatus] =
@@ -6146,6 +6262,12 @@ function BackendPersistenceView({
   const closureSlaFollowUpClosurePackageDeliveryRecords = deliveryRecords.filter(
     (record) => record.payload.request.source === 'closure_sla_follow_up_closure_export_package',
   )
+  const latestClosureSlaFollowUpClosurePackageDelivery = closureSlaFollowUpClosurePackageDeliveryRecords[0]
+  const closureSlaFollowUpClosurePackageAcknowledgedDeliveryIds = new Set(
+    closureSlaFollowUpClosurePackageAcknowledgementRecords.map((record) => record.payload.deliveryRecordId),
+  )
+  const latestClosureSlaFollowUpClosurePackageAcknowledgement =
+    closureSlaFollowUpClosurePackageAcknowledgementRecords[0]
   const closureSlaFollowUpClosureMetrics = closureSlaResponseFollowUpClosureRecords.reduce(
     (summary, record) => {
       summary.totalClosures += 1
@@ -6268,6 +6390,12 @@ function BackendPersistenceView({
       ? route.payload.requestedActions
       : closureSlaFollowUpActionList()
   }
+  function closureSlaClosurePackageAckActionList() {
+    return closureSlaClosurePackageAckActions
+      .split('\n')
+      .map((action) => action.trim())
+      .filter(Boolean)
+  }
   function closureSlaDeliveryAcknowledgementRequest(
     deliveryRecord: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>,
   ) {
@@ -6278,6 +6406,19 @@ function BackendPersistenceView({
       reviewer: closureSlaAckReviewer,
       routeStage: closureSlaAckRouteStage,
       status: closureSlaAckStatus,
+    }
+  }
+  function closureSlaFollowUpClosurePackageAcknowledgementRequest(
+    deliveryRecord = latestClosureSlaFollowUpClosurePackageDelivery,
+  ) {
+    if (!deliveryRecord) return
+    return {
+      closureReady: closureSlaClosurePackageAckReady,
+      deliveryRecord,
+      requestedActions: closureSlaClosurePackageAckActionList(),
+      responseNotes: closureSlaClosurePackageAckNotes,
+      reviewer: closureSlaClosurePackageAckReviewer,
+      status: closureSlaClosurePackageAckStatus,
     }
   }
   function closureSlaResponseFollowUpRequest(
@@ -7895,6 +8036,116 @@ function BackendPersistenceView({
               ))}
             </div>
           ) : null}
+          <div className="retry-aging-list">
+            <div className="dashboard-heading">
+              <h4>Follow-up closure package acknowledgement</h4>
+              <StatusChip
+                status={closureSlaDeliveryAcknowledgementStatusLevel(closureSlaClosurePackageAckStatus)}
+                label={closureSlaDeliveryAcknowledgementLabel(closureSlaClosurePackageAckStatus)}
+              />
+            </div>
+            <div className="trace-review-grid">
+              <label>
+                <span>Reviewer</span>
+                <input
+                  value={closureSlaClosurePackageAckReviewer}
+                  onChange={(event) => setClosureSlaClosurePackageAckReviewer(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Response status</span>
+                <select
+                  value={closureSlaClosurePackageAckStatus}
+                  onChange={(event) =>
+                    setClosureSlaClosurePackageAckStatus(event.target.value as ClosureSlaDeliveryAcknowledgementStatus)
+                  }
+                >
+                  <option value="acknowledged">Acknowledged</option>
+                  <option value="approved">Approved</option>
+                  <option value="changes_requested">Changes requested</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </label>
+              <label className="toggle-row">
+                <input
+                  checked={closureSlaClosurePackageAckReady}
+                  onChange={(event) => setClosureSlaClosurePackageAckReady(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>Closure package ready</span>
+              </label>
+              <label className="trace-review-rationale">
+                <span>Requested actions</span>
+                <textarea
+                  value={closureSlaClosurePackageAckActions}
+                  onChange={(event) => setClosureSlaClosurePackageAckActions(event.target.value)}
+                />
+              </label>
+              <label className="trace-review-rationale">
+                <span>Response notes</span>
+                <textarea
+                  value={closureSlaClosurePackageAckNotes}
+                  onChange={(event) => setClosureSlaClosurePackageAckNotes(event.target.value)}
+                />
+              </label>
+            </div>
+            <div className="toolbar-actions notification-approval-actions">
+              <button
+                className="primary-action"
+                disabled={!latestClosureSlaFollowUpClosurePackageDelivery}
+                onClick={() => {
+                  const request = closureSlaFollowUpClosurePackageAcknowledgementRequest(
+                    latestClosureSlaFollowUpClosurePackageDelivery,
+                  )
+                  if (request) onSaveClosureSlaFollowUpClosurePackageAcknowledgement(request)
+                }}
+                type="button"
+              >
+                <ClipboardCheck size={15} />
+                Save Closure Package Acknowledgement
+              </button>
+            </div>
+            <div className="metadata-grid">
+              <Metadata
+                label="Acknowledgements"
+                value={String(closureSlaFollowUpClosurePackageAcknowledgementRecords.length)}
+              />
+              <Metadata
+                label="Latest delivery"
+                value={
+                  latestClosureSlaFollowUpClosurePackageDelivery
+                    ? new Date(latestClosureSlaFollowUpClosurePackageDelivery.createdAt).toLocaleString()
+                    : 'Not delivered'
+                }
+              />
+              <Metadata
+                label="Open deliveries"
+                value={String(
+                  closureSlaFollowUpClosurePackageDeliveryRecords.filter(
+                    (record) => !closureSlaFollowUpClosurePackageAcknowledgedDeliveryIds.has(record.id),
+                  ).length,
+                )}
+              />
+              <Metadata label="Requested actions" value={String(closureSlaClosurePackageAckActionList().length)} />
+            </div>
+            {latestClosureSlaFollowUpClosurePackageAcknowledgement ? (
+              <div className="connector-run-row">
+                <div>
+                  <strong>{latestClosureSlaFollowUpClosurePackageAcknowledgement.payload.reviewer}</strong>
+                  <span>
+                    v{latestClosureSlaFollowUpClosurePackageAcknowledgement.version} / {closureSlaDeliveryAcknowledgementLabel(latestClosureSlaFollowUpClosurePackageAcknowledgement.payload.status)} / {new Date(latestClosureSlaFollowUpClosurePackageAcknowledgement.createdAt).toLocaleString()}
+                  </span>
+                  <small>{latestClosureSlaFollowUpClosurePackageAcknowledgement.payload.evidence}</small>
+                </div>
+                <StatusChip
+                  status={latestClosureSlaFollowUpClosurePackageAcknowledgement.status}
+                  label={closureSlaDeliveryAcknowledgementLabel(latestClosureSlaFollowUpClosurePackageAcknowledgement.payload.status)}
+                />
+              </div>
+            ) : (
+              <div className="empty-state compact">No follow-up closure package acknowledgement has been retained yet.</div>
+            )}
+          </div>
         </div>
         {closureSlaDeliveryAcknowledgementRecords.length > 1 ? (
           <div className="mapping-run-history">
