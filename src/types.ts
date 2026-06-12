@@ -1188,6 +1188,7 @@ export type NotificationDeliveryPayload = {
     | 'notification_retry_queue_export_package'
     | 'closure_sla_export_package'
     | 'closure_sla_response_follow_up'
+    | 'closure_sla_follow_up_closure_export_package'
     | 'postgres_cutover_acknowledgement'
     | 'postgres_cutover_owner_reminder'
     | 'postgres_cutover_closure_package'

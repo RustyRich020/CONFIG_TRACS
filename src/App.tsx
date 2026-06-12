@@ -708,6 +708,7 @@ function deliverySourceLabel(source: NotificationDeliveryPayload['source']) {
   if (source === 'notification_retry_queue_export_package') return 'Retry queue package'
   if (source === 'closure_sla_export_package') return 'Closure SLA package'
   if (source === 'closure_sla_response_follow_up') return 'Closure SLA follow-up'
+  if (source === 'closure_sla_follow_up_closure_export_package') return 'Closure SLA follow-up closure package'
   if (source === 'postgres_cutover_acknowledgement') return 'Cutover acknowledgement'
   if (source === 'postgres_cutover_owner_reminder') return 'Cutover owner reminder'
   if (source === 'postgres_cutover_closure_package') return 'Cutover closure package'
@@ -4105,6 +4106,29 @@ function App() {
     return saved
   }
 
+  async function deliverClosureSlaFollowUpClosureExportPackage({
+    download,
+    packagePayload,
+  }: {
+    download: boolean
+    packagePayload: ClosureSlaFollowUpClosureExportPackage
+  }) {
+    const saved = await saveClosureSlaFollowUpClosureExportPackage({ download, packagePayload })
+    if (!saved) return
+    await deliverNotifications(
+      notificationToDeliveryPayload(
+        'closure_sla_follow_up_closure_export_package',
+        'Closure SLA follow-up closure package',
+        {
+          notificationId: saved.payload.packageId,
+          recipients: saved.payload.governanceReviewers,
+          summary: `${saved.payload.governanceReviewers.join(', ')} follow-up closure package includes ${saved.payload.metrics.totalClosures} closure record(s), ${saved.payload.metrics.retainedActions} retained action(s), ${saved.payload.metrics.supersededRoutes} superseded route(s), ${saved.payload.notificationEvidence.length} notification evidence record(s), and ${saved.payload.requiredActions.length} required action(s).`,
+          package: saved.payload,
+        },
+      ),
+    )
+  }
+
   async function saveReportCatalogItem(report: ReportCatalogItem, action: ReportCatalogSaveAction) {
     const freshness = reportFreshnessStatus(report.lastRefresh, report.maxAgeHours)
     const normalizedReport: ReportCatalogItem = {
@@ -4613,6 +4637,7 @@ function App() {
             onDeliverPostgresCutoverOwnerReminder={deliverPostgresCutoverOwnerReminder}
             onDeliverPostgresCutoverClosurePackage={deliverPostgresCutoverClosurePackage}
             onDeliverClosureSlaExportPackage={deliverClosureSlaExportPackage}
+            onDeliverClosureSlaFollowUpClosureExportPackage={deliverClosureSlaFollowUpClosureExportPackage}
             onDeliverNotificationRetryQueueExportPackage={deliverNotificationRetryQueueExportPackage}
             onSaveClosureSlaDeliveryAcknowledgement={saveClosureSlaDeliveryAcknowledgement}
             onSaveClosureSlaResponseFollowUpRoute={saveClosureSlaResponseFollowUpRoute}
@@ -5293,6 +5318,7 @@ function BackendPersistenceView({
   onDeliverPostgresCutoverOwnerReminder,
   onDeliverPostgresCutoverClosurePackage,
   onDeliverClosureSlaExportPackage,
+  onDeliverClosureSlaFollowUpClosureExportPackage,
   onDeliverNotificationRetryQueueExportPackage,
   onSaveClosureSlaDeliveryAcknowledgement,
   onSaveClosureSlaResponseFollowUpClosure,
@@ -5389,6 +5415,10 @@ function BackendPersistenceView({
   onDeliverClosureSlaExportPackage: (request: {
     download: boolean
     packagePayload: ClosureSlaExportPackage
+  }) => void
+  onDeliverClosureSlaFollowUpClosureExportPackage: (request: {
+    download: boolean
+    packagePayload: ClosureSlaFollowUpClosureExportPackage
   }) => void
   onDeliverNotificationRetryQueueExportPackage: (request: {
     download: boolean
@@ -5896,6 +5926,7 @@ function BackendPersistenceView({
     'notification_retry_queue_export_package',
     'closure_sla_export_package',
     'closure_sla_response_follow_up',
+    'closure_sla_follow_up_closure_export_package',
     'postgres_cutover_acknowledgement',
     'postgres_cutover_owner_reminder',
     'postgres_cutover_closure_package',
@@ -6046,6 +6077,9 @@ function BackendPersistenceView({
   const latestClosureSlaFollowUpClosureExportPackage = closureSlaFollowUpClosureExportPackageRecords[0]
   const closureSlaFollowUpNotificationRecords = deliveryRecords.filter(
     (record) => record.payload.request.source === 'closure_sla_response_follow_up',
+  )
+  const closureSlaFollowUpClosurePackageDeliveryRecords = deliveryRecords.filter(
+    (record) => record.payload.request.source === 'closure_sla_follow_up_closure_export_package',
   )
   const closureSlaFollowUpClosureMetrics = closureSlaResponseFollowUpClosureRecords.reduce(
     (summary, record) => {
@@ -7729,6 +7763,19 @@ function BackendPersistenceView({
               <Download size={15} />
               Save & Download Closure Package
             </button>
+            <button
+              className="primary-action"
+              onClick={() =>
+                onDeliverClosureSlaFollowUpClosureExportPackage({
+                  download: false,
+                  packagePayload: buildClosureSlaFollowUpClosureExportPackage(),
+                })
+              }
+              type="button"
+            >
+              <Bell size={15} />
+              Save & Notify Closure Reviewers
+            </button>
           </div>
           <div className="metadata-grid">
             <Metadata label="Closure packages" value={String(closureSlaFollowUpClosureExportPackageRecords.length)} />
@@ -7737,6 +7784,7 @@ function BackendPersistenceView({
             <Metadata label="Superseded routes" value={String(closureSlaFollowUpClosureMetrics.supersededRoutes)} />
             <Metadata label="Required actions" value={String(closureSlaFollowUpClosurePackageRequiredActions().length)} />
             <Metadata label="Notification evidence" value={String(closureSlaFollowUpNotificationRecords.length)} />
+            <Metadata label="Package deliveries" value={String(closureSlaFollowUpClosurePackageDeliveryRecords.length)} />
           </div>
           {latestClosureSlaFollowUpClosureExportPackage ? (
             <div className="retry-aging-list">
@@ -7762,6 +7810,23 @@ function BackendPersistenceView({
           ) : (
             <div className="empty-state compact">No Closure SLA follow-up closure export package has been retained yet.</div>
           )}
+          {closureSlaFollowUpClosurePackageDeliveryRecords.length > 0 ? (
+            <div className="retry-aging-list">
+              <h4>Follow-up closure package delivery evidence</h4>
+              {closureSlaFollowUpClosurePackageDeliveryRecords.slice(0, 3).map((record) => (
+                <div className="connector-run-row" key={record.id}>
+                  <div>
+                    <strong>{record.payload.request.subject}</strong>
+                    <span>
+                      v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
+                    </span>
+                    <small>{record.payload.result.evidence}</small>
+                  </div>
+                  <StatusChip status={record.status} label={record.status} />
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
         {closureSlaDeliveryAcknowledgementRecords.length > 1 ? (
           <div className="mapping-run-history">
@@ -9007,6 +9072,7 @@ function BackendPersistenceView({
                   <option value="notification_retry_queue_export_package">Retry queue package</option>
                   <option value="closure_sla_export_package">Closure SLA package</option>
                   <option value="closure_sla_response_follow_up">Closure SLA follow-up</option>
+                  <option value="closure_sla_follow_up_closure_export_package">Closure SLA follow-up closure package</option>
                   <option value="postgres_cutover_acknowledgement">Cutover acknowledgement</option>
                   <option value="postgres_cutover_owner_reminder">Cutover owner reminder</option>
                   <option value="postgres_cutover_closure_package">Cutover closure package</option>
