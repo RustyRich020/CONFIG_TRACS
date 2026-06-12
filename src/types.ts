@@ -195,6 +195,7 @@ export type SavedVersionKind =
   | 'postgres_cutover_acknowledgement'
   | 'postgres_cutover_owner_reminder'
   | 'postgres_cutover_reminder_closure'
+  | 'postgres_cutover_closure_package'
 
 export type SavedVersion = {
   id: string
@@ -240,6 +241,7 @@ export type BackendRecordKind =
   | 'postgres_cutover_acknowledgement'
   | 'postgres_cutover_owner_reminder'
   | 'postgres_cutover_reminder_closure'
+  | 'postgres_cutover_closure_package'
 
 export type BackendRecord<TPayload = unknown> = {
   id: string
@@ -492,6 +494,43 @@ export type PostgresCutoverReminderClosure = {
     actor: string
     timestamp: string
     status: PostgresCutoverReminderClosureStatus
+    summary: string
+  }>
+  evidence: string
+}
+
+export type PostgresCutoverClosurePackage = {
+  packageId: string
+  generatedAt: string
+  finalHandoffReviewers: string[]
+  status: StatusLevel
+  latestPackage?: PostgresCutoverChecklistPackage
+  latestApproval?: PostgresCutoverApproval
+  latestAcknowledgement?: PostgresCutoverAcknowledgement
+  latestReminder?: PostgresCutoverOwnerReminder
+  latestReminderClosure?: PostgresCutoverReminderClosure
+  deliveryEvidence: Array<BackendRecord<{
+    request: NotificationDeliveryPayload
+    result: NotificationDeliveryResult
+  }>>
+  retryEvidence: Array<BackendRecord<NotificationDeliveryRetryControl>>
+  closureEvidence: string[]
+  requiredActions: string[]
+  finalHandoffNotes: string
+  sourceRecordCounts: {
+    approvals: number
+    checklistPackages: number
+    acknowledgements: number
+    ownerReminders: number
+    reminderClosures: number
+    deliveries: number
+    retryControls: number
+  }
+  auditHistory: Array<{
+    action: 'cutover_closure_package_generated'
+    actor: string
+    timestamp: string
+    status: StatusLevel
     summary: string
   }>
   evidence: string

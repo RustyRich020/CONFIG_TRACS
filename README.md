@@ -121,6 +121,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Captures Closure SLA governance delivery acknowledgements and reviewer response history.
 - Closes production cutover owner reminders with retained actions and superseded package evidence.
 - Shows retry queue aging and retry due-date dashboard metrics for governed delivery retries.
+- Exports production cutover closure packages for final infrastructure handoff.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
@@ -269,6 +270,6 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add production cutover closure package export for final infrastructure handoff.
-2. Add retry queue export packages for notification operations review.
-3. Add governance response follow-up routing for Closure SLA delivery acknowledgements.
+1. Add retry queue export packages for notification operations review.
+2. Add governance response follow-up routing for Closure SLA delivery acknowledgements.
+3. Add production cutover closure package notification delivery to infrastructure owners.
