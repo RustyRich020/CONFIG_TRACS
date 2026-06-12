@@ -179,6 +179,7 @@ export type SavedVersionKind =
   | 'extraction_run'
   | 'credential_validation'
   | 'notification_delivery'
+  | 'notification_delivery_retry'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -221,6 +222,7 @@ export type BackendRecordKind =
   | 'extraction_run'
   | 'credential_validation'
   | 'notification_delivery'
+  | 'notification_delivery_retry'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -1019,6 +1021,42 @@ export type NotificationDeliveryPayload = {
   subject: string
   summary: string
   evidence: unknown
+}
+
+export type NotificationDeliveryRetryStatus =
+  | 'planned'
+  | 'executed'
+  | 'blocked'
+
+export type NotificationDeliveryRetryControl = {
+  retryId: string
+  createdAt: string
+  originalDeliveryRecordId: string
+  originalDeliveryId: string
+  retryDeliveryId?: string
+  source: NotificationDeliveryPayload['source']
+  subject: string
+  recipients: string[]
+  channels: NotificationDeliveryPayload['channels']
+  attempt: number
+  maxRetries: number
+  retryDelayMinutes: number
+  retryOnWarnings: boolean
+  retryEligible: boolean
+  status: NotificationDeliveryRetryStatus
+  originalStatus: StatusLevel
+  retryStatus?: StatusLevel
+  rationale: string
+  originalResult: NotificationDeliveryResult
+  retryResult?: NotificationDeliveryResult
+  auditHistory: Array<{
+    action: 'retry_planned' | 'retry_executed' | 'retry_blocked'
+    actor: string
+    timestamp: string
+    status: NotificationDeliveryRetryStatus
+    summary: string
+  }>
+  evidence: string
 }
 
 export type NotificationLiveChannelApprovalStatus = 'draft' | 'approved' | 'rejected'

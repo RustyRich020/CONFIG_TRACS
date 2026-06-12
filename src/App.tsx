@@ -78,6 +78,8 @@ import type {
   NotificationApprovalRenewalClosure,
   NotificationApprovalRenewalClosureStatus,
   NotificationClosureExportPackage,
+  NotificationDeliveryRetryControl,
+  NotificationDeliveryRetryStatus,
   NotificationLiveChannelApprovalStatus,
   NotificationDeliveryPayload,
   NotificationDeliveryResult,
@@ -588,6 +590,26 @@ function notificationToDeliveryPayload(
     summary: notification.summary,
     evidence: notification,
   }
+}
+
+function notificationDeliveryRetryStatusLevel(status: NotificationDeliveryRetryStatus, retryStatus?: StatusLevel): StatusLevel {
+  if (status === 'blocked') return 'blocking'
+  if (status === 'executed') return retryStatus ?? 'warning'
+  return 'warning'
+}
+
+function notificationDeliveryRetryLabel(status: NotificationDeliveryRetryStatus) {
+  if (status === 'planned') return 'Planned'
+  if (status === 'executed') return 'Executed'
+  return 'Blocked'
+}
+
+function deliverySourceLabel(source: NotificationDeliveryPayload['source']) {
+  if (source === 'notification_closure_export_package') return 'Closure package'
+  if (source === 'postgres_cutover_acknowledgement') return 'Cutover acknowledgement'
+  if (source === 'postgres_cutover_owner_reminder') return 'Cutover owner reminder'
+  if (source === 'traceability_response_closure') return 'Traceability closure'
+  return titleize(source)
 }
 
 function notificationApprovalStatusLevel(status: NotificationLiveChannelApprovalStatus): StatusLevel {
@@ -2063,6 +2085,117 @@ function App() {
       'delivery',
       `${payload.subject} delivery completed with ${result.status} status.`,
     )
+    return result
+  }
+
+  async function saveNotificationDeliveryRetryControl({
+    deliveryRecord,
+    execute,
+    maxRetries,
+    rationale,
+    retryDelayMinutes,
+    retryOnWarnings,
+  }: {
+    deliveryRecord: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>
+    execute: boolean
+    maxRetries: number
+    rationale: string
+    retryDelayMinutes: number
+    retryOnWarnings: boolean
+  }) {
+    const createdAt = new Date().toISOString()
+    const existingRetryRecords = backendRecords.filter(
+      (record): record is BackendRecord<NotificationDeliveryRetryControl> => {
+        if (record.kind !== 'notification_delivery_retry') return false
+        return (record.payload as NotificationDeliveryRetryControl).originalDeliveryRecordId === deliveryRecord.id
+      },
+    )
+    const attempt = existingRetryRecords.length + 1
+    const statusEligible =
+      deliveryRecord.status === 'blocking' || (deliveryRecord.status === 'warning' && retryOnWarnings)
+    const retryEligible = statusEligible && attempt <= maxRetries
+    const retryDeliveryId = `${deliveryRecord.payload.request.deliveryId}:retry:${attempt}:${createdAt}`
+    let retryResult: NotificationDeliveryResult | undefined
+
+    if (execute && retryEligible) {
+      retryResult = await deliverNotifications({
+        ...deliveryRecord.payload.request,
+        deliveryId: retryDeliveryId,
+        generatedAt: createdAt,
+        evidence: {
+          originalDeliveryRecordId: deliveryRecord.id,
+          originalDeliveryId: deliveryRecord.payload.result.deliveryId,
+          retryAttempt: attempt,
+          retryRationale: rationale.trim() || 'Retry executed from Backend delivery retry controls.',
+          originalEvidence: deliveryRecord.payload.request.evidence,
+        },
+      })
+    }
+
+    const retryStatus: NotificationDeliveryRetryStatus = execute
+      ? retryEligible
+        ? 'executed'
+        : 'blocked'
+      : retryEligible
+        ? 'planned'
+        : 'blocked'
+    const controlPayload: NotificationDeliveryRetryControl = {
+      retryId: `notification_delivery_retry:${deliveryRecord.id}:${createdAt}`,
+      createdAt,
+      originalDeliveryRecordId: deliveryRecord.id,
+      originalDeliveryId: deliveryRecord.payload.result.deliveryId,
+      retryDeliveryId: retryResult ? retryDeliveryId : undefined,
+      source: deliveryRecord.payload.request.source,
+      subject: deliveryRecord.payload.request.subject,
+      recipients: deliveryRecord.payload.request.recipients,
+      channels: deliveryRecord.payload.request.channels,
+      attempt,
+      maxRetries,
+      retryDelayMinutes,
+      retryOnWarnings,
+      retryEligible,
+      status: retryStatus,
+      originalStatus: deliveryRecord.status,
+      retryStatus: retryResult?.status,
+      rationale: rationale.trim() || 'Retry reviewed from Backend delivery retry controls.',
+      originalResult: deliveryRecord.payload.result,
+      retryResult,
+      auditHistory: [
+        {
+          action: retryStatus === 'executed' ? 'retry_executed' : retryStatus === 'planned' ? 'retry_planned' : 'retry_blocked',
+          actor: 'TRACS Backend',
+          timestamp: createdAt,
+          status: retryStatus,
+          summary: `${deliverySourceLabel(deliveryRecord.payload.request.source)} retry ${notificationDeliveryRetryLabel(retryStatus).toLowerCase()} for attempt ${attempt} of ${maxRetries}.`,
+        },
+      ],
+      evidence: retryEligible
+        ? `${deliverySourceLabel(deliveryRecord.payload.request.source)} delivery retry ${notificationDeliveryRetryLabel(retryStatus).toLowerCase()} for attempt ${attempt} of ${maxRetries}.`
+        : `${deliverySourceLabel(deliveryRecord.payload.request.source)} delivery retry blocked for attempt ${attempt} of ${maxRetries}; original status ${deliveryRecord.status} is not eligible under the active retry policy.`,
+    }
+    const saved = await backendClient.saveRecord({
+      kind: 'notification_delivery_retry',
+      label: `${deliverySourceLabel(deliveryRecord.payload.request.source)} delivery retry control`,
+      status: notificationDeliveryRetryStatusLevel(retryStatus, retryResult?.status),
+      summary: controlPayload.evidence,
+      payload: controlPayload,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'notification_delivery_retry',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record(
+      'notification',
+      execute ? 'delivery_retry_execute' : 'delivery_retry_plan',
+      `Notification delivery retry control saved as backend record v${saved.version}.`,
+    )
+    return saved
   }
 
   async function runNotificationSmokeFixtures() {
@@ -3327,6 +3460,10 @@ function App() {
               (record): record is BackendRecord<NotificationClosureExportPackage> =>
                 record.kind === 'notification_closure_export_package',
             )}
+            notificationDeliveryRetryRecords={backendRecords.filter(
+              (record): record is BackendRecord<NotificationDeliveryRetryControl> =>
+                record.kind === 'notification_delivery_retry',
+            )}
             closureSlaExportPackageRecords={backendRecords.filter(
               (record): record is BackendRecord<ClosureSlaExportPackage> =>
                 record.kind === 'closure_sla_export_package',
@@ -3358,6 +3495,7 @@ function App() {
             onDeliverNotificationClosureExportPackage={deliverNotificationClosureExportPackage}
             onDeliverPostgresCutoverAcknowledgement={deliverPostgresCutoverAcknowledgement}
             onDeliverPostgresCutoverOwnerReminder={deliverPostgresCutoverOwnerReminder}
+            onSaveNotificationDeliveryRetryControl={saveNotificationDeliveryRetryControl}
             onSaveNotificationApprovalRenewalClosure={saveNotificationApprovalRenewalClosure}
             onSaveNotificationClosureExportPackage={saveNotificationClosureExportPackage}
             onSaveClosureSlaExportPackage={saveClosureSlaExportPackage}
@@ -3997,6 +4135,7 @@ function BackendPersistenceView({
   connectorEntries,
   notificationApprovalRecords,
   notificationClosureExportPackageRecords,
+  notificationDeliveryRetryRecords,
   notificationRenewalRecords,
   notificationRenewalClosureRecords,
   traceabilityClosureRouteRecords,
@@ -4011,6 +4150,7 @@ function BackendPersistenceView({
   onDeliverNotificationClosureExportPackage,
   onDeliverPostgresCutoverAcknowledgement,
   onDeliverPostgresCutoverOwnerReminder,
+  onSaveNotificationDeliveryRetryControl,
   onSaveNotificationApprovalRenewalClosure,
   onSaveClosureSlaExportPackage,
   onSaveNotificationClosureExportPackage,
@@ -4032,6 +4172,7 @@ function BackendPersistenceView({
   connectorEntries: [string, AppConfig['connectors']['connectors'][string]][]
   notificationApprovalRecords: BackendRecord<NotificationLiveChannelApproval>[]
   notificationClosureExportPackageRecords: BackendRecord<NotificationClosureExportPackage>[]
+  notificationDeliveryRetryRecords: BackendRecord<NotificationDeliveryRetryControl>[]
   notificationRenewalRecords: BackendRecord<NotificationApprovalRenewalRoute>[]
   notificationRenewalClosureRecords: BackendRecord<NotificationApprovalRenewalClosure>[]
   traceabilityClosureRouteRecords: BackendRecord<TraceabilityResponseClosureRoute>[]
@@ -4073,6 +4214,14 @@ function BackendPersistenceView({
     reminderAt: string
     renewalNotes: string
     status: PostgresCutoverOwnerReminderStatus
+  }) => void
+  onSaveNotificationDeliveryRetryControl: (request: {
+    deliveryRecord: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>
+    execute: boolean
+    maxRetries: number
+    rationale: string
+    retryDelayMinutes: number
+    retryOnWarnings: boolean
   }) => void
   onSaveNotificationApprovalRenewalClosure: (request: {
     closureNotes: string
@@ -4228,6 +4377,14 @@ function BackendPersistenceView({
   const [postgresCutoverReminderNotes, setPostgresCutoverReminderNotes] = useState(
     'Renewal reminder confirms owner accountability for cutover package actions before production enablement.',
   )
+  const [deliveryRetrySource, setDeliveryRetrySource] =
+    useState<NotificationDeliveryPayload['source']>('notification_closure_export_package')
+  const [deliveryRetryMaxRetries, setDeliveryRetryMaxRetries] = useState('2')
+  const [deliveryRetryDelayMinutes, setDeliveryRetryDelayMinutes] = useState('15')
+  const [deliveryRetryOnWarnings, setDeliveryRetryOnWarnings] = useState(true)
+  const [deliveryRetryRationale, setDeliveryRetryRationale] = useState(
+    'Retry retained because closure or cutover notification delivery produced warning or blocking evidence.',
+  )
   const recordCounts = backendRecords.reduce(
     (summary, record) => {
       summary[record.kind] = (summary[record.kind] ?? 0) + 1
@@ -4344,6 +4501,40 @@ function BackendPersistenceView({
     (record): record is BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }> =>
       record.kind === 'notification_delivery',
   )
+  const retryControlledSources: NotificationDeliveryPayload['source'][] = [
+    'notification_closure_export_package',
+    'postgres_cutover_acknowledgement',
+    'postgres_cutover_owner_reminder',
+  ]
+  const retryableDeliveryRecords = deliveryRecords.filter(
+    (record) =>
+      retryControlledSources.includes(record.payload.request.source) &&
+      record.payload.request.source === deliveryRetrySource,
+  )
+  const latestRetryableDelivery = retryableDeliveryRecords[0]
+  const retryControlsForSource = notificationDeliveryRetryRecords.filter(
+    (record) => record.payload.source === deliveryRetrySource,
+  )
+  const retryControlsByOriginalDelivery = notificationDeliveryRetryRecords.reduce(
+    (summary, record) => {
+      summary[record.payload.originalDeliveryRecordId] = (summary[record.payload.originalDeliveryRecordId] ?? 0) + 1
+      return summary
+    },
+    {} as Record<string, number>,
+  )
+  const deliveryRetryPolicy = {
+    maxRetries: Math.max(1, Number(deliveryRetryMaxRetries) || 1),
+    retryDelayMinutes: Math.max(0, Number(deliveryRetryDelayMinutes) || 0),
+    retryOnWarnings: deliveryRetryOnWarnings,
+  }
+  const latestRetryAttemptCount = latestRetryableDelivery
+    ? retryControlsByOriginalDelivery[latestRetryableDelivery.id] ?? 0
+    : 0
+  const latestRetryEligible = latestRetryableDelivery
+    ? latestRetryAttemptCount < deliveryRetryPolicy.maxRetries &&
+      (latestRetryableDelivery.status === 'blocking' ||
+        (latestRetryableDelivery.status === 'warning' && deliveryRetryPolicy.retryOnWarnings))
+    : false
   const notificationClosurePackageDeliveryRecords = deliveryRecords.filter(
     (record) => record.payload.request.source === 'notification_closure_export_package',
   )
@@ -4476,6 +4667,19 @@ function BackendPersistenceView({
       reminderAt: postgresCutoverReminderAt,
       renewalNotes: postgresCutoverReminderNotes,
       status: postgresCutoverReminderStatus,
+    }
+  }
+  function notificationDeliveryRetryRequest(
+    deliveryRecord: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>,
+    execute: boolean,
+  ) {
+    return {
+      deliveryRecord,
+      execute,
+      maxRetries: deliveryRetryPolicy.maxRetries,
+      rationale: deliveryRetryRationale,
+      retryDelayMinutes: deliveryRetryPolicy.retryDelayMinutes,
+      retryOnWarnings: deliveryRetryPolicy.retryOnWarnings,
     }
   }
 
@@ -5869,6 +6073,139 @@ function BackendPersistenceView({
             ))}
           </div>
         ) : null}
+      </section>
+
+      <section className="panel notification-approval-panel">
+        <PanelHeader
+          icon={Activity}
+          title="Delivery Retry Controls"
+          subtitle="Plan and execute governed retries for closure package, cutover acknowledgement, and cutover owner reminder notifications."
+        />
+        <div className="notification-approval-grid">
+          <div className="notification-approval-form">
+            <div className="trace-review-grid">
+              <label>
+                <span>Delivery source</span>
+                <select
+                  value={deliveryRetrySource}
+                  onChange={(event) =>
+                    setDeliveryRetrySource(event.target.value as NotificationDeliveryPayload['source'])
+                  }
+                >
+                  <option value="notification_closure_export_package">Closure package</option>
+                  <option value="postgres_cutover_acknowledgement">Cutover acknowledgement</option>
+                  <option value="postgres_cutover_owner_reminder">Cutover owner reminder</option>
+                </select>
+              </label>
+              <label>
+                <span>Max retries</span>
+                <input
+                  value={deliveryRetryMaxRetries}
+                  onChange={(event) => setDeliveryRetryMaxRetries(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Retry delay minutes</span>
+                <input
+                  value={deliveryRetryDelayMinutes}
+                  onChange={(event) => setDeliveryRetryDelayMinutes(event.target.value)}
+                />
+              </label>
+              <label className="toggle-row">
+                <input
+                  checked={deliveryRetryOnWarnings}
+                  onChange={(event) => setDeliveryRetryOnWarnings(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>Retry warning deliveries</span>
+              </label>
+              <label className="trace-review-rationale">
+                <span>Retry rationale</span>
+                <textarea
+                  value={deliveryRetryRationale}
+                  onChange={(event) => setDeliveryRetryRationale(event.target.value)}
+                />
+              </label>
+            </div>
+            <div className="toolbar-actions notification-approval-actions">
+              <button
+                className="secondary-action"
+                disabled={!latestRetryableDelivery}
+                onClick={() =>
+                  latestRetryableDelivery
+                    ? onSaveNotificationDeliveryRetryControl(
+                        notificationDeliveryRetryRequest(latestRetryableDelivery, false),
+                      )
+                    : undefined
+                }
+                type="button"
+              >
+                <ClipboardCheck size={15} />
+                Plan Retry
+              </button>
+              <button
+                className="primary-action"
+                disabled={!latestRetryableDelivery || !latestRetryEligible}
+                onClick={() =>
+                  latestRetryableDelivery
+                    ? onSaveNotificationDeliveryRetryControl(
+                        notificationDeliveryRetryRequest(latestRetryableDelivery, true),
+                      )
+                    : undefined
+                }
+                type="button"
+              >
+                <Activity size={15} />
+                Execute Retry
+              </button>
+            </div>
+          </div>
+          <div className="notification-approval-summary">
+            <div className="metadata-grid">
+              <Metadata label="Source" value={deliverySourceLabel(deliveryRetrySource)} />
+              <Metadata label="Deliveries" value={String(retryableDeliveryRecords.length)} />
+              <Metadata label="Retry controls" value={String(retryControlsForSource.length)} />
+              <Metadata label="Latest status" value={latestRetryableDelivery?.status ?? 'none'} />
+              <Metadata label="Attempt count" value={String(latestRetryAttemptCount)} />
+              <Metadata label="Eligible" value={latestRetryEligible ? 'Yes' : 'No'} />
+              <Metadata label="Policy" value={`${deliveryRetryPolicy.maxRetries} retries / ${deliveryRetryPolicy.retryDelayMinutes} min`} />
+            </div>
+            {latestRetryableDelivery ? (
+              <div className="connector-run-history">
+                <h4>Latest retry candidate</h4>
+                <div className="connector-run-row">
+                  <div>
+                    <strong>{latestRetryableDelivery.payload.request.subject}</strong>
+                    <span>
+                      v{latestRetryableDelivery.version} / {new Date(latestRetryableDelivery.createdAt).toLocaleString()} / {latestRetryableDelivery.payload.request.recipients.join(', ')}
+                    </span>
+                    <small>{latestRetryableDelivery.payload.result.evidence}</small>
+                  </div>
+                  <StatusChip status={latestRetryableDelivery.status} label={latestRetryableDelivery.status} />
+                </div>
+              </div>
+            ) : (
+              <div className="empty-state compact">No delivery records are available for the selected retry source.</div>
+            )}
+            {retryControlsForSource.length > 0 ? (
+              <div className="connector-run-history">
+                <h4>Retry control evidence</h4>
+                {retryControlsForSource.slice(0, 3).map((record) => (
+                  <div className="connector-run-row" key={record.id}>
+                    <div>
+                      <strong>{notificationDeliveryRetryLabel(record.payload.status)}</strong>
+                      <span>
+                        v{record.version} / attempt {record.payload.attempt} of {record.payload.maxRetries} / {new Date(record.createdAt).toLocaleString()}
+                      </span>
+                      <small>{record.payload.evidence}</small>
+                    </div>
+                    <StatusChip status={record.status} label={record.status} />
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
       </section>
 
       <section className="panel storage-schema-panel">
