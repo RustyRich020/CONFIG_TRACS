@@ -109,6 +109,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Adds Postgres import reconciliation summaries and Backend dashboard views for guarded migration runs.
 - Captures applied Postgres cutover approval gates with reviewer sign-off, reconciliation evidence, and rollback conditions.
 - Exports production Postgres cutover checklist packages for infrastructure reviewer handoff.
+- Captures infrastructure reviewer acknowledgement records for production Postgres cutover packages.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
@@ -257,6 +258,6 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add infrastructure reviewer acknowledgement records for cutover packages.
-2. Add notification closure export packages for messaging owners.
-3. Add closure SLA dashboard metrics for traceability and notification follow-ups.
+1. Add notification closure export packages for messaging owners.
+2. Add closure SLA dashboard metrics for traceability and notification follow-ups.
+3. Add infrastructure acknowledgement notification delivery to cutover reviewer channels.

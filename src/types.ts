@@ -188,6 +188,7 @@ export type SavedVersionKind =
   | 'postgres_import_reconciliation'
   | 'postgres_cutover_approval'
   | 'postgres_cutover_checklist_package'
+  | 'postgres_cutover_acknowledgement'
 
 export type SavedVersion = {
   id: string
@@ -226,6 +227,7 @@ export type BackendRecordKind =
   | 'postgres_import_reconciliation'
   | 'postgres_cutover_approval'
   | 'postgres_cutover_checklist_package'
+  | 'postgres_cutover_acknowledgement'
 
 export type BackendRecord<TPayload = unknown> = {
   id: string
@@ -374,6 +376,38 @@ export type PostgresCutoverChecklistPackage = {
   recordKindCounts: Record<string, number>
   requiredActions: string[]
   rollbackPlan: string[]
+  evidence: string
+}
+
+export type PostgresCutoverAcknowledgementStatus =
+  | 'acknowledged'
+  | 'acknowledged_with_actions'
+  | 'rejected'
+  | 'deferred'
+
+export type PostgresCutoverAcknowledgement = {
+  acknowledgementId: string
+  acknowledgedAt: string
+  reviewer: string
+  reviewerRole: 'infrastructure_owner' | 'database_administrator' | 'security_reviewer' | 'platform_owner'
+  status: PostgresCutoverAcknowledgementStatus
+  packageRecordId?: string
+  packageId?: string
+  packageVersion?: number
+  gateStatus: StatusLevel
+  requiredActions: string[]
+  dueAt: string
+  acknowledgementNotes: string
+  productionReadiness: 'ready' | 'ready_with_conditions' | 'not_ready'
+  rollbackConfirmed: boolean
+  backupConfirmed: boolean
+  auditHistory: Array<{
+    action: 'infrastructure_acknowledgement_recorded'
+    actor: string
+    timestamp: string
+    status: PostgresCutoverAcknowledgementStatus
+    summary: string
+  }>
   evidence: string
 }
 

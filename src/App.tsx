@@ -81,6 +81,8 @@ import type {
   NotificationDeliveryResult,
   PostgresCutoverApproval,
   PostgresCutoverApprovalStatus,
+  PostgresCutoverAcknowledgement,
+  PostgresCutoverAcknowledgementStatus,
   PostgresCutoverChecklistPackage,
   PostgresMigrationChecklist,
   PostgresImportReconciliation,
@@ -658,6 +660,17 @@ function postgresCutoverApprovalStatusLevel(status: PostgresCutoverApprovalStatu
 
 function postgresCutoverApprovalLabel(status: PostgresCutoverApprovalStatus) {
   return status === 'approved_with_conditions' ? 'Approved with conditions' : titleize(status)
+}
+
+function postgresCutoverAcknowledgementStatusLevel(status: PostgresCutoverAcknowledgementStatus): StatusLevel {
+  if (status === 'acknowledged') return 'pass'
+  if (status === 'rejected') return 'blocking'
+  return 'warning'
+}
+
+function postgresCutoverAcknowledgementLabel(status: PostgresCutoverAcknowledgementStatus) {
+  if (status === 'acknowledged_with_actions') return 'Acknowledged with actions'
+  return titleize(status)
 }
 
 function evaluatePostgresCutoverGates({
@@ -2208,6 +2221,89 @@ function App() {
     )
   }
 
+  async function savePostgresCutoverAcknowledgement({
+    acknowledgementNotes,
+    backupConfirmed,
+    dueAt,
+    productionReadiness,
+    requiredActions,
+    reviewer,
+    reviewerRole,
+    rollbackConfirmed,
+    status,
+  }: {
+    acknowledgementNotes: string
+    backupConfirmed: boolean
+    dueAt: string
+    productionReadiness: PostgresCutoverAcknowledgement['productionReadiness']
+    requiredActions: string[]
+    reviewer: string
+    reviewerRole: PostgresCutoverAcknowledgement['reviewerRole']
+    rollbackConfirmed: boolean
+    status: PostgresCutoverAcknowledgementStatus
+  }) {
+    const acknowledgedAt = new Date().toISOString()
+    const reviewerName = reviewer.trim() || 'Infrastructure Reviewer'
+    const latestPackage = backendRecords.find(
+      (record): record is BackendRecord<PostgresCutoverChecklistPackage> =>
+        record.kind === 'postgres_cutover_checklist_package',
+    )
+    const packageRequiredActions = latestPackage?.payload.requiredActions ?? []
+    const retainedActions = [...packageRequiredActions, ...requiredActions]
+      .map((action) => action.trim())
+      .filter((action, index, actions) => action.length > 0 && actions.indexOf(action) === index)
+    const payload: PostgresCutoverAcknowledgement = {
+      acknowledgementId: `postgres_cutover_acknowledgement:${acknowledgedAt}`,
+      acknowledgedAt,
+      reviewer: reviewerName,
+      reviewerRole,
+      status,
+      packageRecordId: latestPackage?.id,
+      packageId: latestPackage?.payload.packageId,
+      packageVersion: latestPackage?.version,
+      gateStatus: latestPackage?.payload.gateReview.status ?? 'warning',
+      requiredActions: retainedActions,
+      dueAt,
+      acknowledgementNotes: acknowledgementNotes.trim() || 'No infrastructure acknowledgement notes recorded.',
+      productionReadiness,
+      rollbackConfirmed,
+      backupConfirmed,
+      auditHistory: [
+        {
+          action: 'infrastructure_acknowledgement_recorded',
+          actor: reviewerName,
+          timestamp: acknowledgedAt,
+          status,
+          summary: `${reviewerName} recorded ${postgresCutoverAcknowledgementLabel(status)} for ${latestPackage?.payload.packageId ?? 'the latest Postgres cutover package'}.`,
+        },
+      ],
+      evidence: `${reviewerName} recorded ${postgresCutoverAcknowledgementLabel(status)} for Postgres cutover package ${latestPackage?.payload.packageId ?? 'not generated'}. ${retainedActions.length} required action(s) retained.`,
+    }
+    const saved = await backendClient.saveRecord({
+      kind: 'postgres_cutover_acknowledgement',
+      label: 'production Postgres cutover infrastructure acknowledgement',
+      status: postgresCutoverAcknowledgementStatusLevel(status),
+      summary: payload.evidence,
+      payload,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'postgres_cutover_acknowledgement',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record(
+      'backend',
+      'postgres_cutover_acknowledgement',
+      `Postgres cutover acknowledgement saved as backend record v${saved.version}.`,
+    )
+    return saved
+  }
+
   async function saveNotificationLiveChannelApproval({
     approvedChannels,
     rationale,
@@ -2879,6 +2975,10 @@ function App() {
               (record): record is BackendRecord<PostgresCutoverApproval> =>
                 record.kind === 'postgres_cutover_approval',
             )}
+            postgresCutoverAcknowledgementRecords={backendRecords.filter(
+              (record): record is BackendRecord<PostgresCutoverAcknowledgement> =>
+                record.kind === 'postgres_cutover_acknowledgement',
+            )}
             postgresCutoverPackageRecords={backendRecords.filter(
               (record): record is BackendRecord<PostgresCutoverChecklistPackage> =>
                 record.kind === 'postgres_cutover_checklist_package',
@@ -2889,6 +2989,7 @@ function App() {
             onDeliverNotificationApprovalRenewalRoute={deliverNotificationApprovalRenewalRoute}
             onSaveNotificationApprovalRenewalClosure={saveNotificationApprovalRenewalClosure}
             onSaveNotificationApprovalRenewalRoute={saveNotificationApprovalRenewalRoute}
+            onSavePostgresCutoverAcknowledgement={savePostgresCutoverAcknowledgement}
             onSavePostgresCutoverApproval={savePostgresCutoverApproval}
             onSavePostgresCutoverChecklistPackage={savePostgresCutoverChecklistPackage}
             onSaveSnapshot={saveBackendSnapshot}
@@ -3523,6 +3624,7 @@ function BackendPersistenceView({
   notificationRenewalRecords,
   notificationRenewalClosureRecords,
   postgresCutoverApprovalRecords,
+  postgresCutoverAcknowledgementRecords,
   postgresCutoverPackageRecords,
   onRefresh,
   onRunAdapterDryRun,
@@ -3530,6 +3632,7 @@ function BackendPersistenceView({
   onDeliverNotificationApprovalRenewalRoute,
   onSaveNotificationApprovalRenewalClosure,
   onSaveNotificationApprovalRenewalRoute,
+  onSavePostgresCutoverAcknowledgement,
   onSavePostgresCutoverApproval,
   onSavePostgresCutoverChecklistPackage,
   onSaveSnapshot,
@@ -3546,6 +3649,7 @@ function BackendPersistenceView({
   notificationRenewalRecords: BackendRecord<NotificationApprovalRenewalRoute>[]
   notificationRenewalClosureRecords: BackendRecord<NotificationApprovalRenewalClosure>[]
   postgresCutoverApprovalRecords: BackendRecord<PostgresCutoverApproval>[]
+  postgresCutoverAcknowledgementRecords: BackendRecord<PostgresCutoverAcknowledgement>[]
   postgresCutoverPackageRecords: BackendRecord<PostgresCutoverChecklistPackage>[]
   onRefresh: () => void
   onRunAdapterDryRun: (connectorId: string) => void
@@ -3570,6 +3674,17 @@ function BackendPersistenceView({
     reminderAt: string
     reviewers: string[]
     routeStage: NotificationApprovalRenewalRoute['routeStage']
+  }) => void
+  onSavePostgresCutoverAcknowledgement: (request: {
+    acknowledgementNotes: string
+    backupConfirmed: boolean
+    dueAt: string
+    productionReadiness: PostgresCutoverAcknowledgement['productionReadiness']
+    requiredActions: string[]
+    reviewer: string
+    reviewerRole: PostgresCutoverAcknowledgement['reviewerRole']
+    rollbackConfirmed: boolean
+    status: PostgresCutoverAcknowledgementStatus
   }) => void
   onSavePostgresCutoverApproval: (request: {
     conditions: string
@@ -3635,6 +3750,26 @@ function BackendPersistenceView({
   const [postgresPackageReviewers, setPostgresPackageReviewers] = useState(
     'Infrastructure Owner, Database Administrator, Security Reviewer',
   )
+  const [postgresAcknowledgementReviewer, setPostgresAcknowledgementReviewer] = useState('Infrastructure Owner')
+  const [postgresAcknowledgementRole, setPostgresAcknowledgementRole] =
+    useState<PostgresCutoverAcknowledgement['reviewerRole']>('infrastructure_owner')
+  const [postgresAcknowledgementStatus, setPostgresAcknowledgementStatus] =
+    useState<PostgresCutoverAcknowledgementStatus>('acknowledged_with_actions')
+  const [postgresAcknowledgementDueAt, setPostgresAcknowledgementDueAt] = useState(() => {
+    const date = new Date()
+    date.setDate(date.getDate() + 7)
+    return date.toISOString().slice(0, 10)
+  })
+  const [postgresProductionReadiness, setPostgresProductionReadiness] =
+    useState<PostgresCutoverAcknowledgement['productionReadiness']>('ready_with_conditions')
+  const [postgresRollbackConfirmed, setPostgresRollbackConfirmed] = useState(true)
+  const [postgresBackupConfirmed, setPostgresBackupConfirmed] = useState(false)
+  const [postgresAcknowledgementActions, setPostgresAcknowledgementActions] = useState(
+    'Confirm managed Postgres backup retention and restore drill owner before live cutover.',
+  )
+  const [postgresAcknowledgementNotes, setPostgresAcknowledgementNotes] = useState(
+    'Infrastructure review acknowledges the cutover package and retains required action ownership before production enablement.',
+  )
   const recordCounts = backendRecords.reduce(
     (summary, record) => {
       summary[record.kind] = (summary[record.kind] ?? 0) + 1
@@ -3666,6 +3801,7 @@ function BackendPersistenceView({
   const supersededNotificationApproval = notificationApprovalRecords[1]
   const latestPostgresCutoverApproval = postgresCutoverApprovalRecords[0]
   const latestPostgresCutoverPackage = postgresCutoverPackageRecords[0]
+  const latestPostgresCutoverAcknowledgement = postgresCutoverAcknowledgementRecords[0]
   const postgresCutoverGateReview = evaluatePostgresCutoverGates({
     backendHealth,
     latestReconciliation,
@@ -3715,6 +3851,12 @@ function BackendPersistenceView({
     return postgresPackageReviewers
       .split(',')
       .map((reviewer) => reviewer.trim())
+      .filter(Boolean)
+  }
+  function postgresAcknowledgementActionList() {
+    return postgresAcknowledgementActions
+      .split('\n')
+      .map((action) => action.trim())
       .filter(Boolean)
   }
 
@@ -4484,6 +4626,182 @@ function BackendPersistenceView({
                   </span>
                 </div>
                 <StatusChip status={record.status} label={record.status} />
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </section>
+
+      <section className="panel notification-approval-panel">
+        <PanelHeader
+          icon={ClipboardCheck}
+          title="Infrastructure Cutover Acknowledgements"
+          subtitle="Retain reviewer acknowledgement records for production Postgres cutover checklist packages."
+        />
+        <div className="notification-approval-grid">
+          <div className="notification-approval-form">
+            <div className="trace-review-grid">
+              <label>
+                <span>Reviewer</span>
+                <input
+                  value={postgresAcknowledgementReviewer}
+                  onChange={(event) => setPostgresAcknowledgementReviewer(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Reviewer role</span>
+                <select
+                  value={postgresAcknowledgementRole}
+                  onChange={(event) =>
+                    setPostgresAcknowledgementRole(event.target.value as PostgresCutoverAcknowledgement['reviewerRole'])
+                  }
+                >
+                  <option value="infrastructure_owner">Infrastructure owner</option>
+                  <option value="database_administrator">Database administrator</option>
+                  <option value="security_reviewer">Security reviewer</option>
+                  <option value="platform_owner">Platform owner</option>
+                </select>
+              </label>
+              <label>
+                <span>Acknowledgement</span>
+                <select
+                  value={postgresAcknowledgementStatus}
+                  onChange={(event) =>
+                    setPostgresAcknowledgementStatus(event.target.value as PostgresCutoverAcknowledgementStatus)
+                  }
+                >
+                  <option value="acknowledged">Acknowledged</option>
+                  <option value="acknowledged_with_actions">Acknowledged with actions</option>
+                  <option value="deferred">Deferred</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </label>
+              <label>
+                <span>Due date</span>
+                <input
+                  type="date"
+                  value={postgresAcknowledgementDueAt}
+                  onChange={(event) => setPostgresAcknowledgementDueAt(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Production readiness</span>
+                <select
+                  value={postgresProductionReadiness}
+                  onChange={(event) =>
+                    setPostgresProductionReadiness(event.target.value as PostgresCutoverAcknowledgement['productionReadiness'])
+                  }
+                >
+                  <option value="ready">Ready</option>
+                  <option value="ready_with_conditions">Ready with conditions</option>
+                  <option value="not_ready">Not ready</option>
+                </select>
+              </label>
+              <label className="toggle-row">
+                <input
+                  checked={postgresRollbackConfirmed}
+                  onChange={(event) => setPostgresRollbackConfirmed(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>Rollback confirmed</span>
+              </label>
+              <label className="toggle-row">
+                <input
+                  checked={postgresBackupConfirmed}
+                  onChange={(event) => setPostgresBackupConfirmed(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>Backup confirmed</span>
+              </label>
+              <label className="trace-review-rationale">
+                <span>Required actions</span>
+                <textarea
+                  value={postgresAcknowledgementActions}
+                  onChange={(event) => setPostgresAcknowledgementActions(event.target.value)}
+                />
+              </label>
+              <label className="trace-review-rationale">
+                <span>Acknowledgement notes</span>
+                <textarea
+                  value={postgresAcknowledgementNotes}
+                  onChange={(event) => setPostgresAcknowledgementNotes(event.target.value)}
+                />
+              </label>
+            </div>
+            <div className="toolbar-actions notification-approval-actions">
+              <button
+                className="primary-action"
+                disabled={!latestPostgresCutoverPackage}
+                onClick={() =>
+                  onSavePostgresCutoverAcknowledgement({
+                    acknowledgementNotes: postgresAcknowledgementNotes,
+                    backupConfirmed: postgresBackupConfirmed,
+                    dueAt: postgresAcknowledgementDueAt,
+                    productionReadiness: postgresProductionReadiness,
+                    requiredActions: postgresAcknowledgementActionList(),
+                    reviewer: postgresAcknowledgementReviewer,
+                    reviewerRole: postgresAcknowledgementRole,
+                    rollbackConfirmed: postgresRollbackConfirmed,
+                    status: postgresAcknowledgementStatus,
+                  })
+                }
+                type="button"
+              >
+                <ClipboardCheck size={15} />
+                Save Acknowledgement
+              </button>
+            </div>
+          </div>
+          <div className="notification-approval-summary">
+            <div className="metadata-grid">
+              <Metadata label="Acknowledgements" value={String(postgresCutoverAcknowledgementRecords.length)} />
+              <Metadata
+                label="Latest status"
+                value={latestPostgresCutoverAcknowledgement ? postgresCutoverAcknowledgementLabel(latestPostgresCutoverAcknowledgement.payload.status) : 'Not acknowledged'}
+              />
+              <Metadata
+                label="Package version"
+                value={latestPostgresCutoverAcknowledgement?.payload.packageVersion ? `v${latestPostgresCutoverAcknowledgement.payload.packageVersion}` : 'Not linked'}
+              />
+              <Metadata label="Action count" value={String(postgresAcknowledgementActionList().length)} />
+              <Metadata label="Rollback" value={postgresRollbackConfirmed ? 'Confirmed' : 'Open'} />
+              <Metadata label="Backup" value={postgresBackupConfirmed ? 'Confirmed' : 'Open'} />
+            </div>
+            {latestPostgresCutoverAcknowledgement ? (
+              <div className="connector-run-history">
+                <h4>Latest acknowledgement</h4>
+                <div className="connector-run-row">
+                  <div>
+                    <strong>{latestPostgresCutoverAcknowledgement.payload.reviewer}</strong>
+                    <span>
+                      v{latestPostgresCutoverAcknowledgement.version} / {new Date(latestPostgresCutoverAcknowledgement.createdAt).toLocaleString()}
+                    </span>
+                    <small>{latestPostgresCutoverAcknowledgement.payload.evidence}</small>
+                  </div>
+                  <StatusChip
+                    status={latestPostgresCutoverAcknowledgement.status}
+                    label={postgresCutoverAcknowledgementLabel(latestPostgresCutoverAcknowledgement.payload.status)}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="empty-state compact">No infrastructure acknowledgement has been retained yet.</div>
+            )}
+          </div>
+        </div>
+        {postgresCutoverAcknowledgementRecords.length > 1 ? (
+          <div className="mapping-run-history">
+            <h4>Acknowledgement history</h4>
+            {postgresCutoverAcknowledgementRecords.slice(1, 5).map((record) => (
+              <div className="mapping-run-row" key={record.id}>
+                <div>
+                  <strong>{record.payload.reviewer}</strong>
+                  <span>
+                    v{record.version} / {titleize(record.payload.reviewerRole)} / due {record.payload.dueAt || 'not scheduled'}
+                  </span>
+                  <small>{record.payload.acknowledgementNotes}</small>
+                </div>
+                <StatusChip status={record.status} label={postgresCutoverAcknowledgementLabel(record.payload.status)} />
               </div>
             ))}
           </div>

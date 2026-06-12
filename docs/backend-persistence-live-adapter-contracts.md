@@ -374,6 +374,8 @@ Production Postgres cutover approvals are persisted as `postgres_cutover_approva
 
 Production cutover checklist packages are persisted as `postgres_cutover_checklist_package` records and can be downloaded as JSON for infrastructure reviewers. Each package binds backend health, storage schema, migration checklist, gate review, latest reconciliation, latest cutover approval, aggregate reconciliation totals, backend record-kind counts, required actions, rollback plan, reviewer audience, and package evidence. These packages are infrastructure handoff artifacts and do not by themselves enable production cutover.
 
+Infrastructure reviewer acknowledgements are persisted as `postgres_cutover_acknowledgement` records. Each acknowledgement links to the latest retained cutover checklist package, records reviewer role, acknowledgement status, production readiness, backup and rollback confirmations, due date, required actions, notes, and audit history. The acknowledgement is append-only evidence that infrastructure owners reviewed the handoff package before production cutover.
+
 ## GitHub Implementation Plan
 
 1. Create branch: `codex/backend-persistence-adapter-contracts`

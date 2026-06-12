@@ -1823,6 +1823,18 @@
   gap: 6px;
 }
 
+.trace-review-grid .toggle-row {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  align-content: center;
+}
+
+.trace-review-grid .toggle-row input {
+  width: 16px;
+  min-height: 16px;
+  padding: 0;
+}
+
 .trace-review-grid span {
   color: #617171;
   font-size: 11px;
