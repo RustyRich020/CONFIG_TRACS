@@ -76,6 +76,7 @@ import type {
   NotificationApprovalRenewalRoute,
   NotificationApprovalRenewalClosure,
   NotificationApprovalRenewalClosureStatus,
+  NotificationClosureExportPackage,
   NotificationLiveChannelApprovalStatus,
   NotificationDeliveryPayload,
   NotificationDeliveryResult,
@@ -2548,6 +2549,100 @@ function App() {
     )
   }
 
+  async function saveNotificationClosureExportPackage({
+    download,
+    messagingOwners,
+    ownerNotes,
+  }: {
+    download: boolean
+    messagingOwners: string[]
+    ownerNotes: string
+  }) {
+    const generatedAt = new Date().toISOString()
+    const approvalRecords = backendRecords.filter(
+      (record): record is BackendRecord<NotificationLiveChannelApproval> =>
+        record.kind === 'notification_live_channel_approval',
+    )
+    const renewalRecords = backendRecords.filter(
+      (record): record is BackendRecord<NotificationApprovalRenewalRoute> =>
+        record.kind === 'notification_approval_renewal',
+    )
+    const closureRecords = backendRecords.filter(
+      (record): record is BackendRecord<NotificationApprovalRenewalClosure> =>
+        record.kind === 'notification_approval_renewal_closure',
+    )
+    const deliveryEvidence = backendRecords.filter(
+      (record): record is BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }> =>
+        record.kind === 'notification_delivery' &&
+        ['notification_approval_renewal', 'traceability_response_closure'].includes(
+          (record.payload as { request?: { source?: string } }).request?.source ?? '',
+        ),
+    )
+    const latestClosure = closureRecords[0]
+    const latestRenewalRoute = renewalRecords[0]
+    const latestApproval = approvalRecords[0]
+    const supersededApproval = approvalRecords[1]
+    const channelSummary = deliveryEvidence.flatMap((record) =>
+      record.payload.result.channelResults.map((channel) => ({
+        channel: channel.channel,
+        mode: channel.mode,
+        status: channel.status,
+        evidence: channel.evidence,
+      })),
+    )
+    const requiredActions = [
+      latestClosure ? null : 'Retain a notification approval renewal closure before final owner handoff.',
+      latestRenewalRoute ? null : 'Retain a notification approval renewal route before final owner handoff.',
+      latestApproval ? null : 'Retain a renewed notification live-channel approval before final owner handoff.',
+      supersededApproval ? null : 'Identify superseded approval evidence or record that no prior approval exists.',
+      deliveryEvidence.length > 0 ? null : 'Retain notification delivery dry-run or live handoff evidence.',
+      ...((latestClosure?.payload.requiredEvidence ?? []).map((item) => `Closure evidence: ${item}`)),
+    ].filter((action): action is string => Boolean(action))
+    const status = latestClosure?.status ?? 'warning'
+    const owners = messagingOwners.length > 0 ? messagingOwners : ['Messaging Owner']
+    const packagePayload: NotificationClosureExportPackage = {
+      packageId: `notification_closure_export:${generatedAt}`,
+      generatedAt,
+      messagingOwners: owners,
+      status,
+      latestClosure: latestClosure?.payload,
+      latestRenewalRoute: latestRenewalRoute?.payload,
+      latestApproval: latestApproval?.payload,
+      supersededApproval: supersededApproval?.payload,
+      deliveryEvidence,
+      channelSummary,
+      requiredActions,
+      ownerNotes: ownerNotes.trim() || 'No messaging owner handoff notes recorded.',
+      evidence: `Notification closure export package generated for ${owners.join(', ')} with ${requiredActions.length} required action(s), ${deliveryEvidence.length} delivery record(s), and ${channelSummary.length} channel evidence item(s).`,
+    }
+    const saved = await backendClient.saveRecord({
+      kind: 'notification_closure_export_package',
+      label: 'notification closure export package',
+      status: packagePayload.status,
+      summary: packagePayload.evidence,
+      payload: packagePayload,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'notification_closure_export_package',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    if (download) {
+      downloadJson('tracs-notification-closure-export-package.json', packagePayload)
+    }
+    record(
+      'notification',
+      download ? 'closure_export_package_download' : 'closure_export_package_save',
+      `Notification closure export package saved as backend record v${saved.version}.`,
+    )
+    return saved
+  }
+
   async function saveReportCatalogItem(report: ReportCatalogItem, action: ReportCatalogSaveAction) {
     const freshness = reportFreshnessStatus(report.lastRefresh, report.maxAgeHours)
     const normalizedReport: ReportCatalogItem = {
@@ -2971,6 +3066,10 @@ function App() {
               (record): record is BackendRecord<NotificationApprovalRenewalClosure> =>
                 record.kind === 'notification_approval_renewal_closure',
             )}
+            notificationClosureExportPackageRecords={backendRecords.filter(
+              (record): record is BackendRecord<NotificationClosureExportPackage> =>
+                record.kind === 'notification_closure_export_package',
+            )}
             postgresCutoverApprovalRecords={backendRecords.filter(
               (record): record is BackendRecord<PostgresCutoverApproval> =>
                 record.kind === 'postgres_cutover_approval',
@@ -2988,6 +3087,7 @@ function App() {
             onRunNotificationSmokeFixtures={runNotificationSmokeFixtures}
             onDeliverNotificationApprovalRenewalRoute={deliverNotificationApprovalRenewalRoute}
             onSaveNotificationApprovalRenewalClosure={saveNotificationApprovalRenewalClosure}
+            onSaveNotificationClosureExportPackage={saveNotificationClosureExportPackage}
             onSaveNotificationApprovalRenewalRoute={saveNotificationApprovalRenewalRoute}
             onSavePostgresCutoverAcknowledgement={savePostgresCutoverAcknowledgement}
             onSavePostgresCutoverApproval={savePostgresCutoverApproval}
@@ -3621,6 +3721,7 @@ function BackendPersistenceView({
   backendRecords,
   connectorEntries,
   notificationApprovalRecords,
+  notificationClosureExportPackageRecords,
   notificationRenewalRecords,
   notificationRenewalClosureRecords,
   postgresCutoverApprovalRecords,
@@ -3631,6 +3732,7 @@ function BackendPersistenceView({
   onRunNotificationSmokeFixtures,
   onDeliverNotificationApprovalRenewalRoute,
   onSaveNotificationApprovalRenewalClosure,
+  onSaveNotificationClosureExportPackage,
   onSaveNotificationApprovalRenewalRoute,
   onSavePostgresCutoverAcknowledgement,
   onSavePostgresCutoverApproval,
@@ -3646,6 +3748,7 @@ function BackendPersistenceView({
   backendRecords: BackendRecord[]
   connectorEntries: [string, AppConfig['connectors']['connectors'][string]][]
   notificationApprovalRecords: BackendRecord<NotificationLiveChannelApproval>[]
+  notificationClosureExportPackageRecords: BackendRecord<NotificationClosureExportPackage>[]
   notificationRenewalRecords: BackendRecord<NotificationApprovalRenewalRoute>[]
   notificationRenewalClosureRecords: BackendRecord<NotificationApprovalRenewalClosure>[]
   postgresCutoverApprovalRecords: BackendRecord<PostgresCutoverApproval>[]
@@ -3666,6 +3769,11 @@ function BackendPersistenceView({
     closureNotes: string
     reviewer: string
     status: NotificationApprovalRenewalClosureStatus
+  }) => void
+  onSaveNotificationClosureExportPackage: (request: {
+    download: boolean
+    messagingOwners: string[]
+    ownerNotes: string
   }) => void
   onSaveNotificationApprovalRenewalRoute: (request: {
     channels: NotificationApprovalRenewalRoute['channels']
@@ -3734,6 +3842,12 @@ function BackendPersistenceView({
   const [renewalClosureNotes, setRenewalClosureNotes] = useState(
     'Renewal completed; previous live-channel approval is superseded by the retained renewed approval record.',
   )
+  const [notificationClosureOwners, setNotificationClosureOwners] = useState(
+    'Messaging Owner, Tenant Communications Owner',
+  )
+  const [notificationClosureExportNotes, setNotificationClosureExportNotes] = useState(
+    'Package retained closure, delivery, superseded approval, and channel evidence for messaging owner handoff.',
+  )
   const [postgresReviewer, setPostgresReviewer] = useState('TRACS Platform Owner')
   const [postgresApprovalStatus, setPostgresApprovalStatus] =
     useState<PostgresCutoverApprovalStatus>('approved_with_conditions')
@@ -3798,6 +3912,7 @@ function BackendPersistenceView({
   )
   const latestNotificationRenewal = notificationRenewalRecords[0]
   const latestNotificationRenewalClosure = notificationRenewalClosureRecords[0]
+  const latestNotificationClosureExportPackage = notificationClosureExportPackageRecords[0]
   const supersededNotificationApproval = notificationApprovalRecords[1]
   const latestPostgresCutoverApproval = postgresCutoverApprovalRecords[0]
   const latestPostgresCutoverPackage = postgresCutoverPackageRecords[0]
@@ -3851,6 +3966,12 @@ function BackendPersistenceView({
     return postgresPackageReviewers
       .split(',')
       .map((reviewer) => reviewer.trim())
+      .filter(Boolean)
+  }
+  function notificationClosureOwnerList() {
+    return notificationClosureOwners
+      .split(',')
+      .map((owner) => owner.trim())
       .filter(Boolean)
   }
   function postgresAcknowledgementActionList() {
@@ -4311,10 +4432,110 @@ function BackendPersistenceView({
                 </div>
               </div>
             ) : (
-              <div className="empty-state compact">No renewal closure has been retained yet.</div>
-            )}
+            <div className="empty-state compact">No renewal closure has been retained yet.</div>
+          )}
+        </div>
+      </div>
+      <div className="notification-approval-grid renewal-routing-grid">
+        <div className="notification-approval-form">
+          <div className="trace-review-grid">
+            <label className="trace-review-rationale">
+              <span>Messaging owners</span>
+              <textarea
+                value={notificationClosureOwners}
+                onChange={(event) => setNotificationClosureOwners(event.target.value)}
+              />
+            </label>
+            <label className="trace-review-rationale">
+              <span>Owner handoff notes</span>
+              <textarea
+                value={notificationClosureExportNotes}
+                onChange={(event) => setNotificationClosureExportNotes(event.target.value)}
+              />
+            </label>
+          </div>
+          <div className="toolbar-actions notification-approval-actions">
+            <button
+              className="secondary-action"
+              onClick={() =>
+                onSaveNotificationClosureExportPackage({
+                  download: false,
+                  messagingOwners: notificationClosureOwnerList(),
+                  ownerNotes: notificationClosureExportNotes,
+                })
+              }
+              type="button"
+            >
+              <ClipboardCheck size={15} />
+              Save Closure Package
+            </button>
+            <button
+              className="primary-action"
+              onClick={() =>
+                onSaveNotificationClosureExportPackage({
+                  download: true,
+                  messagingOwners: notificationClosureOwnerList(),
+                  ownerNotes: notificationClosureExportNotes,
+                })
+              }
+              type="button"
+            >
+              <Download size={15} />
+              Save & Download Package
+            </button>
           </div>
         </div>
+        <div className="notification-approval-summary">
+          <div className="metadata-grid">
+            <Metadata label="Closure packages" value={String(notificationClosureExportPackageRecords.length)} />
+            <Metadata label="Messaging owners" value={String(notificationClosureOwnerList().length)} />
+            <Metadata
+              label="Latest package"
+              value={latestNotificationClosureExportPackage ? new Date(latestNotificationClosureExportPackage.createdAt).toLocaleString() : 'Not packaged'}
+            />
+            <Metadata
+              label="Package status"
+              value={latestNotificationClosureExportPackage?.status ?? 'not saved'}
+            />
+          </div>
+          {latestNotificationClosureExportPackage ? (
+            <div className="connector-run-history">
+              <h4>Latest closure export package</h4>
+              <div className="connector-run-row">
+                <div>
+                  <strong>{latestNotificationClosureExportPackage.payload.messagingOwners.join(', ')}</strong>
+                  <span>
+                    v{latestNotificationClosureExportPackage.version} / {new Date(latestNotificationClosureExportPackage.createdAt).toLocaleString()}
+                  </span>
+                  <small>{latestNotificationClosureExportPackage.payload.evidence}</small>
+                </div>
+                <StatusChip
+                  status={latestNotificationClosureExportPackage.status}
+                  label={latestNotificationClosureExportPackage.status}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="empty-state compact">No notification closure export package has been retained yet.</div>
+          )}
+        </div>
+      </div>
+      {notificationClosureExportPackageRecords.length > 1 ? (
+        <div className="mapping-run-history">
+          <h4>Closure package history</h4>
+          {notificationClosureExportPackageRecords.slice(1, 5).map((record) => (
+            <div className="mapping-run-row" key={record.id}>
+              <div>
+                <strong>{record.payload.packageId}</strong>
+                <span>
+                  v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.messagingOwners.join(', ')}
+                </span>
+              </div>
+              <StatusChip status={record.status} label={record.status} />
+            </div>
+          ))}
+        </div>
+      ) : null}
       </section>
 
       <section className="panel import-reconciliation-panel">

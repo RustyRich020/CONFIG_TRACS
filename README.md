@@ -102,6 +102,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Delivers traceability graph export packages to reviewer notification channels with persisted delivery evidence.
 - Tracks reviewer acknowledgement and response records for delivered traceability export packages.
 - Routes traceability response closures and sends reviewer follow-up notifications with retained evidence.
+- Exports notification closure packages for messaging owners with closure, delivery, and approval evidence.
 - Discovers external-reference metadata and bounded preview rows through a credential-aware backend adapter.
 - Filters traceability graphs by object family, status, and saved evidence packet coverage.
 - Adds a selectable SQLite record store adapter behind the existing API persistence contract.
@@ -258,6 +259,6 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add notification closure export packages for messaging owners.
-2. Add closure SLA dashboard metrics for traceability and notification follow-ups.
-3. Add infrastructure acknowledgement notification delivery to cutover reviewer channels.
+1. Add closure SLA dashboard metrics for traceability and notification follow-ups.
+2. Add infrastructure acknowledgement notification delivery to cutover reviewer channels.
+3. Add messaging-owner closure package notification delivery.

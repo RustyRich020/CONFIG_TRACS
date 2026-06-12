@@ -182,6 +182,7 @@ export type SavedVersionKind =
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
+  | 'notification_closure_export_package'
   | 'traceability_export_review'
   | 'traceability_delivery_response'
   | 'traceability_response_closure_route'
@@ -221,6 +222,7 @@ export type BackendRecordKind =
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
+  | 'notification_closure_export_package'
   | 'traceability_export_review'
   | 'traceability_delivery_response'
   | 'traceability_response_closure_route'
@@ -1050,6 +1052,30 @@ export type NotificationApprovalRenewalClosure = {
     status: NotificationApprovalRenewalClosureStatus
     summary: string
   }>
+  evidence: string
+}
+
+export type NotificationClosureExportPackage = {
+  packageId: string
+  generatedAt: string
+  messagingOwners: string[]
+  status: StatusLevel
+  latestClosure?: NotificationApprovalRenewalClosure
+  latestRenewalRoute?: NotificationApprovalRenewalRoute
+  latestApproval?: NotificationLiveChannelApproval
+  supersededApproval?: NotificationLiveChannelApproval
+  deliveryEvidence: Array<BackendRecord<{
+    request: NotificationDeliveryPayload
+    result: NotificationDeliveryResult
+  }>>
+  channelSummary: Array<{
+    channel: 'email' | 'teams' | 'sharepoint_folder'
+    mode: 'dry_run' | 'live' | 'skipped'
+    status: StatusLevel
+    evidence: string
+  }>
+  requiredActions: string[]
+  ownerNotes: string
   evidence: string
 }
 
