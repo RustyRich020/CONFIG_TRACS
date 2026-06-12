@@ -172,6 +172,7 @@ export type SavedVersionKind =
   | 'controlled_template'
   | 'canonical_object'
   | 'canonical_load'
+  | 'external_reference_load_disposition'
   | 'readiness_evidence_packet'
   | 'report_catalog_item'
   | 'extraction_job'
@@ -209,6 +210,7 @@ export type BackendRecordKind =
   | 'traceability_link'
   | 'report_catalog_item'
   | 'canonical_load'
+  | 'external_reference_load_disposition'
   | 'readiness_evidence_packet'
   | 'extraction_job'
   | 'extraction_run'
@@ -723,6 +725,41 @@ export type CanonicalLoadRequest = {
   }
   sourceRows?: Array<Record<string, unknown>>
   traceabilityLinks?: MappingManifest['traceability_links']
+}
+
+export type ExternalReferenceLoadExceptionDispositionStatus =
+  | 'accepted'
+  | 'retry_planned'
+  | 'replayed'
+  | 'waived'
+  | 'blocked'
+
+export type ExternalReferenceLoadExceptionDisposition = {
+  dispositionId: string
+  createdAt: string
+  mappingId: string
+  sourceConnector: string
+  sourceObject: string
+  targetObject: string
+  latestLoadRecordId?: string
+  latestLoadId?: string
+  replayedLoadId?: string
+  status: ExternalReferenceLoadExceptionDispositionStatus
+  owner: string
+  dueAt: string
+  rationale: string
+  exceptionSummary: string
+  replayMode: 'manual_replay' | 'hold_until_source_ready' | 'waive_no_replay'
+  replayedAt?: string
+  warnings: string[]
+  auditHistory: Array<{
+    action: 'disposition_recorded' | 'replay_requested' | 'replay_completed'
+    actor: string
+    timestamp: string
+    status: ExternalReferenceLoadExceptionDispositionStatus
+    summary: string
+  }>
+  evidence: string
 }
 
 export type ExtractionJobPayload = {

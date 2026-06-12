@@ -2172,6 +2172,52 @@
   line-height: 1.4;
 }
 
+.form-grid.compact-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.compact-form label {
+  display: grid;
+  gap: 5px;
+}
+
+.compact-form span {
+  color: #687979;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.compact-form input,
+.compact-form select {
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid #d7e1df;
+  border-radius: 8px;
+  color: #1e3030;
+  background: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.compact-textarea {
+  width: 100%;
+  min-height: 76px;
+  margin-top: 10px;
+  resize: vertical;
+  padding: 10px;
+  border: 1px solid #dce7e5;
+  border-radius: 8px;
+  color: #1f3030;
+  background: #f8fbfa;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .tested-count {
   padding: 0 14px 12px;
   color: #687878;

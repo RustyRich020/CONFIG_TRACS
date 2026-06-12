@@ -67,6 +67,8 @@ import type {
   CredentialValidationResult,
   CsvSchemaInference,
   DeploymentState,
+  ExternalReferenceLoadExceptionDisposition,
+  ExternalReferenceLoadExceptionDispositionStatus,
   ExtractionJobPayload,
   ExtractionRunPayload,
   MappingValidationResult,
@@ -360,6 +362,19 @@ function traceabilityResponseStatusLevel(status: TraceabilityDeliveryResponseSta
 
 function traceabilityResponseLabel(status: TraceabilityDeliveryResponseStatus) {
   return status === 'changes_requested' ? 'Changes requested' : titleize(status)
+}
+
+function externalReferenceDispositionStatusLevel(
+  status: ExternalReferenceLoadExceptionDispositionStatus,
+): StatusLevel {
+  if (status === 'blocked') return 'blocking'
+  if (status === 'retry_planned') return 'warning'
+  return 'pass'
+}
+
+function externalReferenceDispositionLabel(status: ExternalReferenceLoadExceptionDispositionStatus) {
+  if (status === 'retry_planned') return 'Retry planned'
+  return titleize(status)
 }
 
 function traceabilityRetentionLabel(retentionClass: TraceabilityExportRetentionClass) {
@@ -1453,6 +1468,114 @@ function App() {
       'load',
       `${savedLoad.objectCount} canonical object(s) and ${savedLoad.linkCount} traceability link(s) loaded from ${mappingId}.`,
     )
+    return savedLoad
+  }
+
+  async function saveExternalReferenceLoadDisposition({
+    dueAt,
+    owner,
+    rationale,
+    replay,
+    status,
+  }: {
+    dueAt: string
+    owner: string
+    rationale: string
+    replay?: boolean
+    status: ExternalReferenceLoadExceptionDispositionStatus
+  }) {
+    if (!config) return
+    const mappingId = activeMappingId
+    const mapping = config.mappings[mappingId]
+    if (!mapping || mappingId === 'quality_event') return
+    const latestLoad = backendRecords.find(
+      (record): record is BackendRecord<CanonicalLoadResult> =>
+        record.kind === 'canonical_load' &&
+        (record.payload as CanonicalLoadResult).mappingId === mappingId,
+    )
+    let replayedLoad: CanonicalLoadResult | undefined
+    if (replay) {
+      replayedLoad = await loadCanonicalFromMapping()
+    }
+    const createdAt = new Date().toISOString()
+    const actor = owner.trim() || 'TRACS Mapping Owner'
+    const finalStatus: ExternalReferenceLoadExceptionDispositionStatus = replay
+      ? replayedLoad
+        ? 'replayed'
+        : 'retry_planned'
+      : status
+    const warnings = replayedLoad?.warnings ?? latestLoad?.payload.warnings ?? []
+    const exceptionSummary =
+      warnings.length > 0
+        ? warnings.join(' ')
+        : latestLoad
+          ? `${latestLoad.payload.objectCount} object(s) and ${latestLoad.payload.linkCount} traceability link(s) loaded without warnings.`
+          : 'No canonical load evidence exists yet for this external-reference mapping.'
+    const payload: ExternalReferenceLoadExceptionDisposition = {
+      dispositionId: `external_reference_disposition:${mappingId}:${createdAt}`,
+      createdAt,
+      mappingId,
+      sourceConnector: mapping.source_connector,
+      sourceObject: mapping.source_object,
+      targetObject: mapping.object,
+      latestLoadRecordId: replayedLoad?.record?.id ?? latestLoad?.id,
+      latestLoadId: latestLoad?.payload.loadId,
+      replayedLoadId: replayedLoad?.loadId,
+      status: finalStatus,
+      owner: actor,
+      dueAt,
+      rationale: rationale.trim() || 'Disposition recorded without additional rationale.',
+      exceptionSummary,
+      replayMode: replay ? 'manual_replay' : finalStatus === 'waived' ? 'waive_no_replay' : 'hold_until_source_ready',
+      replayedAt: replayedLoad ? createdAt : undefined,
+      warnings,
+      auditHistory: [
+        {
+          action: replay ? 'replay_requested' : 'disposition_recorded',
+          actor,
+          timestamp: createdAt,
+          status: finalStatus,
+          summary: replay
+            ? `${actor} requested replay for ${mappingId}.`
+            : `${actor} recorded ${externalReferenceDispositionLabel(finalStatus)} for ${mappingId}.`,
+        },
+        ...(replayedLoad
+          ? [{
+              action: 'replay_completed' as const,
+              actor,
+              timestamp: createdAt,
+              status: finalStatus,
+              summary: `Replay completed with ${replayedLoad.objectCount} object(s), ${replayedLoad.linkCount} link(s), and ${warnings.length} warning(s).`,
+            }]
+          : []),
+      ],
+      evidence: replayedLoad
+        ? `${mappingId} replay completed by ${actor}. ${replayedLoad.evidence}`
+        : `${mappingId} load exception disposition recorded by ${actor}: ${externalReferenceDispositionLabel(finalStatus)}.`,
+    }
+    const saved = await backendClient.saveRecord({
+      kind: 'external_reference_load_disposition',
+      label: `${mappingId} load disposition`,
+      status: externalReferenceDispositionStatusLevel(finalStatus),
+      summary: payload.evidence,
+      payload,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'external_reference_load_disposition',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record(
+      'mapping',
+      replay ? 'replay_load' : 'save_disposition',
+      `${mappingId} external-reference load disposition saved as backend record v${saved.version}.`,
+    )
+    return saved
   }
 
   async function saveExtractionJob(policy?: {
@@ -2513,9 +2636,15 @@ function App() {
             extractionRuns={backendRecords.filter(
               (record): record is BackendRecord<ExtractionRunPayload> => record.kind === 'extraction_run',
             )}
+            externalReferenceDispositions={backendRecords.filter(
+              (record): record is BackendRecord<ExternalReferenceLoadExceptionDisposition> =>
+                record.kind === 'external_reference_load_disposition' &&
+                (record.payload as ExternalReferenceLoadExceptionDisposition).mappingId === activeMappingId,
+            )}
             latestCanonicalLoad={backendRecords.find(
               (record): record is BackendRecord<CanonicalLoadResult> =>
-                record.kind === 'canonical_load',
+                record.kind === 'canonical_load' &&
+                (record.payload as CanonicalLoadResult).mappingId === activeMappingId,
             )}
             activeMappingId={activeMappingId}
             mapping={config.mappings[activeMappingId] ?? config.mappings.quality_event}
@@ -2530,6 +2659,7 @@ function App() {
             onLoadCanonical={loadCanonicalFromMapping}
             onMappingChange={selectMappingProfile}
             onRunExtractionJob={runExtractionJob}
+            onSaveLoadDisposition={saveExternalReferenceLoadDisposition}
             onValidate={runMappingValidation}
           />
         ) : activeView === 'Quality Events' ? (
@@ -5877,6 +6007,7 @@ function MappingStudio({
   csvText,
   extractionJobs,
   extractionRuns,
+  externalReferenceDispositions,
   latestCanonicalLoad,
   mapping,
   mappingIds,
@@ -5890,6 +6021,7 @@ function MappingStudio({
   onLoadCanonical,
   onMappingChange,
   onRunExtractionJob,
+  onSaveLoadDisposition,
   onValidate,
 }: {
   activeMappingId: string
@@ -5899,6 +6031,7 @@ function MappingStudio({
   csvText: string
   extractionJobs: BackendRecord<ExtractionJobPayload>[]
   extractionRuns: BackendRecord<ExtractionRunPayload>[]
+  externalReferenceDispositions: BackendRecord<ExternalReferenceLoadExceptionDisposition>[]
   latestCanonicalLoad?: BackendRecord<CanonicalLoadResult>
   mapping: AppConfig['mappings'][string]
   mappingIds: string[]
@@ -5917,9 +6050,16 @@ function MappingStudio({
     retryOnWarnings: boolean
   }) => void
   onLoadConnectorChange: (value: string) => void
-  onLoadCanonical: () => void
+  onLoadCanonical: () => Promise<CanonicalLoadResult | undefined> | void
   onMappingChange: (value: string) => void
   onRunExtractionJob: (job: BackendRecord<ExtractionJobPayload>) => void
+  onSaveLoadDisposition: (request: {
+    dueAt: string
+    owner: string
+    rationale: string
+    replay?: boolean
+    status: ExternalReferenceLoadExceptionDispositionStatus
+  }) => void
   onValidate: () => void
 }) {
   const summary = mappingResult
@@ -5944,6 +6084,29 @@ function MappingStudio({
   const retryEligibleRuns = extractionRuns.filter((run) => run.payload.retryEligible)
   const latestMappingRun = mappingRuns[0]
   const externalMappingApproved = activeMappingId === 'quality_event' || latestMappingRun?.status === 'pass'
+  const [loadDispositionOwner, setLoadDispositionOwner] = useState('TRACS Mapping Owner')
+  const [loadDispositionStatus, setLoadDispositionStatus] =
+    useState<ExternalReferenceLoadExceptionDispositionStatus>('retry_planned')
+  const [loadDispositionDueAt, setLoadDispositionDueAt] = useState(() => {
+    const date = new Date()
+    date.setDate(date.getDate() + 7)
+    return date.toISOString().slice(0, 10)
+  })
+  const [loadDispositionRationale, setLoadDispositionRationale] = useState(
+    'Review source readiness and replay after upstream credentials or preview rows are corrected.',
+  )
+  const latestLoadWarningSummary =
+    latestCanonicalLoad?.payload.warnings.length
+      ? latestCanonicalLoad.payload.warnings.join(' ')
+      : latestCanonicalLoad
+        ? 'Latest load completed without warning evidence.'
+        : 'No canonical load has been retained for this mapping yet.'
+  const loadDispositionRequest = () => ({
+    dueAt: loadDispositionDueAt,
+    owner: loadDispositionOwner,
+    rationale: loadDispositionRationale,
+    status: loadDispositionStatus,
+  })
 
   return (
     <>
@@ -6205,6 +6368,96 @@ function MappingStudio({
                 </div>
                 <StatusChip status={latestCanonicalLoad.status} label={latestCanonicalLoad.status} />
               </div>
+            </div>
+          ) : null}
+          {activeMappingId !== 'quality_event' ? (
+            <div className="mapping-run-history">
+              <h4>External-Reference Load Exceptions & Replay</h4>
+              <div className="mapping-run-row">
+                <div>
+                  <strong>Exception summary</strong>
+                  <span>{latestLoadWarningSummary}</span>
+                  <small>
+                    {latestCanonicalLoad
+                      ? `${latestCanonicalLoad.payload.objectCount} object(s), ${latestCanonicalLoad.payload.linkCount} traceability link(s), ${latestCanonicalLoad.payload.warnings.length} warning(s).`
+                      : 'Save a disposition now or replay after the mapping validation gate passes.'}
+                  </small>
+                </div>
+                <StatusChip
+                  status={latestCanonicalLoad?.status ?? 'warning'}
+                  label={latestCanonicalLoad ? latestCanonicalLoad.status : 'no load'}
+                />
+              </div>
+              <div className="form-grid compact-form">
+                <label>
+                  <span>Owner</span>
+                  <input value={loadDispositionOwner} onChange={(event) => setLoadDispositionOwner(event.target.value)} />
+                </label>
+                <label>
+                  <span>Status</span>
+                  <select
+                    value={loadDispositionStatus}
+                    onChange={(event) =>
+                      setLoadDispositionStatus(event.target.value as ExternalReferenceLoadExceptionDispositionStatus)
+                    }
+                  >
+                    <option value="retry_planned">Retry planned</option>
+                    <option value="accepted">Accepted</option>
+                    <option value="waived">Waived</option>
+                    <option value="blocked">Blocked</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Due date</span>
+                  <input
+                    type="date"
+                    value={loadDispositionDueAt}
+                    onChange={(event) => setLoadDispositionDueAt(event.target.value)}
+                  />
+                </label>
+              </div>
+              <textarea
+                aria-label="Load exception disposition rationale"
+                className="compact-textarea"
+                value={loadDispositionRationale}
+                onChange={(event) => setLoadDispositionRationale(event.target.value)}
+              />
+              <div className="toolbar-actions">
+                <button
+                  className="secondary-action compact"
+                  onClick={() => onSaveLoadDisposition(loadDispositionRequest())}
+                  type="button"
+                >
+                  <ClipboardCheck size={14} />
+                  Save Disposition
+                </button>
+                <button
+                  className="primary-action compact"
+                  disabled={!externalMappingApproved}
+                  onClick={() => onSaveLoadDisposition({ ...loadDispositionRequest(), replay: true })}
+                  type="button"
+                >
+                  <Database size={14} />
+                  Replay Load
+                </button>
+              </div>
+              {externalReferenceDispositions.length > 0 ? (
+                <div className="mapping-run-history">
+                  <h4>Disposition History</h4>
+                  {externalReferenceDispositions.slice(0, 4).map((record) => (
+                    <div className="mapping-run-row" key={record.id}>
+                      <div>
+                        <strong>{externalReferenceDispositionLabel(record.payload.status)}</strong>
+                        <span>
+                          {record.payload.owner} / due {record.payload.dueAt || 'not set'} / v{record.version}
+                        </span>
+                        <small>{record.payload.evidence}</small>
+                      </div>
+                      <StatusChip status={record.status} label={record.status} />
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </section>
