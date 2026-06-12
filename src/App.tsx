@@ -85,6 +85,7 @@ import type {
   NotificationLiveChannelApprovalStatus,
   NotificationDeliveryPayload,
   NotificationDeliveryResult,
+  NotificationRetryQueueExportPackage,
   PostgresCutoverApproval,
   PostgresCutoverApprovalStatus,
   PostgresCutoverAcknowledgement,
@@ -2280,6 +2281,41 @@ function App() {
     return saved
   }
 
+  async function saveNotificationRetryQueueExportPackage({
+    download,
+    packagePayload,
+  }: {
+    download: boolean
+    packagePayload: NotificationRetryQueueExportPackage
+  }) {
+    const saved = await backendClient.saveRecord({
+      kind: 'notification_retry_queue_export_package',
+      label: 'notification retry queue export package',
+      status: packagePayload.status,
+      summary: packagePayload.evidence,
+      payload: packagePayload,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'notification_retry_queue_export_package',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    if (download) {
+      downloadJson('tracs-notification-retry-queue-export-package.json', packagePayload)
+    }
+    record(
+      'notification',
+      download ? 'retry_queue_export_package_download' : 'retry_queue_export_package_save',
+      `Notification retry queue export package saved as backend record v${saved.version}.`,
+    )
+    return saved
+  }
+
   async function runNotificationSmokeFixtures() {
     const result = await backendClient.runNotificationSmokeFixtures()
     await refreshBackend()
@@ -3895,6 +3931,10 @@ function App() {
               (record): record is BackendRecord<NotificationDeliveryRetryControl> =>
                 record.kind === 'notification_delivery_retry',
             )}
+            notificationRetryQueueExportPackageRecords={backendRecords.filter(
+              (record): record is BackendRecord<NotificationRetryQueueExportPackage> =>
+                record.kind === 'notification_retry_queue_export_package',
+            )}
             closureSlaExportPackageRecords={backendRecords.filter(
               (record): record is BackendRecord<ClosureSlaExportPackage> =>
                 record.kind === 'closure_sla_export_package',
@@ -3941,6 +3981,7 @@ function App() {
             onDeliverClosureSlaExportPackage={deliverClosureSlaExportPackage}
             onSaveClosureSlaDeliveryAcknowledgement={saveClosureSlaDeliveryAcknowledgement}
             onSaveNotificationDeliveryRetryControl={saveNotificationDeliveryRetryControl}
+            onSaveNotificationRetryQueueExportPackage={saveNotificationRetryQueueExportPackage}
             onSaveNotificationApprovalRenewalClosure={saveNotificationApprovalRenewalClosure}
             onSaveNotificationClosureExportPackage={saveNotificationClosureExportPackage}
             onSaveClosureSlaExportPackage={saveClosureSlaExportPackage}
@@ -4584,6 +4625,7 @@ function BackendPersistenceView({
   notificationApprovalRecords,
   notificationClosureExportPackageRecords,
   notificationDeliveryRetryRecords,
+  notificationRetryQueueExportPackageRecords,
   notificationRenewalRecords,
   notificationRenewalClosureRecords,
   traceabilityClosureRouteRecords,
@@ -4603,6 +4645,7 @@ function BackendPersistenceView({
   onDeliverClosureSlaExportPackage,
   onSaveClosureSlaDeliveryAcknowledgement,
   onSaveNotificationDeliveryRetryControl,
+  onSaveNotificationRetryQueueExportPackage,
   onSaveNotificationApprovalRenewalClosure,
   onSaveClosureSlaExportPackage,
   onSaveNotificationClosureExportPackage,
@@ -4628,6 +4671,7 @@ function BackendPersistenceView({
   notificationApprovalRecords: BackendRecord<NotificationLiveChannelApproval>[]
   notificationClosureExportPackageRecords: BackendRecord<NotificationClosureExportPackage>[]
   notificationDeliveryRetryRecords: BackendRecord<NotificationDeliveryRetryControl>[]
+  notificationRetryQueueExportPackageRecords: BackendRecord<NotificationRetryQueueExportPackage>[]
   notificationRenewalRecords: BackendRecord<NotificationApprovalRenewalRoute>[]
   notificationRenewalClosureRecords: BackendRecord<NotificationApprovalRenewalClosure>[]
   traceabilityClosureRouteRecords: BackendRecord<TraceabilityResponseClosureRoute>[]
@@ -4691,6 +4735,10 @@ function BackendPersistenceView({
     rationale: string
     retryDelayMinutes: number
     retryOnWarnings: boolean
+  }) => void
+  onSaveNotificationRetryQueueExportPackage: (request: {
+    download: boolean
+    packagePayload: NotificationRetryQueueExportPackage
   }) => void
   onSaveNotificationApprovalRenewalClosure: (request: {
     closureNotes: string
@@ -4890,6 +4938,12 @@ function BackendPersistenceView({
   const [deliveryRetryOnWarnings, setDeliveryRetryOnWarnings] = useState(true)
   const [deliveryRetryRationale, setDeliveryRetryRationale] = useState(
     'Retry retained because closure or cutover notification delivery produced warning or blocking evidence.',
+  )
+  const [retryQueueOperationsReviewers, setRetryQueueOperationsReviewers] = useState(
+    'Notification Operations Owner, Messaging Owner',
+  )
+  const [retryQueueReviewerNotes, setRetryQueueReviewerNotes] = useState(
+    'Operations review package retained current retry queue aging, retry due windows, delivery evidence, and required follow-up actions.',
   )
   const [retryQueueMeasuredAt] = useState(() => new Date())
   const recordCounts = backendRecords.reduce(
@@ -5104,6 +5158,7 @@ function BackendPersistenceView({
     : retryQueueMetrics.dueSoon > 0
       ? 'warning'
       : 'pass'
+  const retryQueueActiveSources = new Set(notificationDeliveryRetryRecords.map((record) => record.payload.source))
   const notificationClosurePackageDeliveryRecords = deliveryRecords.filter(
     (record) => record.payload.request.source === 'notification_closure_export_package',
   )
@@ -5286,6 +5341,74 @@ function BackendPersistenceView({
       .split(',')
       .map((reviewer) => reviewer.trim())
       .filter(Boolean)
+  }
+  function retryQueueOperationsReviewerList() {
+    return retryQueueOperationsReviewers
+      .split(',')
+      .map((reviewer) => reviewer.trim())
+      .filter(Boolean)
+  }
+  function retryQueueRequiredActions() {
+    const actions = [
+      retryQueueRows.length > 0 ? null : 'No delivery retry controls are available for operations review.',
+      retryQueueMetrics.overdue > 0
+        ? `Execute or close ${retryQueueMetrics.overdue} overdue retry queue item(s).`
+        : null,
+      retryQueueMetrics.dueSoon > 0
+        ? `Review ${retryQueueMetrics.dueSoon} retry queue item(s) due within one hour.`
+        : null,
+      retryQueueMetrics.active > 0
+        ? `Disposition ${retryQueueMetrics.active} active retry queue item(s) before closing notification operations review.`
+        : null,
+      retryQueueMetrics.blocked > 0
+        ? `Escalate ${retryQueueMetrics.blocked} blocked retry control(s) to notification channel owners.`
+        : null,
+    ]
+    return actions.filter((action): action is string => Boolean(action))
+  }
+  function buildRetryQueueExportPackage(): NotificationRetryQueueExportPackage {
+    const generatedAt = new Date().toISOString()
+    const reviewers = retryQueueOperationsReviewerList()
+    const operationsReviewers = reviewers.length > 0 ? reviewers : ['Notification Operations Owner']
+    const requiredActions = retryQueueRequiredActions()
+    const rows = retryQueueRows.map((row) => ({
+      retryRecordId: row.record.id,
+      retryId: row.record.payload.retryId,
+      source: row.record.payload.source,
+      subject: row.record.payload.subject,
+      status: row.record.payload.status,
+      queueStatus: row.status,
+      active: row.active,
+      attempt: row.record.payload.attempt,
+      maxRetries: row.record.payload.maxRetries,
+      retryDueAt: row.dueAt,
+      ageMinutes: row.ageMinutes,
+      minutesUntilDue: row.minutesUntilDue,
+      recipients: row.record.payload.recipients,
+      channels: row.record.payload.channels,
+      evidence: row.record.payload.evidence,
+    }))
+    const deliveryEvidence = deliveryRecords.filter((record) =>
+      retryQueueActiveSources.has(record.payload.request.source),
+    )
+    return {
+      packageId: `notification_retry_queue_export:${generatedAt}`,
+      generatedAt,
+      operationsReviewers,
+      status: retryQueueStatus,
+      sourceFilter: 'all',
+      metrics: retryQueueMetrics,
+      rows,
+      deliveryEvidence,
+      requiredActions,
+      reviewerNotes: retryQueueReviewerNotes.trim() || 'No notification operations reviewer notes recorded.',
+      sourceRecordCounts: {
+        retryControls: notificationDeliveryRetryRecords.length,
+        deliveries: deliveryEvidence.length,
+        activeSources: retryQueueActiveSources.size,
+      },
+      evidence: `Notification retry queue export package generated for ${operationsReviewers.join(', ')} with ${retryQueueMetrics.active} active retry item(s), ${retryQueueMetrics.overdue} overdue item(s), and ${requiredActions.length} required action(s).`,
+    }
   }
   function notificationDeliveryRetryRequest(
     deliveryRecord: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>,
@@ -7279,6 +7402,83 @@ function BackendPersistenceView({
                 </div>
               ) : (
                 <div className="empty-state compact">No retry controls have been planned or executed yet.</div>
+              )}
+            </div>
+            <div className="connector-run-history retry-aging-dashboard">
+              <div className="dashboard-heading">
+                <h4>Retry Queue Export Package</h4>
+                <StatusChip status={retryQueueStatus} label={retryQueueStatus} />
+              </div>
+              <div className="trace-review-grid">
+                <label className="trace-review-rationale">
+                  <span>Operations reviewers</span>
+                  <textarea
+                    value={retryQueueOperationsReviewers}
+                    onChange={(event) => setRetryQueueOperationsReviewers(event.target.value)}
+                  />
+                </label>
+                <label className="trace-review-rationale">
+                  <span>Reviewer notes</span>
+                  <textarea
+                    value={retryQueueReviewerNotes}
+                    onChange={(event) => setRetryQueueReviewerNotes(event.target.value)}
+                  />
+                </label>
+              </div>
+              <div className="toolbar-actions notification-approval-actions">
+                <button
+                  className="secondary-action"
+                  onClick={() =>
+                    onSaveNotificationRetryQueueExportPackage({
+                      download: false,
+                      packagePayload: buildRetryQueueExportPackage(),
+                    })
+                  }
+                  type="button"
+                >
+                  <ClipboardCheck size={15} />
+                  Save Retry Queue Package
+                </button>
+                <button
+                  className="primary-action"
+                  onClick={() =>
+                    onSaveNotificationRetryQueueExportPackage({
+                      download: true,
+                      packagePayload: buildRetryQueueExportPackage(),
+                    })
+                  }
+                  type="button"
+                >
+                  <Download size={15} />
+                  Save & Download Retry Queue Package
+                </button>
+              </div>
+              <div className="metadata-grid">
+                <Metadata label="Queue packages" value={String(notificationRetryQueueExportPackageRecords.length)} />
+                <Metadata label="Operations reviewers" value={String(retryQueueOperationsReviewerList().length)} />
+                <Metadata label="Required actions" value={String(retryQueueRequiredActions().length)} />
+                <Metadata
+                  label="Evidence deliveries"
+                  value={String(deliveryRecords.filter((record) => retryQueueActiveSources.has(record.payload.request.source)).length)}
+                />
+              </div>
+              {notificationRetryQueueExportPackageRecords.length > 0 ? (
+                <div className="retry-aging-list">
+                  {notificationRetryQueueExportPackageRecords.slice(0, 3).map((record) => (
+                    <div className="connector-run-row" key={record.id}>
+                      <div>
+                        <strong>{record.payload.operationsReviewers.join(', ')}</strong>
+                        <span>
+                          v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.rows.length} retry row(s)
+                        </span>
+                        <small>{record.payload.evidence}</small>
+                      </div>
+                      <StatusChip status={record.status} label={record.status} />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-state compact">No retry queue export packages have been retained yet.</div>
               )}
             </div>
             {retryControlsForSource.length > 0 ? (

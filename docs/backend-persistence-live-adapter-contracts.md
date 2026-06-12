@@ -398,6 +398,8 @@ Production cutover closure packages are persisted as `postgres_cutover_closure_p
 
 Delivery retry controls are persisted as `notification_delivery_retry` records for notification closure package, closure SLA package, Postgres cutover acknowledgement, and Postgres cutover owner reminder notifications. A retry control links to the original `notification_delivery` record, captures source, subject, recipients, channel list, retry policy, attempt count, retry eligibility, retry due timestamp, rationale, original result, optional retry result, and audit evidence. Executed retries resubmit the original delivery payload with a retry-specific delivery id and retain the new `notification_delivery` record separately from the retry-control record. The Backend workspace derives retry queue aging metrics from these records, falling back to `createdAt + retryDelayMinutes` for older records that do not yet carry `retryDueAt`.
 
+Notification retry queue export packages are persisted as `notification_retry_queue_export_package` records for notification operations review. Each package retains active retry rows, queue status, aging and due-window metrics, source delivery evidence, operations reviewer routing, reviewer notes, required actions, and source record counts. These packages can be downloaded as JSON and do not mutate delivery or retry-control records; they provide a point-in-time review artifact for notification operations owners before retry queues are closed or escalated.
+
 ## GitHub Implementation Plan
 
 1. Create branch: `codex/backend-persistence-adapter-contracts`

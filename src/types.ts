@@ -180,6 +180,7 @@ export type SavedVersionKind =
   | 'credential_validation'
   | 'notification_delivery'
   | 'notification_delivery_retry'
+  | 'notification_retry_queue_export_package'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -226,6 +227,7 @@ export type BackendRecordKind =
   | 'credential_validation'
   | 'notification_delivery'
   | 'notification_delivery_retry'
+  | 'notification_retry_queue_export_package'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -1141,6 +1143,54 @@ export type NotificationDeliveryRetryControl = {
     status: NotificationDeliveryRetryStatus
     summary: string
   }>
+  evidence: string
+}
+
+export type NotificationRetryQueueExportRow = {
+  retryRecordId: string
+  retryId: string
+  source: NotificationDeliveryPayload['source']
+  subject: string
+  status: NotificationDeliveryRetryStatus
+  queueStatus: StatusLevel
+  active: boolean
+  attempt: number
+  maxRetries: number
+  retryDueAt: string
+  ageMinutes: number
+  minutesUntilDue: number | null
+  recipients: string[]
+  channels: NotificationDeliveryPayload['channels']
+  evidence: string
+}
+
+export type NotificationRetryQueueExportPackage = {
+  packageId: string
+  generatedAt: string
+  operationsReviewers: string[]
+  status: StatusLevel
+  sourceFilter: NotificationDeliveryPayload['source'] | 'all'
+  metrics: {
+    total: number
+    active: number
+    executed: number
+    blocked: number
+    overdue: number
+    dueSoon: number
+    oldestAgeMinutes: number
+  }
+  rows: NotificationRetryQueueExportRow[]
+  deliveryEvidence: Array<BackendRecord<{
+    request: NotificationDeliveryPayload
+    result: NotificationDeliveryResult
+  }>>
+  requiredActions: string[]
+  reviewerNotes: string
+  sourceRecordCounts: {
+    retryControls: number
+    deliveries: number
+    activeSources: number
+  }
   evidence: string
 }
 
