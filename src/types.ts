@@ -973,6 +973,7 @@ export type NotificationDeliveryPayload = {
     | 'traceability_export'
     | 'traceability_response_closure'
     | 'notification_approval_renewal'
+    | 'notification_closure_export_package'
     | 'postgres_cutover_acknowledgement'
   channels: Array<'email' | 'teams' | 'sharepoint_folder'>
   recipients: string[]

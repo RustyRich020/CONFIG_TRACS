@@ -2694,6 +2694,27 @@ function App() {
     return saved
   }
 
+  async function deliverNotificationClosureExportPackage(request: {
+    download: boolean
+    messagingOwners: string[]
+    ownerNotes: string
+  }) {
+    const saved = await saveNotificationClosureExportPackage(request)
+    if (!saved) return
+    await deliverNotifications(
+      notificationToDeliveryPayload(
+        'notification_closure_export_package',
+        'Notification closure export package',
+        {
+          notificationId: saved.payload.packageId,
+          recipients: saved.payload.messagingOwners,
+          summary: `${saved.payload.messagingOwners.join(', ')} notification closure package includes ${saved.payload.deliveryEvidence.length} delivery record(s), ${saved.payload.channelSummary.length} channel evidence item(s), and ${saved.payload.requiredActions.length} required action(s).`,
+          package: saved.payload,
+        },
+      ),
+    )
+  }
+
   async function saveReportCatalogItem(report: ReportCatalogItem, action: ReportCatalogSaveAction) {
     const freshness = reportFreshnessStatus(report.lastRefresh, report.maxAgeHours)
     const normalizedReport: ReportCatalogItem = {
@@ -3141,6 +3162,7 @@ function App() {
             onRunAdapterDryRun={runAdapterDryRun}
             onRunNotificationSmokeFixtures={runNotificationSmokeFixtures}
             onDeliverNotificationApprovalRenewalRoute={deliverNotificationApprovalRenewalRoute}
+            onDeliverNotificationClosureExportPackage={deliverNotificationClosureExportPackage}
             onDeliverPostgresCutoverAcknowledgement={deliverPostgresCutoverAcknowledgement}
             onSaveNotificationApprovalRenewalClosure={saveNotificationApprovalRenewalClosure}
             onSaveNotificationClosureExportPackage={saveNotificationClosureExportPackage}
@@ -3788,6 +3810,7 @@ function BackendPersistenceView({
   onRunAdapterDryRun,
   onRunNotificationSmokeFixtures,
   onDeliverNotificationApprovalRenewalRoute,
+  onDeliverNotificationClosureExportPackage,
   onDeliverPostgresCutoverAcknowledgement,
   onSaveNotificationApprovalRenewalClosure,
   onSaveNotificationClosureExportPackage,
@@ -3823,6 +3846,11 @@ function BackendPersistenceView({
     reminderAt: string
     reviewers: string[]
     routeStage: NotificationApprovalRenewalRoute['routeStage']
+  }) => void
+  onDeliverNotificationClosureExportPackage: (request: {
+    download: boolean
+    messagingOwners: string[]
+    ownerNotes: string
   }) => void
   onDeliverPostgresCutoverAcknowledgement: (request: {
     acknowledgementNotes: string
@@ -4067,6 +4095,9 @@ function BackendPersistenceView({
   const deliveryRecords = backendRecords.filter(
     (record): record is BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }> =>
       record.kind === 'notification_delivery',
+  )
+  const notificationClosurePackageDeliveryRecords = deliveryRecords.filter(
+    (record) => record.payload.request.source === 'notification_closure_export_package',
   )
   const postgresAcknowledgementDeliveryRecords = deliveryRecords.filter(
     (record) => record.payload.request.source === 'postgres_cutover_acknowledgement',
@@ -4637,11 +4668,26 @@ function BackendPersistenceView({
               <Download size={15} />
               Save & Download Package
             </button>
+            <button
+              className="primary-action"
+              onClick={() =>
+                onDeliverNotificationClosureExportPackage({
+                  download: false,
+                  messagingOwners: notificationClosureOwnerList(),
+                  ownerNotes: notificationClosureExportNotes,
+                })
+              }
+              type="button"
+            >
+              <Bell size={15} />
+              Save & Notify Owners
+            </button>
           </div>
         </div>
         <div className="notification-approval-summary">
           <div className="metadata-grid">
             <Metadata label="Closure packages" value={String(notificationClosureExportPackageRecords.length)} />
+            <Metadata label="Package deliveries" value={String(notificationClosurePackageDeliveryRecords.length)} />
             <Metadata label="Messaging owners" value={String(notificationClosureOwnerList().length)} />
             <Metadata
               label="Latest package"
@@ -4672,6 +4718,23 @@ function BackendPersistenceView({
           ) : (
             <div className="empty-state compact">No notification closure export package has been retained yet.</div>
           )}
+          {notificationClosurePackageDeliveryRecords.length > 0 ? (
+            <div className="connector-run-history">
+              <h4>Closure package delivery evidence</h4>
+              {notificationClosurePackageDeliveryRecords.slice(0, 3).map((record) => (
+                <div className="connector-run-row" key={record.id}>
+                  <div>
+                    <strong>{record.payload.request.subject}</strong>
+                    <span>
+                      v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
+                    </span>
+                    <small>{record.payload.result.evidence}</small>
+                  </div>
+                  <StatusChip status={record.status} label={record.status} />
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
       {notificationClosureExportPackageRecords.length > 1 ? (
