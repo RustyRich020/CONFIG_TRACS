@@ -382,6 +382,22 @@ function traceabilityClosureRouteLabel(status: TraceabilityResponseClosureRouteS
   return titleize(status)
 }
 
+function daysUntilDue(dueAt: string, now = new Date()) {
+  const dueTime = Date.parse(dueAt)
+  if (!Number.isFinite(dueTime)) return null
+  return Math.ceil((dueTime - now.getTime()) / 86_400_000)
+}
+
+function closureSlaStatus(dueAt: string, closed: boolean, escalated = false): StatusLevel {
+  if (closed) return 'pass'
+  if (escalated) return 'blocking'
+  const days = daysUntilDue(dueAt)
+  if (days === null) return 'warning'
+  if (days < 0) return 'blocking'
+  if (days <= 3) return 'warning'
+  return 'pass'
+}
+
 function externalReferenceDispositionStatusLevel(
   status: ExternalReferenceLoadExceptionDispositionStatus,
 ): StatusLevel {
@@ -3070,6 +3086,10 @@ function App() {
               (record): record is BackendRecord<NotificationClosureExportPackage> =>
                 record.kind === 'notification_closure_export_package',
             )}
+            traceabilityClosureRouteRecords={backendRecords.filter(
+              (record): record is BackendRecord<TraceabilityResponseClosureRoute> =>
+                record.kind === 'traceability_response_closure_route',
+            )}
             postgresCutoverApprovalRecords={backendRecords.filter(
               (record): record is BackendRecord<PostgresCutoverApproval> =>
                 record.kind === 'postgres_cutover_approval',
@@ -3724,6 +3744,7 @@ function BackendPersistenceView({
   notificationClosureExportPackageRecords,
   notificationRenewalRecords,
   notificationRenewalClosureRecords,
+  traceabilityClosureRouteRecords,
   postgresCutoverApprovalRecords,
   postgresCutoverAcknowledgementRecords,
   postgresCutoverPackageRecords,
@@ -3751,6 +3772,7 @@ function BackendPersistenceView({
   notificationClosureExportPackageRecords: BackendRecord<NotificationClosureExportPackage>[]
   notificationRenewalRecords: BackendRecord<NotificationApprovalRenewalRoute>[]
   notificationRenewalClosureRecords: BackendRecord<NotificationApprovalRenewalClosure>[]
+  traceabilityClosureRouteRecords: BackendRecord<TraceabilityResponseClosureRoute>[]
   postgresCutoverApprovalRecords: BackendRecord<PostgresCutoverApproval>[]
   postgresCutoverAcknowledgementRecords: BackendRecord<PostgresCutoverAcknowledgement>[]
   postgresCutoverPackageRecords: BackendRecord<PostgresCutoverChecklistPackage>[]
@@ -3913,6 +3935,74 @@ function BackendPersistenceView({
   const latestNotificationRenewal = notificationRenewalRecords[0]
   const latestNotificationRenewalClosure = notificationRenewalClosureRecords[0]
   const latestNotificationClosureExportPackage = notificationClosureExportPackageRecords[0]
+  const closedNotificationRenewalRouteIds = new Set(
+    notificationRenewalClosureRecords
+      .map((record) => record.payload.renewalRouteId)
+      .filter((routeId): routeId is string => Boolean(routeId)),
+  )
+  const closureSlaRows = [
+    ...notificationRenewalRecords.map((record) => {
+      const closed =
+        record.payload.routeStage === 'closed' ||
+        closedNotificationRenewalRouteIds.has(record.payload.routeId)
+      const status = closureSlaStatus(record.payload.dueAt, closed)
+      return {
+        id: record.id,
+        source: 'Notification renewal',
+        subject: 'Live-channel approval renewal',
+        owner: record.payload.routedReviewers.join(', ') || 'Unassigned',
+        dueAt: record.payload.dueAt,
+        closed,
+        daysRemaining: daysUntilDue(record.payload.dueAt),
+        stage: closed ? 'Closed' : titleize(record.payload.routeStage),
+        status,
+        evidence: record.payload.evidence,
+      }
+    }),
+    ...traceabilityClosureRouteRecords.map((record) => {
+      const closed = record.payload.status === 'closed' || record.payload.routeStage === 'closed'
+      const status = closureSlaStatus(record.payload.dueAt, closed, record.payload.status === 'escalated')
+      return {
+        id: record.id,
+        source: 'Traceability response',
+        subject: record.payload.deliverySubject,
+        owner: record.payload.routedReviewers.join(', ') || record.payload.reviewer,
+        dueAt: record.payload.dueAt,
+        closed,
+        daysRemaining: daysUntilDue(record.payload.dueAt),
+        stage: traceabilityClosureRouteLabel(record.payload.status),
+        status,
+        evidence: record.payload.evidence,
+      }
+    }),
+  ].sort((first, second) => {
+    const severity = { blocking: 0, warning: 1, pass: 2 } satisfies Record<StatusLevel, number>
+    const severityDelta = severity[first.status] - severity[second.status]
+    if (severityDelta !== 0) return severityDelta
+    return (first.daysRemaining ?? Number.MAX_SAFE_INTEGER) - (second.daysRemaining ?? Number.MAX_SAFE_INTEGER)
+  })
+  const closureSlaMetrics = closureSlaRows.reduce(
+    (summary, row) => {
+      summary.total += 1
+      if (row.closed) summary.closed += 1
+      else summary.open += 1
+      if (!row.closed && row.status === 'blocking') summary.overdue += 1
+      if (!row.closed && row.status === 'warning') summary.dueSoon += 1
+      if (!row.closed && row.source === 'Notification renewal') summary.notificationOpen += 1
+      if (!row.closed && row.source === 'Traceability response') summary.traceabilityOpen += 1
+      return summary
+    },
+    {
+      total: 0,
+      open: 0,
+      closed: 0,
+      overdue: 0,
+      dueSoon: 0,
+      notificationOpen: 0,
+      traceabilityOpen: 0,
+    },
+  )
+  const closureSlaOverallStatus = mostSevereStatus(closureSlaRows.map((row) => row.status))
   const supersededNotificationApproval = notificationApprovalRecords[1]
   const latestPostgresCutoverApproval = postgresCutoverApprovalRecords[0]
   const latestPostgresCutoverPackage = postgresCutoverPackageRecords[0]
@@ -4536,6 +4626,51 @@ function BackendPersistenceView({
           ))}
         </div>
       ) : null}
+      </section>
+
+      <section className="panel notification-approval-panel">
+        <PanelHeader
+          icon={Gauge}
+          title="Closure SLA Dashboard"
+          subtitle="SLA rollup for traceability response closures and notification follow-up routes."
+        />
+        <div className="notification-approval-summary">
+          <div className="metadata-grid">
+            <Metadata label="Overall SLA" value={closureSlaOverallStatus} />
+            <Metadata label="Total routes" value={String(closureSlaMetrics.total)} />
+            <Metadata label="Open" value={String(closureSlaMetrics.open)} />
+            <Metadata label="Closed" value={String(closureSlaMetrics.closed)} />
+            <Metadata label="Overdue" value={String(closureSlaMetrics.overdue)} />
+            <Metadata label="Due soon" value={String(closureSlaMetrics.dueSoon)} />
+            <Metadata label="Notification open" value={String(closureSlaMetrics.notificationOpen)} />
+            <Metadata label="Traceability open" value={String(closureSlaMetrics.traceabilityOpen)} />
+          </div>
+        </div>
+        {closureSlaRows.length > 0 ? (
+          <div className="mapping-run-history">
+            <h4>Closure SLA queue</h4>
+            {closureSlaRows.slice(0, 8).map((row) => (
+              <div className="mapping-run-row" key={row.id}>
+                <div>
+                  <strong>{row.subject}</strong>
+                  <span>
+                    {row.source} / {row.stage} / {row.owner}
+                  </span>
+                  <small>
+                    Due {row.dueAt || 'not scheduled'} / {row.daysRemaining === null
+                      ? 'no due date'
+                      : row.daysRemaining < 0
+                        ? `${Math.abs(row.daysRemaining)} day(s) overdue`
+                        : `${row.daysRemaining} day(s) remaining`} / {row.evidence}
+                  </small>
+                </div>
+                <StatusChip status={row.status} label={row.closed ? 'closed' : row.status} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state compact">No closure SLA routes are available yet.</div>
+        )}
       </section>
 
       <section className="panel import-reconciliation-panel">
