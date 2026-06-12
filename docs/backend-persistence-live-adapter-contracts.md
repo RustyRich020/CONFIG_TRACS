@@ -416,6 +416,8 @@ Notification retry queue package notifications reuse the guarded notification de
 
 Notification retry queue package acknowledgements are persisted as `notification_retry_queue_acknowledgement` records. Each acknowledgement links to the delivered retry queue package notification, retains reviewer role, response status, queue closure readiness, requested actions, source retry metrics, source retry row count, delivery channel summary, response notes, and audit history. Acknowledgement records do not mutate retry-control, package, or delivery records; they provide append-only evidence that notification operations reviewers responded to the retry queue package before queue closure.
 
+Notification retry queue acknowledgement closure packages are persisted as `notification_retry_queue_acknowledgement_closure_package` records. Each package retains retry queue acknowledgement records, retry queue export package records, delivery evidence, closure reviewers, closure readiness metrics, retained action counts, required actions, reviewer notes, source record counts, and package audit history. Packages can be downloaded as JSON and do not mutate retry-control, retry queue package, delivery, or acknowledgement records; they provide point-in-time closure evidence before notification operations owners close or externally route retry queue acknowledgement outcomes.
+
 ## GitHub Implementation Plan
 
 1. Create branch: `codex/backend-persistence-adapter-contracts`

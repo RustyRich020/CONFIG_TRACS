@@ -91,6 +91,7 @@ import type {
   NotificationDeliveryPayload,
   NotificationDeliveryResult,
   NotificationRetryQueueAcknowledgement,
+  NotificationRetryQueueAcknowledgementClosurePackage,
   NotificationRetryQueueAcknowledgementStatus,
   NotificationRetryQueueExportPackage,
   PostgresCutoverApproval,
@@ -2493,6 +2494,41 @@ function App() {
     return saved
   }
 
+  async function saveNotificationRetryQueueAcknowledgementClosurePackage({
+    download,
+    packagePayload,
+  }: {
+    download: boolean
+    packagePayload: NotificationRetryQueueAcknowledgementClosurePackage
+  }) {
+    const saved = await backendClient.saveRecord({
+      kind: 'notification_retry_queue_acknowledgement_closure_package',
+      label: 'Notification retry queue acknowledgement closure package',
+      status: packagePayload.status,
+      summary: packagePayload.evidence,
+      payload: packagePayload,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'notification_retry_queue_acknowledgement_closure_package',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    if (download) {
+      downloadJson('tracs-notification-retry-queue-acknowledgement-closure-package.json', packagePayload)
+    }
+    record(
+      'notification',
+      download ? 'retry_queue_acknowledgement_closure_package_download' : 'retry_queue_acknowledgement_closure_package_save',
+      `Notification retry queue acknowledgement closure package saved as backend record v${saved.version}.`,
+    )
+    return saved
+  }
+
   async function runNotificationSmokeFixtures() {
     const result = await backendClient.runNotificationSmokeFixtures()
     await refreshBackend()
@@ -4508,6 +4544,10 @@ function App() {
               (record): record is BackendRecord<NotificationRetryQueueAcknowledgement> =>
                 record.kind === 'notification_retry_queue_acknowledgement',
             )}
+            notificationRetryQueueAcknowledgementClosurePackageRecords={backendRecords.filter(
+              (record): record is BackendRecord<NotificationRetryQueueAcknowledgementClosurePackage> =>
+                record.kind === 'notification_retry_queue_acknowledgement_closure_package',
+            )}
             closureSlaExportPackageRecords={backendRecords.filter(
               (record): record is BackendRecord<ClosureSlaExportPackage> =>
                 record.kind === 'closure_sla_export_package',
@@ -4581,6 +4621,7 @@ function App() {
             onSaveNotificationDeliveryRetryControl={saveNotificationDeliveryRetryControl}
             onSaveNotificationRetryQueueExportPackage={saveNotificationRetryQueueExportPackage}
             onSaveNotificationRetryQueueAcknowledgement={saveNotificationRetryQueueAcknowledgement}
+            onSaveNotificationRetryQueueAcknowledgementClosurePackage={saveNotificationRetryQueueAcknowledgementClosurePackage}
             onSaveNotificationApprovalRenewalClosure={saveNotificationApprovalRenewalClosure}
             onSaveNotificationClosureExportPackage={saveNotificationClosureExportPackage}
             onSaveClosureSlaExportPackage={saveClosureSlaExportPackage}
@@ -5230,6 +5271,7 @@ function BackendPersistenceView({
   notificationClosureExportPackageRecords,
   notificationDeliveryRetryRecords,
   notificationRetryQueueAcknowledgementRecords,
+  notificationRetryQueueAcknowledgementClosurePackageRecords,
   notificationRetryQueueExportPackageRecords,
   notificationRenewalRecords,
   notificationRenewalClosureRecords,
@@ -5258,6 +5300,7 @@ function BackendPersistenceView({
   onSaveClosureSlaResponseFollowUpRoute,
   onSaveNotificationDeliveryRetryControl,
   onSaveNotificationRetryQueueAcknowledgement,
+  onSaveNotificationRetryQueueAcknowledgementClosurePackage,
   onSaveNotificationRetryQueueExportPackage,
   onSaveNotificationApprovalRenewalClosure,
   onSaveClosureSlaExportPackage,
@@ -5290,6 +5333,7 @@ function BackendPersistenceView({
   notificationClosureExportPackageRecords: BackendRecord<NotificationClosureExportPackage>[]
   notificationDeliveryRetryRecords: BackendRecord<NotificationDeliveryRetryControl>[]
   notificationRetryQueueAcknowledgementRecords: BackendRecord<NotificationRetryQueueAcknowledgement>[]
+  notificationRetryQueueAcknowledgementClosurePackageRecords: BackendRecord<NotificationRetryQueueAcknowledgementClosurePackage>[]
   notificationRetryQueueExportPackageRecords: BackendRecord<NotificationRetryQueueExportPackage>[]
   notificationRenewalRecords: BackendRecord<NotificationApprovalRenewalRoute>[]
   notificationRenewalClosureRecords: BackendRecord<NotificationApprovalRenewalClosure>[]
@@ -5398,6 +5442,10 @@ function BackendPersistenceView({
     reviewer: string
     reviewerRole: NotificationRetryQueueAcknowledgement['reviewerRole']
     status: NotificationRetryQueueAcknowledgementStatus
+  }) => void
+  onSaveNotificationRetryQueueAcknowledgementClosurePackage: (request: {
+    download: boolean
+    packagePayload: NotificationRetryQueueAcknowledgementClosurePackage
   }) => void
   onSaveNotificationRetryQueueExportPackage: (request: {
     download: boolean
@@ -5686,6 +5734,12 @@ function BackendPersistenceView({
   const [retryQueueAckNotes, setRetryQueueAckNotes] = useState(
     'Notification operations reviewer acknowledged the delivered retry queue package and retained reviewer response evidence.',
   )
+  const [retryQueueClosurePackageReviewers, setRetryQueueClosurePackageReviewers] = useState(
+    'Notification Operations Owner, Messaging Owner',
+  )
+  const [retryQueueClosurePackageNotes, setRetryQueueClosurePackageNotes] = useState(
+    'Closure package retained retry queue acknowledgement responses, delivery evidence, closure readiness, and retained actions for notification operations review.',
+  )
   const [retryQueueMeasuredAt] = useState(() => new Date())
   const recordCounts = backendRecords.reduce(
     (summary, record) => {
@@ -5942,10 +5996,41 @@ function BackendPersistenceView({
     notificationRetryQueueAcknowledgementRecords.map((record) => record.payload.deliveryRecordId),
   )
   const latestRetryQueueAcknowledgement = notificationRetryQueueAcknowledgementRecords[0]
+  const latestRetryQueueAcknowledgementClosurePackage = notificationRetryQueueAcknowledgementClosurePackageRecords[0]
   const latestRetryQueuePackageDelivery = retryQueuePackageDeliveryRecords[0]
   const openRetryQueuePackageDeliveryCount = retryQueuePackageDeliveryRecords.filter(
     (record) => !retryQueueAcknowledgedDeliveryIds.has(record.id),
   ).length
+  const retryQueueAcknowledgementClosureMetrics = notificationRetryQueueAcknowledgementRecords.reduce(
+    (summary, record) => {
+      summary.totalAcknowledgements += 1
+      if (record.payload.status === 'acknowledged') summary.acknowledged += 1
+      if (record.payload.status === 'acknowledged_with_actions') summary.acknowledgedWithActions += 1
+      if (record.payload.status === 'changes_requested') summary.changesRequested += 1
+      if (record.payload.status === 'rejected') summary.rejected += 1
+      if (record.payload.queueClosureReady) summary.closureReady += 1
+      summary.retainedActions += record.payload.requestedActions.length
+      return summary
+    },
+    {
+      totalAcknowledgements: 0,
+      acknowledged: 0,
+      acknowledgedWithActions: 0,
+      changesRequested: 0,
+      rejected: 0,
+      closureReady: 0,
+      retainedActions: 0,
+    },
+  )
+  const retryQueueAcknowledgementClosureStatus: StatusLevel =
+    retryQueueAcknowledgementClosureMetrics.rejected > 0
+      ? 'blocking'
+      : retryQueueAcknowledgementClosureMetrics.totalAcknowledgements === 0 ||
+          retryQueueAcknowledgementClosureMetrics.acknowledgedWithActions > 0 ||
+          retryQueueAcknowledgementClosureMetrics.changesRequested > 0 ||
+          retryQueueAcknowledgementClosureMetrics.closureReady < retryQueueAcknowledgementClosureMetrics.totalAcknowledgements
+        ? 'warning'
+        : 'pass'
   const notificationClosurePackageDeliveryRecords = deliveryRecords.filter(
     (record) => record.payload.request.source === 'notification_closure_export_package',
   )
@@ -6358,6 +6443,68 @@ function BackendPersistenceView({
       .split('\n')
       .map((action) => action.trim())
       .filter(Boolean)
+  }
+  function retryQueueClosurePackageReviewerList() {
+    return retryQueueClosurePackageReviewers
+      .split(',')
+      .map((reviewer) => reviewer.trim())
+      .filter(Boolean)
+  }
+  function retryQueueAcknowledgementClosurePackageRequiredActions() {
+    const actions = [
+      notificationRetryQueueAcknowledgementRecords.length > 0
+        ? null
+        : 'Retain at least one retry queue acknowledgement before closing notification operations review.',
+      retryQueueAcknowledgementClosureMetrics.rejected > 0
+        ? `Resolve ${retryQueueAcknowledgementClosureMetrics.rejected} rejected retry queue acknowledgement record(s).`
+        : null,
+      retryQueueAcknowledgementClosureMetrics.changesRequested > 0
+        ? `Disposition ${retryQueueAcknowledgementClosureMetrics.changesRequested} retry queue acknowledgement change request(s).`
+        : null,
+      retryQueueAcknowledgementClosureMetrics.acknowledgedWithActions > 0
+        ? `Disposition retained actions from ${retryQueueAcknowledgementClosureMetrics.acknowledgedWithActions} retry queue acknowledgement record(s).`
+        : null,
+      retryQueueAcknowledgementClosureMetrics.closureReady < retryQueueAcknowledgementClosureMetrics.totalAcknowledgements
+        ? 'Confirm queue closure ready on all retained retry queue acknowledgement records before operations closure.'
+        : null,
+      retryQueuePackageDeliveryRecords.length > 0
+        ? null
+        : 'Deliver the retry queue package before retaining acknowledgement closure evidence.',
+    ]
+    return actions.filter((action): action is string => Boolean(action))
+  }
+  function buildRetryQueueAcknowledgementClosurePackage(): NotificationRetryQueueAcknowledgementClosurePackage {
+    const generatedAt = new Date().toISOString()
+    const reviewers = retryQueueClosurePackageReviewerList()
+    const closureReviewers = reviewers.length > 0 ? reviewers : ['Notification Operations Owner']
+    const requiredActions = retryQueueAcknowledgementClosurePackageRequiredActions()
+    return {
+      packageId: `notification_retry_queue_acknowledgement_closure:${generatedAt}`,
+      generatedAt,
+      closureReviewers,
+      status: retryQueueAcknowledgementClosureStatus,
+      acknowledgementRecords: notificationRetryQueueAcknowledgementRecords,
+      retryQueuePackages: notificationRetryQueueExportPackageRecords,
+      deliveryEvidence: retryQueuePackageDeliveryRecords,
+      metrics: retryQueueAcknowledgementClosureMetrics,
+      requiredActions,
+      reviewerNotes: retryQueueClosurePackageNotes.trim() || 'No retry queue acknowledgement closure package reviewer notes recorded.',
+      sourceRecordCounts: {
+        retryQueuePackages: notificationRetryQueueExportPackageRecords.length,
+        acknowledgementRecords: notificationRetryQueueAcknowledgementRecords.length,
+        deliveryRecords: retryQueuePackageDeliveryRecords.length,
+      },
+      auditHistory: [
+        {
+          action: 'retry_queue_acknowledgement_closure_package_generated',
+          actor: closureReviewers.join(', '),
+          timestamp: generatedAt,
+          status: retryQueueAcknowledgementClosureStatus,
+          summary: `Retry queue acknowledgement closure package generated with ${retryQueueAcknowledgementClosureMetrics.totalAcknowledgements} acknowledgement record(s).`,
+        },
+      ],
+      evidence: `Retry queue acknowledgement closure package generated for ${closureReviewers.join(', ')} with ${retryQueueAcknowledgementClosureMetrics.totalAcknowledgements} acknowledgement record(s), ${retryQueueAcknowledgementClosureMetrics.retainedActions} retained action(s), and ${requiredActions.length} required action(s).`,
+    }
   }
   function retryQueueRequiredActions() {
     const actions = [
@@ -9245,6 +9392,91 @@ function BackendPersistenceView({
                     ))}
                   </div>
                 ) : null}
+              </div>
+              <div className="connector-run-history retry-aging-dashboard">
+                <div className="dashboard-heading">
+                  <h4>Retry Queue Acknowledgement Closure Package</h4>
+                  <StatusChip status={retryQueueAcknowledgementClosureStatus} label={retryQueueAcknowledgementClosureStatus} />
+                </div>
+                <div className="trace-review-grid">
+                  <label className="trace-review-rationale">
+                    <span>Closure reviewers</span>
+                    <textarea
+                      value={retryQueueClosurePackageReviewers}
+                      onChange={(event) => setRetryQueueClosurePackageReviewers(event.target.value)}
+                    />
+                  </label>
+                  <label className="trace-review-rationale">
+                    <span>Closure package notes</span>
+                    <textarea
+                      value={retryQueueClosurePackageNotes}
+                      onChange={(event) => setRetryQueueClosurePackageNotes(event.target.value)}
+                    />
+                  </label>
+                </div>
+                <div className="toolbar-actions notification-approval-actions">
+                  <button
+                    className="secondary-action"
+                    onClick={() =>
+                      onSaveNotificationRetryQueueAcknowledgementClosurePackage({
+                        download: false,
+                        packagePayload: buildRetryQueueAcknowledgementClosurePackage(),
+                      })
+                    }
+                    type="button"
+                  >
+                    <ClipboardCheck size={15} />
+                    Save Retry Queue Closure Package
+                  </button>
+                  <button
+                    className="primary-action"
+                    onClick={() =>
+                      onSaveNotificationRetryQueueAcknowledgementClosurePackage({
+                        download: true,
+                        packagePayload: buildRetryQueueAcknowledgementClosurePackage(),
+                      })
+                    }
+                    type="button"
+                  >
+                    <Download size={15} />
+                    Save & Download Retry Queue Closure Package
+                  </button>
+                </div>
+                <div className="metadata-grid">
+                  <Metadata label="Closure packages" value={String(notificationRetryQueueAcknowledgementClosurePackageRecords.length)} />
+                  <Metadata label="Acknowledgements" value={String(retryQueueAcknowledgementClosureMetrics.totalAcknowledgements)} />
+                  <Metadata label="Closure ready" value={String(retryQueueAcknowledgementClosureMetrics.closureReady)} />
+                  <Metadata label="Retained actions" value={String(retryQueueAcknowledgementClosureMetrics.retainedActions)} />
+                  <Metadata label="Required actions" value={String(retryQueueAcknowledgementClosurePackageRequiredActions().length)} />
+                  <Metadata label="Delivery records" value={String(retryQueuePackageDeliveryRecords.length)} />
+                </div>
+                {latestRetryQueueAcknowledgementClosurePackage ? (
+                  <div className="retry-aging-list">
+                    <h4>Latest retry queue closure package</h4>
+                    <div className="connector-run-row">
+                      <div>
+                        <strong>{latestRetryQueueAcknowledgementClosurePackage.payload.closureReviewers.join(', ')}</strong>
+                        <span>
+                          v{latestRetryQueueAcknowledgementClosurePackage.version} / {new Date(latestRetryQueueAcknowledgementClosurePackage.createdAt).toLocaleString()} / {latestRetryQueueAcknowledgementClosurePackage.payload.acknowledgementRecords.length} acknowledgement record(s)
+                        </span>
+                        <small>{latestRetryQueueAcknowledgementClosurePackage.payload.evidence}</small>
+                      </div>
+                      <StatusChip
+                        status={latestRetryQueueAcknowledgementClosurePackage.status}
+                        label={latestRetryQueueAcknowledgementClosurePackage.status}
+                      />
+                    </div>
+                    {latestRetryQueueAcknowledgementClosurePackage.payload.requiredActions.length > 0 ? (
+                      <ul className="compact-list">
+                        {latestRetryQueueAcknowledgementClosurePackage.payload.requiredActions.slice(0, 5).map((action) => (
+                          <li key={action}>{action}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="empty-state compact">No retry queue acknowledgement closure package has been retained yet.</div>
+                )}
               </div>
             </div>
             {retryControlsForSource.length > 0 ? (

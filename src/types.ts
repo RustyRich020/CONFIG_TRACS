@@ -182,6 +182,7 @@ export type SavedVersionKind =
   | 'notification_delivery_retry'
   | 'notification_retry_queue_export_package'
   | 'notification_retry_queue_acknowledgement'
+  | 'notification_retry_queue_acknowledgement_closure_package'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -235,6 +236,7 @@ export type BackendRecordKind =
   | 'notification_delivery_retry'
   | 'notification_retry_queue_export_package'
   | 'notification_retry_queue_acknowledgement'
+  | 'notification_retry_queue_acknowledgement_closure_package'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -1312,6 +1314,43 @@ export type NotificationRetryQueueAcknowledgement = {
     actor: string
     timestamp: string
     status: NotificationRetryQueueAcknowledgementStatus
+    summary: string
+  }>
+  evidence: string
+}
+
+export type NotificationRetryQueueAcknowledgementClosurePackage = {
+  packageId: string
+  generatedAt: string
+  closureReviewers: string[]
+  status: StatusLevel
+  acknowledgementRecords: Array<BackendRecord<NotificationRetryQueueAcknowledgement>>
+  retryQueuePackages: Array<BackendRecord<NotificationRetryQueueExportPackage>>
+  deliveryEvidence: Array<BackendRecord<{
+    request: NotificationDeliveryPayload
+    result: NotificationDeliveryResult
+  }>>
+  metrics: {
+    totalAcknowledgements: number
+    acknowledged: number
+    acknowledgedWithActions: number
+    changesRequested: number
+    rejected: number
+    closureReady: number
+    retainedActions: number
+  }
+  requiredActions: string[]
+  reviewerNotes: string
+  sourceRecordCounts: {
+    retryQueuePackages: number
+    acknowledgementRecords: number
+    deliveryRecords: number
+  }
+  auditHistory: Array<{
+    action: 'retry_queue_acknowledgement_closure_package_generated'
+    actor: string
+    timestamp: string
+    status: StatusLevel
     summary: string
   }>
   evidence: string
