@@ -185,6 +185,7 @@ export type SavedVersionKind =
   | 'notification_approval_renewal_closure'
   | 'notification_closure_export_package'
   | 'closure_sla_export_package'
+  | 'closure_sla_delivery_acknowledgement'
   | 'traceability_export_review'
   | 'traceability_delivery_response'
   | 'traceability_response_closure_route'
@@ -229,6 +230,7 @@ export type BackendRecordKind =
   | 'notification_approval_renewal_closure'
   | 'notification_closure_export_package'
   | 'closure_sla_export_package'
+  | 'closure_sla_delivery_acknowledgement'
   | 'traceability_export_review'
   | 'traceability_delivery_response'
   | 'traceability_response_closure_route'
@@ -1237,6 +1239,40 @@ export type ClosureSlaExportPackage = {
     notificationRenewalClosures: number
     traceabilityClosureRoutes: number
   }
+  evidence: string
+}
+
+export type ClosureSlaDeliveryAcknowledgementStatus =
+  | 'acknowledged'
+  | 'approved'
+  | 'changes_requested'
+  | 'rejected'
+
+export type ClosureSlaDeliveryAcknowledgement = {
+  acknowledgementId: string
+  acknowledgedAt: string
+  deliveryRecordId: string
+  deliveryId: string
+  deliverySubject: string
+  packageId?: string
+  packageRecordId?: string
+  packageVersion?: number
+  reviewer: string
+  status: ClosureSlaDeliveryAcknowledgementStatus
+  routeStage: 'governance_acknowledgement' | 'owner_follow_up' | 'closed'
+  responseNotes: string
+  requestedActions: string[]
+  channelSummary: string
+  sourceMetrics?: ClosureSlaExportPackage['metrics']
+  sourceRequiredActions: string[]
+  auditHistory: Array<{
+    action: 'closure_sla_delivery_acknowledged'
+    actor: string
+    timestamp: string
+    status: ClosureSlaDeliveryAcknowledgementStatus
+    routeStage: string
+    summary: string
+  }>
   evidence: string
 }
 
