@@ -193,6 +193,7 @@ export type SavedVersionKind =
   | 'postgres_cutover_checklist_package'
   | 'postgres_cutover_acknowledgement'
   | 'postgres_cutover_owner_reminder'
+  | 'postgres_cutover_reminder_closure'
 
 export type SavedVersion = {
   id: string
@@ -236,6 +237,7 @@ export type BackendRecordKind =
   | 'postgres_cutover_checklist_package'
   | 'postgres_cutover_acknowledgement'
   | 'postgres_cutover_owner_reminder'
+  | 'postgres_cutover_reminder_closure'
 
 export type BackendRecord<TPayload = unknown> = {
   id: string
@@ -448,6 +450,46 @@ export type PostgresCutoverOwnerReminder = {
     actor: string
     timestamp: string
     status: PostgresCutoverOwnerReminderStatus
+    summary: string
+  }>
+  evidence: string
+}
+
+export type PostgresCutoverReminderClosureStatus =
+  | 'closed'
+  | 'closed_with_actions'
+  | 'rejected'
+  | 'deferred'
+
+export type PostgresCutoverReminderClosure = {
+  closureId: string
+  closedAt: string
+  reviewer: string
+  status: PostgresCutoverReminderClosureStatus
+  reminderRecordId?: string
+  reminderId?: string
+  reminderStatus?: PostgresCutoverOwnerReminderStatus
+  packageRecordId?: string
+  packageId?: string
+  packageVersion?: number
+  acknowledgementId?: string
+  acknowledgementStatus?: PostgresCutoverAcknowledgementStatus
+  productionReadiness?: PostgresCutoverAcknowledgement['productionReadiness']
+  supersededPackages: Array<{
+    packageId: string
+    packageVersion: number
+    generatedAt: string
+    status: StatusLevel
+    evidence: string
+  }>
+  retainedActions: string[]
+  closureNotes: string
+  supersededEvidence: string[]
+  auditHistory: Array<{
+    action: 'cutover_reminder_closed'
+    actor: string
+    timestamp: string
+    status: PostgresCutoverReminderClosureStatus
     summary: string
   }>
   evidence: string

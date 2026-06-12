@@ -90,6 +90,8 @@ import type {
   PostgresCutoverChecklistPackage,
   PostgresCutoverOwnerReminder,
   PostgresCutoverOwnerReminderStatus,
+  PostgresCutoverReminderClosure,
+  PostgresCutoverReminderClosureStatus,
   PostgresMigrationChecklist,
   PostgresImportReconciliation,
   QualityEvent,
@@ -728,6 +730,17 @@ function postgresCutoverOwnerReminderLabel(status: PostgresCutoverOwnerReminderS
   if (status === 'sent') return 'Sent'
   if (status === 'deferred') return 'Deferred'
   return 'Closed'
+}
+
+function postgresCutoverReminderClosureStatusLevel(status: PostgresCutoverReminderClosureStatus): StatusLevel {
+  if (status === 'closed') return 'pass'
+  if (status === 'rejected') return 'blocking'
+  return 'warning'
+}
+
+function postgresCutoverReminderClosureLabel(status: PostgresCutoverReminderClosureStatus) {
+  if (status === 'closed_with_actions') return 'Closed with actions'
+  return titleize(status)
 }
 
 function evaluatePostgresCutoverGates({
@@ -2640,6 +2653,110 @@ function App() {
     )
   }
 
+  async function savePostgresCutoverReminderClosure({
+    closureNotes,
+    reviewer,
+    status,
+    supersededEvidence,
+  }: {
+    closureNotes: string
+    reviewer: string
+    status: PostgresCutoverReminderClosureStatus
+    supersededEvidence: string[]
+  }) {
+    const closedAt = new Date().toISOString()
+    const reviewerName = reviewer.trim() || 'TRACS Platform Owner'
+    const latestReminder = backendRecords.find(
+      (record): record is BackendRecord<PostgresCutoverOwnerReminder> =>
+        record.kind === 'postgres_cutover_owner_reminder',
+    )
+    const packageRecords = backendRecords.filter(
+      (record): record is BackendRecord<PostgresCutoverChecklistPackage> =>
+        record.kind === 'postgres_cutover_checklist_package',
+    )
+    const latestPackage = packageRecords[0]
+    const supersededPackages = packageRecords.slice(1, 5).map((record) => ({
+      packageId: record.payload.packageId,
+      packageVersion: record.version,
+      generatedAt: record.payload.generatedAt,
+      status: record.status,
+      evidence: record.payload.evidence,
+    }))
+    const latestAcknowledgement = backendRecords.find(
+      (record): record is BackendRecord<PostgresCutoverAcknowledgement> =>
+        record.kind === 'postgres_cutover_acknowledgement',
+    )
+    const retainedActions = [
+      ...(latestPackage?.payload.requiredActions ?? []),
+      ...(latestReminder?.payload.requiredActions ?? []),
+      ...(latestAcknowledgement?.payload.requiredActions ?? []),
+    ]
+      .map((action) => action.trim())
+      .filter((action, index, actions) => action.length > 0 && actions.indexOf(action) === index)
+    const retainedSupersededEvidence = [
+      ...supersededEvidence,
+      ...(supersededPackages.length > 0
+        ? supersededPackages.map(
+            (entry) => `Superseded package ${entry.packageId} v${entry.packageVersion} generated ${entry.generatedAt} retained with ${entry.status} status.`,
+          )
+        : ['No prior Postgres cutover package was available as superseded evidence.']),
+    ]
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+    const payload: PostgresCutoverReminderClosure = {
+      closureId: `postgres_cutover_reminder_closure:${closedAt}`,
+      closedAt,
+      reviewer: reviewerName,
+      status,
+      reminderRecordId: latestReminder?.id,
+      reminderId: latestReminder?.payload.reminderId,
+      reminderStatus: latestReminder?.payload.status,
+      packageRecordId: latestPackage?.id,
+      packageId: latestPackage?.payload.packageId,
+      packageVersion: latestPackage?.version,
+      acknowledgementId: latestAcknowledgement?.payload.acknowledgementId,
+      acknowledgementStatus: latestAcknowledgement?.payload.status,
+      productionReadiness: latestAcknowledgement?.payload.productionReadiness,
+      supersededPackages,
+      retainedActions,
+      closureNotes: closureNotes.trim() || 'No production cutover reminder closure notes recorded.',
+      supersededEvidence: retainedSupersededEvidence,
+      auditHistory: [
+        {
+          action: 'cutover_reminder_closed',
+          actor: reviewerName,
+          timestamp: closedAt,
+          status,
+          summary: `${reviewerName} recorded ${postgresCutoverReminderClosureLabel(status)} for production cutover reminder closure.`,
+        },
+      ],
+      evidence: `${reviewerName} recorded ${postgresCutoverReminderClosureLabel(status)} for production cutover reminder ${latestReminder?.payload.reminderId ?? 'not linked'} with ${retainedActions.length} retained action(s) and ${supersededPackages.length} superseded package(s).`,
+    }
+    const saved = await backendClient.saveRecord({
+      kind: 'postgres_cutover_reminder_closure',
+      label: 'production cutover reminder closure',
+      status: postgresCutoverReminderClosureStatusLevel(status),
+      summary: payload.evidence,
+      payload,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'postgres_cutover_reminder_closure',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record(
+      'backend',
+      'postgres_cutover_reminder_closure',
+      `Postgres cutover reminder closure saved as backend record v${saved.version}.`,
+    )
+    return saved
+  }
+
   async function saveNotificationLiveChannelApproval({
     approvedChannels,
     rationale,
@@ -3508,6 +3625,10 @@ function App() {
               (record): record is BackendRecord<PostgresCutoverOwnerReminder> =>
                 record.kind === 'postgres_cutover_owner_reminder',
             )}
+            postgresCutoverReminderClosureRecords={backendRecords.filter(
+              (record): record is BackendRecord<PostgresCutoverReminderClosure> =>
+                record.kind === 'postgres_cutover_reminder_closure',
+            )}
             postgresCutoverPackageRecords={backendRecords.filter(
               (record): record is BackendRecord<PostgresCutoverChecklistPackage> =>
                 record.kind === 'postgres_cutover_checklist_package',
@@ -3527,6 +3648,7 @@ function App() {
             onSaveNotificationApprovalRenewalRoute={saveNotificationApprovalRenewalRoute}
             onSavePostgresCutoverAcknowledgement={savePostgresCutoverAcknowledgement}
             onSavePostgresCutoverOwnerReminder={savePostgresCutoverOwnerReminder}
+            onSavePostgresCutoverReminderClosure={savePostgresCutoverReminderClosure}
             onSavePostgresCutoverApproval={savePostgresCutoverApproval}
             onSavePostgresCutoverChecklistPackage={savePostgresCutoverChecklistPackage}
             onSaveSnapshot={saveBackendSnapshot}
@@ -4167,6 +4289,7 @@ function BackendPersistenceView({
   postgresCutoverApprovalRecords,
   postgresCutoverAcknowledgementRecords,
   postgresCutoverOwnerReminderRecords,
+  postgresCutoverReminderClosureRecords,
   postgresCutoverPackageRecords,
   onRefresh,
   onRunAdapterDryRun,
@@ -4183,6 +4306,7 @@ function BackendPersistenceView({
   onSaveNotificationApprovalRenewalRoute,
   onSavePostgresCutoverAcknowledgement,
   onSavePostgresCutoverOwnerReminder,
+  onSavePostgresCutoverReminderClosure,
   onSavePostgresCutoverApproval,
   onSavePostgresCutoverChecklistPackage,
   onSaveSnapshot,
@@ -4205,6 +4329,7 @@ function BackendPersistenceView({
   postgresCutoverApprovalRecords: BackendRecord<PostgresCutoverApproval>[]
   postgresCutoverAcknowledgementRecords: BackendRecord<PostgresCutoverAcknowledgement>[]
   postgresCutoverOwnerReminderRecords: BackendRecord<PostgresCutoverOwnerReminder>[]
+  postgresCutoverReminderClosureRecords: BackendRecord<PostgresCutoverReminderClosure>[]
   postgresCutoverPackageRecords: BackendRecord<PostgresCutoverChecklistPackage>[]
   onRefresh: () => void
   onRunAdapterDryRun: (connectorId: string) => void
@@ -4293,6 +4418,12 @@ function BackendPersistenceView({
     reminderAt: string
     renewalNotes: string
     status: PostgresCutoverOwnerReminderStatus
+  }) => void
+  onSavePostgresCutoverReminderClosure: (request: {
+    closureNotes: string
+    reviewer: string
+    status: PostgresCutoverReminderClosureStatus
+    supersededEvidence: string[]
   }) => void
   onSavePostgresCutoverApproval: (request: {
     conditions: string
@@ -4407,6 +4538,15 @@ function BackendPersistenceView({
   const [postgresCutoverReminderNotes, setPostgresCutoverReminderNotes] = useState(
     'Renewal reminder confirms owner accountability for cutover package actions before production enablement.',
   )
+  const [postgresReminderClosureReviewer, setPostgresReminderClosureReviewer] = useState('TRACS Platform Owner')
+  const [postgresReminderClosureStatus, setPostgresReminderClosureStatus] =
+    useState<PostgresCutoverReminderClosureStatus>('closed_with_actions')
+  const [postgresReminderClosureNotes, setPostgresReminderClosureNotes] = useState(
+    'Cutover reminder closure retained latest owner response, current package evidence, and superseded package history before production enablement.',
+  )
+  const [postgresReminderSupersededEvidence, setPostgresReminderSupersededEvidence] = useState(
+    'Prior cutover checklist package retained for comparison before closing the current owner reminder route.',
+  )
   const [deliveryRetrySource, setDeliveryRetrySource] =
     useState<NotificationDeliveryPayload['source']>('notification_closure_export_package')
   const [deliveryRetryMaxRetries, setDeliveryRetryMaxRetries] = useState('2')
@@ -4518,6 +4658,7 @@ function BackendPersistenceView({
   const latestPostgresCutoverPackage = postgresCutoverPackageRecords[0]
   const latestPostgresCutoverAcknowledgement = postgresCutoverAcknowledgementRecords[0]
   const latestPostgresCutoverOwnerReminder = postgresCutoverOwnerReminderRecords[0]
+  const latestPostgresCutoverReminderClosure = postgresCutoverReminderClosureRecords[0]
   const postgresCutoverGateReview = evaluatePostgresCutoverGates({
     backendHealth,
     latestReconciliation,
@@ -4701,6 +4842,20 @@ function BackendPersistenceView({
       reminderAt: postgresCutoverReminderAt,
       renewalNotes: postgresCutoverReminderNotes,
       status: postgresCutoverReminderStatus,
+    }
+  }
+  function postgresReminderSupersededEvidenceList() {
+    return postgresReminderSupersededEvidence
+      .split('\n')
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+  }
+  function postgresReminderClosureRequest() {
+    return {
+      closureNotes: postgresReminderClosureNotes,
+      reviewer: postgresReminderClosureReviewer,
+      status: postgresReminderClosureStatus,
+      supersededEvidence: postgresReminderSupersededEvidenceList(),
     }
   }
   function notificationDeliveryRetryRequest(
@@ -6134,6 +6289,135 @@ function BackendPersistenceView({
                   <small>{record.payload.renewalNotes}</small>
                 </div>
                 <StatusChip status={record.status} label={postgresCutoverOwnerReminderLabel(record.payload.status)} />
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </section>
+
+      <section className="panel notification-approval-panel">
+        <PanelHeader
+          icon={ShieldCheck}
+          title="Production Cutover Reminder Closure"
+          subtitle="Close owner reminder routes with current package context, acknowledgement status, and superseded package evidence."
+        />
+        <div className="notification-approval-grid">
+          <div className="notification-approval-form">
+            <div className="trace-review-grid">
+              <label>
+                <span>Closure reviewer</span>
+                <input
+                  value={postgresReminderClosureReviewer}
+                  onChange={(event) => setPostgresReminderClosureReviewer(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Closure status</span>
+                <select
+                  value={postgresReminderClosureStatus}
+                  onChange={(event) =>
+                    setPostgresReminderClosureStatus(event.target.value as PostgresCutoverReminderClosureStatus)
+                  }
+                >
+                  <option value="closed">Closed</option>
+                  <option value="closed_with_actions">Closed with actions</option>
+                  <option value="deferred">Deferred</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </label>
+              <label className="trace-review-rationale">
+                <span>Closure notes</span>
+                <textarea
+                  value={postgresReminderClosureNotes}
+                  onChange={(event) => setPostgresReminderClosureNotes(event.target.value)}
+                />
+              </label>
+              <label className="trace-review-rationale">
+                <span>Superseded package evidence</span>
+                <textarea
+                  value={postgresReminderSupersededEvidence}
+                  onChange={(event) => setPostgresReminderSupersededEvidence(event.target.value)}
+                />
+              </label>
+            </div>
+            <div className="toolbar-actions notification-approval-actions">
+              <button
+                className="primary-action"
+                disabled={!latestPostgresCutoverOwnerReminder}
+                onClick={() => onSavePostgresCutoverReminderClosure(postgresReminderClosureRequest())}
+                type="button"
+              >
+                <ShieldCheck size={15} />
+                Save Reminder Closure
+              </button>
+            </div>
+          </div>
+          <div className="notification-approval-summary">
+            <div className="metadata-grid">
+              <Metadata label="Closures" value={String(postgresCutoverReminderClosureRecords.length)} />
+              <Metadata
+                label="Latest closure"
+                value={latestPostgresCutoverReminderClosure ? postgresCutoverReminderClosureLabel(latestPostgresCutoverReminderClosure.payload.status) : 'Not closed'}
+              />
+              <Metadata
+                label="Reminder"
+                value={latestPostgresCutoverReminderClosure?.payload.reminderStatus ? postgresCutoverOwnerReminderLabel(latestPostgresCutoverReminderClosure.payload.reminderStatus) : 'Not linked'}
+              />
+              <Metadata
+                label="Package version"
+                value={latestPostgresCutoverReminderClosure?.payload.packageVersion ? `v${latestPostgresCutoverReminderClosure.payload.packageVersion}` : 'Not linked'}
+              />
+              <Metadata
+                label="Superseded packages"
+                value={String(latestPostgresCutoverReminderClosure?.payload.supersededPackages.length ?? 0)}
+              />
+              <Metadata
+                label="Retained actions"
+                value={String(latestPostgresCutoverReminderClosure?.payload.retainedActions.length ?? 0)}
+              />
+            </div>
+            {latestPostgresCutoverReminderClosure ? (
+              <div className="connector-run-history">
+                <h4>Latest reminder closure</h4>
+                <div className="connector-run-row">
+                  <div>
+                    <strong>{latestPostgresCutoverReminderClosure.payload.reviewer}</strong>
+                    <span>
+                      v{latestPostgresCutoverReminderClosure.version} / {new Date(latestPostgresCutoverReminderClosure.createdAt).toLocaleString()}
+                    </span>
+                    <small>{latestPostgresCutoverReminderClosure.payload.evidence}</small>
+                  </div>
+                  <StatusChip
+                    status={latestPostgresCutoverReminderClosure.status}
+                    label={postgresCutoverReminderClosureLabel(latestPostgresCutoverReminderClosure.payload.status)}
+                  />
+                </div>
+                {latestPostgresCutoverReminderClosure.payload.supersededEvidence.length > 0 ? (
+                  <div className="storage-column-list">
+                    {latestPostgresCutoverReminderClosure.payload.supersededEvidence.map((entry) => (
+                      <span key={entry}>{entry}</span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="empty-state compact">No production cutover reminder closure has been retained yet.</div>
+            )}
+          </div>
+        </div>
+        {postgresCutoverReminderClosureRecords.length > 1 ? (
+          <div className="mapping-run-history">
+            <h4>Reminder closure history</h4>
+            {postgresCutoverReminderClosureRecords.slice(1, 5).map((record) => (
+              <div className="mapping-run-row" key={record.id}>
+                <div>
+                  <strong>{record.payload.reviewer}</strong>
+                  <span>
+                    v{record.version} / {postgresCutoverReminderClosureLabel(record.payload.status)} / package {record.payload.packageVersion ? `v${record.payload.packageVersion}` : 'not linked'}
+                  </span>
+                  <small>{record.payload.closureNotes}</small>
+                </div>
+                <StatusChip status={record.status} label={postgresCutoverReminderClosureLabel(record.payload.status)} />
               </div>
             ))}
           </div>
