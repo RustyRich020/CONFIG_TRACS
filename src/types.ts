@@ -187,6 +187,7 @@ export type SavedVersionKind =
   | 'notification_closure_export_package'
   | 'closure_sla_export_package'
   | 'closure_sla_delivery_acknowledgement'
+  | 'closure_sla_response_follow_up_route'
   | 'traceability_export_review'
   | 'traceability_delivery_response'
   | 'traceability_response_closure_route'
@@ -234,6 +235,7 @@ export type BackendRecordKind =
   | 'notification_closure_export_package'
   | 'closure_sla_export_package'
   | 'closure_sla_delivery_acknowledgement'
+  | 'closure_sla_response_follow_up_route'
   | 'traceability_export_review'
   | 'traceability_delivery_response'
   | 'traceability_response_closure_route'
@@ -1100,6 +1102,7 @@ export type NotificationDeliveryPayload = {
     | 'notification_approval_renewal'
     | 'notification_closure_export_package'
     | 'closure_sla_export_package'
+    | 'closure_sla_response_follow_up'
     | 'postgres_cutover_acknowledgement'
     | 'postgres_cutover_owner_reminder'
   channels: Array<'email' | 'teams' | 'sharepoint_folder'>
@@ -1360,6 +1363,52 @@ export type ClosureSlaDeliveryAcknowledgement = {
     timestamp: string
     status: ClosureSlaDeliveryAcknowledgementStatus
     routeStage: string
+    summary: string
+  }>
+  evidence: string
+}
+
+export type ClosureSlaResponseFollowUpStatus =
+  | 'routed'
+  | 'in_progress'
+  | 'escalated'
+  | 'closed'
+
+export type ClosureSlaResponseFollowUpRoute = {
+  routeId: string
+  routedAt: string
+  acknowledgementRecordId: string
+  acknowledgementId: string
+  deliveryRecordId: string
+  deliverySubject: string
+  packageId?: string
+  packageVersion?: number
+  reviewer: string
+  status: ClosureSlaResponseFollowUpStatus
+  followUpStage: 'governance_review' | 'owner_follow_up' | 'escalation' | 'closed'
+  routedOwners: string[]
+  dueAt: string
+  escalationPath: string
+  routeNotes: string
+  requestedActions: string[]
+  sourceResponseStatus: ClosureSlaDeliveryAcknowledgementStatus
+  sourceRouteStage: ClosureSlaDeliveryAcknowledgement['routeStage']
+  sourceMetrics?: ClosureSlaExportPackage['metrics']
+  sourceRequiredActions: string[]
+  notificationHistory: Array<{
+    notificationId: string
+    routedAt: string
+    channels: NotificationDeliveryPayload['channels']
+    recipients: string[]
+    summary: string
+    evidence: string
+  }>
+  auditHistory: Array<{
+    action: 'closure_sla_follow_up_routed' | 'closure_sla_follow_up_notified'
+    actor: string
+    timestamp: string
+    status: ClosureSlaResponseFollowUpStatus
+    followUpStage: string
     summary: string
   }>
   evidence: string
