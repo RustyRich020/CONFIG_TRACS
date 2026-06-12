@@ -675,6 +675,7 @@ function deliverySourceLabel(source: NotificationDeliveryPayload['source']) {
   if (source === 'closure_sla_response_follow_up') return 'Closure SLA follow-up'
   if (source === 'postgres_cutover_acknowledgement') return 'Cutover acknowledgement'
   if (source === 'postgres_cutover_owner_reminder') return 'Cutover owner reminder'
+  if (source === 'postgres_cutover_closure_package') return 'Cutover closure package'
   if (source === 'traceability_response_closure') return 'Traceability closure'
   return titleize(source)
 }
@@ -3016,6 +3017,35 @@ function App() {
     return saved
   }
 
+  async function deliverPostgresCutoverClosurePackage({
+    download,
+    finalHandoffNotes,
+    finalHandoffReviewers,
+  }: {
+    download: boolean
+    finalHandoffNotes: string
+    finalHandoffReviewers: string[]
+  }) {
+    const saved = await savePostgresCutoverClosurePackage({
+      download,
+      finalHandoffNotes,
+      finalHandoffReviewers,
+    })
+    if (!saved) return
+    await deliverNotifications(
+      notificationToDeliveryPayload(
+        'postgres_cutover_closure_package',
+        'Production cutover closure package final handoff',
+        {
+          notificationId: saved.payload.packageId,
+          recipients: saved.payload.finalHandoffReviewers,
+          summary: `${saved.payload.finalHandoffReviewers.join(', ')} final handoff package includes ${saved.payload.closureEvidence.length} retained evidence item(s), ${saved.payload.deliveryEvidence.length} delivery record(s), ${saved.payload.retryEvidence.length} retry control(s), and ${saved.payload.requiredActions.length} required action(s).`,
+          package: saved.payload,
+        },
+      ),
+    )
+  }
+
   async function saveNotificationLiveChannelApproval({
     approvedChannels,
     rationale,
@@ -4108,6 +4138,7 @@ function App() {
             onDeliverNotificationClosureExportPackage={deliverNotificationClosureExportPackage}
             onDeliverPostgresCutoverAcknowledgement={deliverPostgresCutoverAcknowledgement}
             onDeliverPostgresCutoverOwnerReminder={deliverPostgresCutoverOwnerReminder}
+            onDeliverPostgresCutoverClosurePackage={deliverPostgresCutoverClosurePackage}
             onDeliverClosureSlaExportPackage={deliverClosureSlaExportPackage}
             onSaveClosureSlaDeliveryAcknowledgement={saveClosureSlaDeliveryAcknowledgement}
             onSaveClosureSlaResponseFollowUpRoute={saveClosureSlaResponseFollowUpRoute}
@@ -4774,6 +4805,7 @@ function BackendPersistenceView({
   onDeliverNotificationClosureExportPackage,
   onDeliverPostgresCutoverAcknowledgement,
   onDeliverPostgresCutoverOwnerReminder,
+  onDeliverPostgresCutoverClosurePackage,
   onDeliverClosureSlaExportPackage,
   onSaveClosureSlaDeliveryAcknowledgement,
   onSaveClosureSlaResponseFollowUpRoute,
@@ -4849,6 +4881,11 @@ function BackendPersistenceView({
     reminderAt: string
     renewalNotes: string
     status: PostgresCutoverOwnerReminderStatus
+  }) => void
+  onDeliverPostgresCutoverClosurePackage: (request: {
+    download: boolean
+    finalHandoffNotes: string
+    finalHandoffReviewers: string[]
   }) => void
   onDeliverClosureSlaExportPackage: (request: {
     download: boolean
@@ -5234,6 +5271,7 @@ function BackendPersistenceView({
     'closure_sla_response_follow_up',
     'postgres_cutover_acknowledgement',
     'postgres_cutover_owner_reminder',
+    'postgres_cutover_closure_package',
   ]
   const retryableDeliveryRecords = deliveryRecords.filter(
     (record) =>
@@ -5347,6 +5385,9 @@ function BackendPersistenceView({
   )
   const postgresCutoverOwnerReminderDeliveryRecords = deliveryRecords.filter(
     (record) => record.payload.request.source === 'postgres_cutover_owner_reminder',
+  )
+  const postgresCutoverClosurePackageDeliveryRecords = deliveryRecords.filter(
+    (record) => record.payload.request.source === 'postgres_cutover_closure_package',
   )
   const deliveryEvidenceCounts = deliveryRecords.reduce(
     (summary, record) => {
@@ -7512,11 +7553,26 @@ function BackendPersistenceView({
                 <Download size={15} />
                 Save & Download Closure Package
               </button>
+              <button
+                className="primary-action"
+                onClick={() =>
+                  onDeliverPostgresCutoverClosurePackage({
+                    download: false,
+                    finalHandoffNotes: postgresClosurePackageNotes,
+                    finalHandoffReviewers: postgresClosurePackageReviewerList(),
+                  })
+                }
+                type="button"
+              >
+                <Bell size={15} />
+                Save & Deliver to Infrastructure Owners
+              </button>
             </div>
           </div>
           <div className="notification-approval-summary">
             <div className="metadata-grid">
               <Metadata label="Closure packages" value={String(postgresCutoverClosurePackageRecords.length)} />
+              <Metadata label="Final handoff deliveries" value={String(postgresCutoverClosurePackageDeliveryRecords.length)} />
               <Metadata label="Handoff reviewers" value={String(postgresClosurePackageReviewerList().length)} />
               <Metadata
                 label="Latest package"
@@ -7525,7 +7581,7 @@ function BackendPersistenceView({
               <Metadata label="Checklist package" value={latestPostgresCutoverPackage ? `v${latestPostgresCutoverPackage.version}` : 'Missing'} />
               <Metadata label="Acknowledgement" value={latestPostgresCutoverAcknowledgement ? postgresCutoverAcknowledgementLabel(latestPostgresCutoverAcknowledgement.payload.status) : 'Missing'} />
               <Metadata label="Reminder closure" value={latestPostgresCutoverReminderClosure ? postgresCutoverReminderClosureLabel(latestPostgresCutoverReminderClosure.payload.status) : 'Missing'} />
-              <Metadata label="Delivery evidence" value={String(postgresAcknowledgementDeliveryRecords.length + postgresCutoverOwnerReminderDeliveryRecords.length)} />
+              <Metadata label="Delivery evidence" value={String(postgresAcknowledgementDeliveryRecords.length + postgresCutoverOwnerReminderDeliveryRecords.length + postgresCutoverClosurePackageDeliveryRecords.length)} />
             </div>
             {latestPostgresCutoverClosurePackage ? (
               <div className="connector-run-history">
@@ -7553,6 +7609,23 @@ function BackendPersistenceView({
             )}
           </div>
         </div>
+        {postgresCutoverClosurePackageDeliveryRecords.length > 0 ? (
+          <div className="mapping-run-history">
+            <h4>Final handoff delivery evidence</h4>
+            {postgresCutoverClosurePackageDeliveryRecords.slice(0, 5).map((record) => (
+              <div className="mapping-run-row" key={record.id}>
+                <div>
+                  <strong>{record.payload.request.subject}</strong>
+                  <span>
+                    v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
+                  </span>
+                  <small>{record.payload.result.evidence}</small>
+                </div>
+                <StatusChip status={record.status} label={record.status} />
+              </div>
+            ))}
+          </div>
+        ) : null}
         {postgresCutoverClosurePackageRecords.length > 1 ? (
           <div className="mapping-run-history">
             <h4>Final handoff package history</h4>
@@ -7576,7 +7649,7 @@ function BackendPersistenceView({
         <PanelHeader
           icon={Activity}
           title="Delivery Retry Controls"
-          subtitle="Plan and execute governed retries for closure package, cutover acknowledgement, and cutover owner reminder notifications."
+          subtitle="Plan and execute governed retries for closure, SLA follow-up, cutover acknowledgement, owner reminder, and final handoff notifications."
         />
         <div className="notification-approval-grid">
           <div className="notification-approval-form">
@@ -7591,8 +7664,10 @@ function BackendPersistenceView({
                 >
                   <option value="notification_closure_export_package">Closure package</option>
                   <option value="closure_sla_export_package">Closure SLA package</option>
+                  <option value="closure_sla_response_follow_up">Closure SLA follow-up</option>
                   <option value="postgres_cutover_acknowledgement">Cutover acknowledgement</option>
                   <option value="postgres_cutover_owner_reminder">Cutover owner reminder</option>
+                  <option value="postgres_cutover_closure_package">Cutover closure package</option>
                 </select>
               </label>
               <label>

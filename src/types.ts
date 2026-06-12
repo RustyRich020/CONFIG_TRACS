@@ -1105,6 +1105,7 @@ export type NotificationDeliveryPayload = {
     | 'closure_sla_response_follow_up'
     | 'postgres_cutover_acknowledgement'
     | 'postgres_cutover_owner_reminder'
+    | 'postgres_cutover_closure_package'
   channels: Array<'email' | 'teams' | 'sharepoint_folder'>
   recipients: string[]
   subject: string
