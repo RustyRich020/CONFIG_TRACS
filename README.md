@@ -105,6 +105,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Exports notification closure packages for messaging owners with closure, delivery, and approval evidence.
 - Delivers notification closure packages to messaging-owner review channels.
 - Shows closure SLA dashboard metrics for traceability response and notification follow-up queues.
+- Exports closure SLA packages for governance review with ordered route queues and required actions.
 - Discovers external-reference metadata and bounded preview rows through a credential-aware backend adapter.
 - Filters traceability graphs by object family, status, and saved evidence packet coverage.
 - Adds a selectable SQLite record store adapter behind the existing API persistence contract.
@@ -262,6 +263,6 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add closure SLA export packages for governance review.
-2. Add production cutover owner notification renewal reminders.
-3. Add delivery retry controls for closure and cutover notifications.
+1. Add production cutover owner notification renewal reminders.
+2. Add delivery retry controls for closure and cutover notifications.
+3. Add governance package notification delivery for closure SLA exports.

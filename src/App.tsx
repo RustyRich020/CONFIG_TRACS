@@ -58,6 +58,7 @@ import type {
   CanonicalLoadResult,
   CanonicalLoadRequest,
   CanonicalObject,
+  ClosureSlaExportPackage,
   ControlledTemplatePayload,
   ControlledTemplateStatus,
   LocalAsset,
@@ -2715,6 +2716,41 @@ function App() {
     )
   }
 
+  async function saveClosureSlaExportPackage({
+    download,
+    packagePayload,
+  }: {
+    download: boolean
+    packagePayload: ClosureSlaExportPackage
+  }) {
+    const saved = await backendClient.saveRecord({
+      kind: 'closure_sla_export_package',
+      label: 'closure SLA export package',
+      status: packagePayload.status,
+      summary: packagePayload.evidence,
+      payload: packagePayload,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'closure_sla_export_package',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    if (download) {
+      downloadJson('tracs-closure-sla-export-package.json', packagePayload)
+    }
+    record(
+      'notification',
+      download ? 'closure_sla_export_package_download' : 'closure_sla_export_package_save',
+      `Closure SLA export package saved as backend record v${saved.version}.`,
+    )
+    return saved
+  }
+
   async function saveReportCatalogItem(report: ReportCatalogItem, action: ReportCatalogSaveAction) {
     const freshness = reportFreshnessStatus(report.lastRefresh, report.maxAgeHours)
     const normalizedReport: ReportCatalogItem = {
@@ -3142,6 +3178,10 @@ function App() {
               (record): record is BackendRecord<NotificationClosureExportPackage> =>
                 record.kind === 'notification_closure_export_package',
             )}
+            closureSlaExportPackageRecords={backendRecords.filter(
+              (record): record is BackendRecord<ClosureSlaExportPackage> =>
+                record.kind === 'closure_sla_export_package',
+            )}
             traceabilityClosureRouteRecords={backendRecords.filter(
               (record): record is BackendRecord<TraceabilityResponseClosureRoute> =>
                 record.kind === 'traceability_response_closure_route',
@@ -3166,6 +3206,7 @@ function App() {
             onDeliverPostgresCutoverAcknowledgement={deliverPostgresCutoverAcknowledgement}
             onSaveNotificationApprovalRenewalClosure={saveNotificationApprovalRenewalClosure}
             onSaveNotificationClosureExportPackage={saveNotificationClosureExportPackage}
+            onSaveClosureSlaExportPackage={saveClosureSlaExportPackage}
             onSaveNotificationApprovalRenewalRoute={saveNotificationApprovalRenewalRoute}
             onSavePostgresCutoverAcknowledgement={savePostgresCutoverAcknowledgement}
             onSavePostgresCutoverApproval={savePostgresCutoverApproval}
@@ -3797,6 +3838,7 @@ function BackendPersistenceView({
   adapterDryRuns,
   backendHealth,
   backendRecords,
+  closureSlaExportPackageRecords,
   connectorEntries,
   notificationApprovalRecords,
   notificationClosureExportPackageRecords,
@@ -3813,6 +3855,7 @@ function BackendPersistenceView({
   onDeliverNotificationClosureExportPackage,
   onDeliverPostgresCutoverAcknowledgement,
   onSaveNotificationApprovalRenewalClosure,
+  onSaveClosureSlaExportPackage,
   onSaveNotificationClosureExportPackage,
   onSaveNotificationApprovalRenewalRoute,
   onSavePostgresCutoverAcknowledgement,
@@ -3827,6 +3870,7 @@ function BackendPersistenceView({
   adapterDryRuns: Record<string, AdapterDryRunResult>
   backendHealth: BackendHealth | null
   backendRecords: BackendRecord[]
+  closureSlaExportPackageRecords: BackendRecord<ClosureSlaExportPackage>[]
   connectorEntries: [string, AppConfig['connectors']['connectors'][string]][]
   notificationApprovalRecords: BackendRecord<NotificationLiveChannelApproval>[]
   notificationClosureExportPackageRecords: BackendRecord<NotificationClosureExportPackage>[]
@@ -3867,6 +3911,10 @@ function BackendPersistenceView({
     closureNotes: string
     reviewer: string
     status: NotificationApprovalRenewalClosureStatus
+  }) => void
+  onSaveClosureSlaExportPackage: (request: {
+    download: boolean
+    packagePayload: ClosureSlaExportPackage
   }) => void
   onSaveNotificationClosureExportPackage: (request: {
     download: boolean
@@ -3946,6 +3994,12 @@ function BackendPersistenceView({
   const [notificationClosureExportNotes, setNotificationClosureExportNotes] = useState(
     'Package retained closure, delivery, superseded approval, and channel evidence for messaging owner handoff.',
   )
+  const [closureSlaGovernanceReviewers, setClosureSlaGovernanceReviewers] = useState(
+    'Quality Governance Reviewer, Operations Owner',
+  )
+  const [closureSlaReviewerNotes, setClosureSlaReviewerNotes] = useState(
+    'Governance review package retained current closure SLA queue, overdue routes, and owner follow-up evidence.',
+  )
   const [postgresReviewer, setPostgresReviewer] = useState('TRACS Platform Owner')
   const [postgresApprovalStatus, setPostgresApprovalStatus] =
     useState<PostgresCutoverApprovalStatus>('approved_with_conditions')
@@ -4011,12 +4065,13 @@ function BackendPersistenceView({
   const latestNotificationRenewal = notificationRenewalRecords[0]
   const latestNotificationRenewalClosure = notificationRenewalClosureRecords[0]
   const latestNotificationClosureExportPackage = notificationClosureExportPackageRecords[0]
+  const latestClosureSlaExportPackage = closureSlaExportPackageRecords[0]
   const closedNotificationRenewalRouteIds = new Set(
     notificationRenewalClosureRecords
       .map((record) => record.payload.renewalRouteId)
       .filter((routeId): routeId is string => Boolean(routeId)),
   )
-  const closureSlaRows = [
+  const closureSlaRows: ClosureSlaExportPackage['rows'] = [
     ...notificationRenewalRecords.map((record) => {
       const closed =
         record.payload.routeStage === 'closed' ||
@@ -4024,7 +4079,7 @@ function BackendPersistenceView({
       const status = closureSlaStatus(record.payload.dueAt, closed)
       return {
         id: record.id,
-        source: 'Notification renewal',
+        source: 'Notification renewal' as const,
         subject: 'Live-channel approval renewal',
         owner: record.payload.routedReviewers.join(', ') || 'Unassigned',
         dueAt: record.payload.dueAt,
@@ -4040,7 +4095,7 @@ function BackendPersistenceView({
       const status = closureSlaStatus(record.payload.dueAt, closed, record.payload.status === 'escalated')
       return {
         id: record.id,
-        source: 'Traceability response',
+        source: 'Traceability response' as const,
         subject: record.payload.deliverySubject,
         owner: record.payload.routedReviewers.join(', ') || record.payload.reviewer,
         dueAt: record.payload.dueAt,
@@ -4145,6 +4200,52 @@ function BackendPersistenceView({
       .split(',')
       .map((owner) => owner.trim())
       .filter(Boolean)
+  }
+  function closureSlaGovernanceReviewerList() {
+    return closureSlaGovernanceReviewers
+      .split(',')
+      .map((reviewer) => reviewer.trim())
+      .filter(Boolean)
+  }
+  function closureSlaExportRequiredActions() {
+    const actions = [
+      closureSlaRows.length > 0 ? null : 'Create closure SLA routes before retaining an empty governance package.',
+      closureSlaMetrics.overdue > 0
+        ? `Disposition ${closureSlaMetrics.overdue} overdue closure SLA route(s) before governance closure.`
+        : null,
+      closureSlaMetrics.dueSoon > 0
+        ? `Review ${closureSlaMetrics.dueSoon} closure SLA route(s) due within three days.`
+        : null,
+      closureSlaMetrics.notificationOpen > 0
+        ? `Confirm messaging-owner follow-up for ${closureSlaMetrics.notificationOpen} open notification renewal route(s).`
+        : null,
+      closureSlaMetrics.traceabilityOpen > 0
+        ? `Confirm reviewer response closure ownership for ${closureSlaMetrics.traceabilityOpen} open traceability route(s).`
+        : null,
+    ]
+    return actions.filter((action): action is string => Boolean(action))
+  }
+  function buildClosureSlaExportPackage(): ClosureSlaExportPackage {
+    const generatedAt = new Date().toISOString()
+    const reviewers = closureSlaGovernanceReviewerList()
+    const requiredActions = closureSlaExportRequiredActions()
+    const governanceReviewers = reviewers.length > 0 ? reviewers : ['Governance Reviewer']
+    return {
+      packageId: `closure_sla_export:${generatedAt}`,
+      generatedAt,
+      governanceReviewers,
+      status: closureSlaOverallStatus,
+      metrics: closureSlaMetrics,
+      rows: closureSlaRows,
+      requiredActions,
+      reviewerNotes: closureSlaReviewerNotes.trim() || 'No governance reviewer notes recorded.',
+      sourceRecordCounts: {
+        notificationRenewals: notificationRenewalRecords.length,
+        notificationRenewalClosures: notificationRenewalClosureRecords.length,
+        traceabilityClosureRoutes: traceabilityClosureRouteRecords.length,
+      },
+      evidence: `Closure SLA export package generated for ${governanceReviewers.join(', ')} with ${closureSlaMetrics.open} open route(s), ${closureSlaMetrics.overdue} overdue route(s), and ${requiredActions.length} required action(s).`,
+    }
   }
   function postgresAcknowledgementActionList() {
     return postgresAcknowledgementActions
@@ -4761,6 +4862,50 @@ function BackendPersistenceView({
           title="Closure SLA Dashboard"
           subtitle="SLA rollup for traceability response closures and notification follow-up routes."
         />
+        <div className="approval-form-grid">
+          <label>
+            Governance reviewers
+            <input
+              value={closureSlaGovernanceReviewers}
+              onChange={(event) => setClosureSlaGovernanceReviewers(event.target.value)}
+            />
+          </label>
+          <label>
+            Reviewer notes
+            <textarea
+              value={closureSlaReviewerNotes}
+              onChange={(event) => setClosureSlaReviewerNotes(event.target.value)}
+            />
+          </label>
+        </div>
+        <div className="toolbar-actions inline-actions">
+          <button
+            className="secondary-action"
+            onClick={() =>
+              onSaveClosureSlaExportPackage({
+                download: false,
+                packagePayload: buildClosureSlaExportPackage(),
+              })
+            }
+            type="button"
+          >
+            <ShieldCheck size={15} />
+            Save SLA Package
+          </button>
+          <button
+            className="primary-action"
+            onClick={() =>
+              onSaveClosureSlaExportPackage({
+                download: true,
+                packagePayload: buildClosureSlaExportPackage(),
+              })
+            }
+            type="button"
+          >
+            <Download size={15} />
+            Save & Download SLA Package
+          </button>
+        </div>
         <div className="notification-approval-summary">
           <div className="metadata-grid">
             <Metadata label="Overall SLA" value={closureSlaOverallStatus} />
@@ -4771,8 +4916,35 @@ function BackendPersistenceView({
             <Metadata label="Due soon" value={String(closureSlaMetrics.dueSoon)} />
             <Metadata label="Notification open" value={String(closureSlaMetrics.notificationOpen)} />
             <Metadata label="Traceability open" value={String(closureSlaMetrics.traceabilityOpen)} />
+            <Metadata label="SLA packages" value={String(closureSlaExportPackageRecords.length)} />
+            <Metadata
+              label="Latest package"
+              value={latestClosureSlaExportPackage ? new Date(latestClosureSlaExportPackage.createdAt).toLocaleString() : 'Not packaged'}
+            />
           </div>
         </div>
+        {latestClosureSlaExportPackage ? (
+          <div className="connector-run-history">
+            <h4>Latest SLA governance package</h4>
+            <div className="connector-run-row">
+              <div>
+                <strong>{latestClosureSlaExportPackage.payload.governanceReviewers.join(', ')}</strong>
+                <span>
+                  v{latestClosureSlaExportPackage.version} / {new Date(latestClosureSlaExportPackage.createdAt).toLocaleString()}
+                </span>
+                <small>{latestClosureSlaExportPackage.payload.evidence}</small>
+              </div>
+              <StatusChip status={latestClosureSlaExportPackage.status} label={latestClosureSlaExportPackage.status} />
+            </div>
+            {latestClosureSlaExportPackage.payload.requiredActions.length > 0 ? (
+              <div className="storage-column-list">
+                {latestClosureSlaExportPackage.payload.requiredActions.map((action) => (
+                  <span key={action}>{action}</span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         {closureSlaRows.length > 0 ? (
           <div className="mapping-run-history">
             <h4>Closure SLA queue</h4>
@@ -4798,6 +4970,23 @@ function BackendPersistenceView({
         ) : (
           <div className="empty-state compact">No closure SLA routes are available yet.</div>
         )}
+        {closureSlaExportPackageRecords.length > 1 ? (
+          <div className="mapping-run-history">
+            <h4>SLA package history</h4>
+            {closureSlaExportPackageRecords.slice(1, 5).map((record) => (
+              <div className="mapping-run-row" key={record.id}>
+                <div>
+                  <strong>{record.payload.packageId}</strong>
+                  <span>
+                    v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.governanceReviewers.join(', ')}
+                  </span>
+                  <small>{record.payload.evidence}</small>
+                </div>
+                <StatusChip status={record.status} label={record.status} />
+              </div>
+            ))}
+          </div>
+        ) : null}
       </section>
 
       <section className="panel import-reconciliation-panel">

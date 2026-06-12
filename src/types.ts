@@ -183,6 +183,7 @@ export type SavedVersionKind =
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
   | 'notification_closure_export_package'
+  | 'closure_sla_export_package'
   | 'traceability_export_review'
   | 'traceability_delivery_response'
   | 'traceability_response_closure_route'
@@ -223,6 +224,7 @@ export type BackendRecordKind =
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
   | 'notification_closure_export_package'
+  | 'closure_sla_export_package'
   | 'traceability_export_review'
   | 'traceability_delivery_response'
   | 'traceability_response_closure_route'
@@ -1078,6 +1080,44 @@ export type NotificationClosureExportPackage = {
   }>
   requiredActions: string[]
   ownerNotes: string
+  evidence: string
+}
+
+export type ClosureSlaExportRow = {
+  id: string
+  source: 'Notification renewal' | 'Traceability response'
+  subject: string
+  owner: string
+  dueAt: string
+  closed: boolean
+  daysRemaining: number | null
+  stage: string
+  status: StatusLevel
+  evidence: string
+}
+
+export type ClosureSlaExportPackage = {
+  packageId: string
+  generatedAt: string
+  governanceReviewers: string[]
+  status: StatusLevel
+  metrics: {
+    total: number
+    open: number
+    closed: number
+    overdue: number
+    dueSoon: number
+    notificationOpen: number
+    traceabilityOpen: number
+  }
+  rows: ClosureSlaExportRow[]
+  requiredActions: string[]
+  reviewerNotes: string
+  sourceRecordCounts: {
+    notificationRenewals: number
+    notificationRenewalClosures: number
+    traceabilityClosureRoutes: number
+  }
   evidence: string
 }
 
