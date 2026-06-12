@@ -104,6 +104,7 @@ import type {
   PostgresCutoverFinalHandoffAcknowledgement,
   PostgresCutoverFinalHandoffAcknowledgementStatus,
   PostgresCutoverFinalHandoffClosurePackage,
+  PostgresCutoverFinalHandoffClosurePackageAcknowledgement,
   PostgresCutoverOwnerReminder,
   PostgresCutoverOwnerReminderStatus,
   PostgresCutoverReminderClosure,
@@ -3417,6 +3418,99 @@ function App() {
     )
   }
 
+  async function savePostgresCutoverFinalHandoffClosurePackageAcknowledgement({
+    closureReady,
+    deliveryRecord,
+    requestedActions,
+    responseNotes,
+    reviewer,
+    reviewerRole,
+    status,
+  }: {
+    closureReady: boolean
+    deliveryRecord: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>
+    requestedActions: string[]
+    responseNotes: string
+    reviewer: string
+    reviewerRole: PostgresCutoverFinalHandoffClosurePackageAcknowledgement['reviewerRole']
+    status: PostgresCutoverFinalHandoffAcknowledgementStatus
+  }) {
+    const acknowledgedAt = new Date().toISOString()
+    const reviewerName = reviewer.trim() || 'Infrastructure Reviewer'
+    const deliveryPackage = (deliveryRecord.payload.request.evidence as {
+      package?: PostgresCutoverFinalHandoffClosurePackage
+    })?.package
+    const packageRecord = backendRecords.find(
+      (record): record is BackendRecord<PostgresCutoverFinalHandoffClosurePackage> => {
+        if (record.kind !== 'postgres_cutover_final_handoff_closure_package') return false
+        return (record.payload as PostgresCutoverFinalHandoffClosurePackage).packageId === deliveryPackage?.packageId
+      },
+    )
+    const sourceActions = deliveryPackage?.requiredActions ?? []
+    const retainedActions = [...sourceActions, ...requestedActions]
+      .map((action) => action.trim())
+      .filter((action, index, actions) => action.length > 0 && actions.indexOf(action) === index)
+    const channelSummary = deliveryRecord.payload.result.channelResults
+      .map((result) => `${titleize(result.channel)} ${result.mode}/${result.status}`)
+      .join(', ')
+    const payload: PostgresCutoverFinalHandoffClosurePackageAcknowledgement = {
+      acknowledgementId: `postgres_cutover_final_handoff_closure_package_ack:${deliveryRecord.id}:${acknowledgedAt}`,
+      acknowledgedAt,
+      deliveryRecordId: deliveryRecord.id,
+      deliveryId: deliveryRecord.payload.result.deliveryId,
+      deliverySubject: deliveryRecord.payload.request.subject,
+      packageRecordId: packageRecord?.id,
+      packageId: deliveryPackage?.packageId,
+      packageVersion: packageRecord?.version,
+      reviewer: reviewerName,
+      reviewerRole,
+      status,
+      closureReady,
+      responseNotes: responseNotes.trim() || 'No final handoff closure package acknowledgement notes recorded.',
+      requestedActions: retainedActions,
+      channelSummary,
+      packageStatus: deliveryPackage?.status,
+      sourceMetrics: deliveryPackage?.metrics,
+      sourceRequiredActions: sourceActions,
+      sourceAcknowledgementCount: deliveryPackage?.acknowledgementRecords.length ?? 0,
+      sourceDeliveryEvidenceCount: deliveryPackage?.deliveryEvidence.length ?? 0,
+      auditHistory: [
+        {
+          action: 'final_handoff_closure_package_acknowledged',
+          actor: reviewerName,
+          timestamp: acknowledgedAt,
+          status,
+          closureReady,
+          summary: `${reviewerName} recorded ${postgresCutoverFinalHandoffAcknowledgementLabel(status)} for ${deliveryRecord.payload.request.subject}.`,
+        },
+      ],
+      evidence: `${reviewerName} recorded ${postgresCutoverFinalHandoffAcknowledgementLabel(status)} for ${deliveryRecord.payload.request.subject}. ${retainedActions.length} requested action(s) retained.`,
+    }
+    const saved = await backendClient.saveRecord({
+      kind: 'postgres_cutover_final_handoff_closure_package_acknowledgement',
+      label: deliveryRecord.payload.request.subject,
+      status: postgresCutoverFinalHandoffAcknowledgementStatusLevel(status),
+      summary: payload.evidence,
+      payload,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'postgres_cutover_final_handoff_closure_package_acknowledgement',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record(
+      'backend',
+      'postgres_cutover_final_handoff_closure_package_acknowledgement',
+      `Postgres final handoff closure package acknowledgement saved as backend record v${saved.version}.`,
+    )
+    return saved
+  }
+
   async function saveNotificationLiveChannelApproval({
     approvedChannels,
     rationale,
@@ -4764,6 +4858,10 @@ function App() {
               (record): record is BackendRecord<PostgresCutoverFinalHandoffClosurePackage> =>
                 record.kind === 'postgres_cutover_final_handoff_closure_package',
             )}
+            postgresCutoverFinalHandoffClosurePackageAcknowledgementRecords={backendRecords.filter(
+              (record): record is BackendRecord<PostgresCutoverFinalHandoffClosurePackageAcknowledgement> =>
+                record.kind === 'postgres_cutover_final_handoff_closure_package_acknowledgement',
+            )}
             postgresCutoverPackageRecords={backendRecords.filter(
               (record): record is BackendRecord<PostgresCutoverChecklistPackage> =>
                 record.kind === 'postgres_cutover_checklist_package',
@@ -4799,6 +4897,9 @@ function App() {
             onSavePostgresCutoverReminderClosure={savePostgresCutoverReminderClosure}
             onSavePostgresCutoverClosurePackage={savePostgresCutoverClosurePackage}
             onSavePostgresCutoverFinalHandoffAcknowledgement={savePostgresCutoverFinalHandoffAcknowledgement}
+            onSavePostgresCutoverFinalHandoffClosurePackageAcknowledgement={
+              savePostgresCutoverFinalHandoffClosurePackageAcknowledgement
+            }
             onSavePostgresCutoverFinalHandoffClosurePackage={savePostgresCutoverFinalHandoffClosurePackage}
             onSavePostgresCutoverApproval={savePostgresCutoverApproval}
             onSavePostgresCutoverChecklistPackage={savePostgresCutoverChecklistPackage}
@@ -5451,6 +5552,7 @@ function BackendPersistenceView({
   postgresCutoverReminderClosureRecords,
   postgresCutoverClosurePackageRecords,
   postgresCutoverFinalHandoffAcknowledgementRecords,
+  postgresCutoverFinalHandoffClosurePackageAcknowledgementRecords,
   postgresCutoverFinalHandoffClosurePackageRecords,
   postgresCutoverPackageRecords,
   onRefresh,
@@ -5484,6 +5586,7 @@ function BackendPersistenceView({
   onSavePostgresCutoverReminderClosure,
   onSavePostgresCutoverClosurePackage,
   onSavePostgresCutoverFinalHandoffAcknowledgement,
+  onSavePostgresCutoverFinalHandoffClosurePackageAcknowledgement,
   onSavePostgresCutoverFinalHandoffClosurePackage,
   onSavePostgresCutoverApproval,
   onSavePostgresCutoverChecklistPackage,
@@ -5518,6 +5621,7 @@ function BackendPersistenceView({
   postgresCutoverReminderClosureRecords: BackendRecord<PostgresCutoverReminderClosure>[]
   postgresCutoverClosurePackageRecords: BackendRecord<PostgresCutoverClosurePackage>[]
   postgresCutoverFinalHandoffAcknowledgementRecords: BackendRecord<PostgresCutoverFinalHandoffAcknowledgement>[]
+  postgresCutoverFinalHandoffClosurePackageAcknowledgementRecords: BackendRecord<PostgresCutoverFinalHandoffClosurePackageAcknowledgement>[]
   postgresCutoverFinalHandoffClosurePackageRecords: BackendRecord<PostgresCutoverFinalHandoffClosurePackage>[]
   postgresCutoverPackageRecords: BackendRecord<PostgresCutoverChecklistPackage>[]
   onRefresh: () => void
@@ -5704,6 +5808,15 @@ function BackendPersistenceView({
     responseNotes: string
     reviewer: string
     reviewerRole: PostgresCutoverFinalHandoffAcknowledgement['reviewerRole']
+    status: PostgresCutoverFinalHandoffAcknowledgementStatus
+  }) => void
+  onSavePostgresCutoverFinalHandoffClosurePackageAcknowledgement: (request: {
+    closureReady: boolean
+    deliveryRecord: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>
+    requestedActions: string[]
+    responseNotes: string
+    reviewer: string
+    reviewerRole: PostgresCutoverFinalHandoffClosurePackageAcknowledgement['reviewerRole']
     status: PostgresCutoverFinalHandoffAcknowledgementStatus
   }) => void
   onSavePostgresCutoverFinalHandoffClosurePackage: (request: {
@@ -5914,6 +6027,19 @@ function BackendPersistenceView({
   const [postgresFinalHandoffClosureNotes, setPostgresFinalHandoffClosureNotes] = useState(
     'Closure package retained final handoff acknowledgement responses, delivery evidence, readiness disposition, and retained actions for production cutover closeout.',
   )
+  const [postgresFinalHandoffClosurePackageAckReviewer, setPostgresFinalHandoffClosurePackageAckReviewer] =
+    useState('Infrastructure Owner')
+  const [postgresFinalHandoffClosurePackageAckReviewerRole, setPostgresFinalHandoffClosurePackageAckReviewerRole] =
+    useState<PostgresCutoverFinalHandoffClosurePackageAcknowledgement['reviewerRole']>('infrastructure_owner')
+  const [postgresFinalHandoffClosurePackageAckStatus, setPostgresFinalHandoffClosurePackageAckStatus] =
+    useState<PostgresCutoverFinalHandoffAcknowledgementStatus>('acknowledged_with_actions')
+  const [postgresFinalHandoffClosurePackageReady, setPostgresFinalHandoffClosurePackageReady] = useState(false)
+  const [postgresFinalHandoffClosurePackageAckActions, setPostgresFinalHandoffClosurePackageAckActions] = useState(
+    'Confirm final infrastructure handoff closure evidence with database, security, and platform owners before production closure.',
+  )
+  const [postgresFinalHandoffClosurePackageAckNotes, setPostgresFinalHandoffClosurePackageAckNotes] = useState(
+    'Infrastructure owner acknowledged the final handoff acknowledgement closure package delivery and retained closeout response evidence.',
+  )
   const [deliveryRetrySource, setDeliveryRetrySource] =
     useState<NotificationDeliveryPayload['source']>('notification_closure_export_package')
   const [deliveryRetryMaxRetries, setDeliveryRetryMaxRetries] = useState('2')
@@ -6054,6 +6180,8 @@ function BackendPersistenceView({
   const latestPostgresCutoverClosurePackage = postgresCutoverClosurePackageRecords[0]
   const latestPostgresCutoverFinalHandoffAcknowledgement = postgresCutoverFinalHandoffAcknowledgementRecords[0]
   const latestPostgresCutoverFinalHandoffClosurePackage = postgresCutoverFinalHandoffClosurePackageRecords[0]
+  const latestPostgresCutoverFinalHandoffClosurePackageAcknowledgement =
+    postgresCutoverFinalHandoffClosurePackageAcknowledgementRecords[0]
   const postgresFinalHandoffClosureMetrics = postgresCutoverFinalHandoffAcknowledgementRecords.reduce(
     (summary, record) => {
       summary.totalAcknowledgements += 1
@@ -6308,6 +6436,10 @@ function BackendPersistenceView({
   )
   const postgresFinalHandoffClosurePackageDeliveryRecords = deliveryRecords.filter(
     (record) => record.payload.request.source === 'postgres_cutover_final_handoff_closure_package',
+  )
+  const latestPostgresFinalHandoffClosurePackageDelivery = postgresFinalHandoffClosurePackageDeliveryRecords[0]
+  const postgresFinalHandoffClosurePackageAcknowledgedDeliveryIds = new Set(
+    postgresCutoverFinalHandoffClosurePackageAcknowledgementRecords.map((record) => record.payload.deliveryRecordId),
   )
   const latestPostgresCutoverClosurePackageDelivery = postgresCutoverClosurePackageDeliveryRecords[0]
   const deliveryEvidenceCounts = deliveryRecords.reduce(
@@ -6599,6 +6731,12 @@ function BackendPersistenceView({
       .map((action) => action.trim())
       .filter(Boolean)
   }
+  function postgresFinalHandoffClosurePackageAckActionList() {
+    return postgresFinalHandoffClosurePackageAckActions
+      .split('\n')
+      .map((action) => action.trim())
+      .filter(Boolean)
+  }
   function postgresFinalHandoffClosureReviewerList() {
     return postgresFinalHandoffClosureReviewers
       .split(',')
@@ -6673,6 +6811,20 @@ function BackendPersistenceView({
       reviewer: postgresFinalHandoffReviewer,
       reviewerRole: postgresFinalHandoffReviewerRole,
       status: postgresFinalHandoffStatus,
+    }
+  }
+  function postgresFinalHandoffClosurePackageAcknowledgementRequest(
+    deliveryRecord = latestPostgresFinalHandoffClosurePackageDelivery,
+  ) {
+    if (!deliveryRecord) return
+    return {
+      closureReady: postgresFinalHandoffClosurePackageReady,
+      deliveryRecord,
+      requestedActions: postgresFinalHandoffClosurePackageAckActionList(),
+      responseNotes: postgresFinalHandoffClosurePackageAckNotes,
+      reviewer: postgresFinalHandoffClosurePackageAckReviewer,
+      reviewerRole: postgresFinalHandoffClosurePackageAckReviewerRole,
+      status: postgresFinalHandoffClosurePackageAckStatus,
     }
   }
   function retryQueueOperationsReviewerList() {
@@ -9381,6 +9533,141 @@ function BackendPersistenceView({
               ))}
             </div>
           ) : null}
+          <div className="retry-aging-list">
+            <div className="dashboard-heading">
+              <h4>Final handoff closure package acknowledgement</h4>
+              <StatusChip
+                status={postgresCutoverFinalHandoffAcknowledgementStatusLevel(
+                  postgresFinalHandoffClosurePackageAckStatus,
+                )}
+                label={postgresCutoverFinalHandoffAcknowledgementLabel(postgresFinalHandoffClosurePackageAckStatus)}
+              />
+            </div>
+            <div className="trace-review-grid">
+              <label>
+                <span>Reviewer</span>
+                <input
+                  value={postgresFinalHandoffClosurePackageAckReviewer}
+                  onChange={(event) => setPostgresFinalHandoffClosurePackageAckReviewer(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Reviewer role</span>
+                <select
+                  value={postgresFinalHandoffClosurePackageAckReviewerRole}
+                  onChange={(event) =>
+                    setPostgresFinalHandoffClosurePackageAckReviewerRole(
+                      event.target.value as PostgresCutoverFinalHandoffClosurePackageAcknowledgement['reviewerRole'],
+                    )
+                  }
+                >
+                  <option value="infrastructure_owner">Infrastructure owner</option>
+                  <option value="database_administrator">Database administrator</option>
+                  <option value="security_reviewer">Security reviewer</option>
+                  <option value="platform_owner">Platform owner</option>
+                </select>
+              </label>
+              <label>
+                <span>Response status</span>
+                <select
+                  value={postgresFinalHandoffClosurePackageAckStatus}
+                  onChange={(event) =>
+                    setPostgresFinalHandoffClosurePackageAckStatus(
+                      event.target.value as PostgresCutoverFinalHandoffAcknowledgementStatus,
+                    )
+                  }
+                >
+                  <option value="acknowledged">Acknowledged</option>
+                  <option value="acknowledged_with_actions">Acknowledged with actions</option>
+                  <option value="changes_requested">Changes requested</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </label>
+              <label className="toggle-row">
+                <input
+                  checked={postgresFinalHandoffClosurePackageReady}
+                  onChange={(event) => setPostgresFinalHandoffClosurePackageReady(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>Closure package ready</span>
+              </label>
+              <label className="trace-review-rationale">
+                <span>Requested actions</span>
+                <textarea
+                  value={postgresFinalHandoffClosurePackageAckActions}
+                  onChange={(event) => setPostgresFinalHandoffClosurePackageAckActions(event.target.value)}
+                />
+              </label>
+              <label className="trace-review-rationale">
+                <span>Response notes</span>
+                <textarea
+                  value={postgresFinalHandoffClosurePackageAckNotes}
+                  onChange={(event) => setPostgresFinalHandoffClosurePackageAckNotes(event.target.value)}
+                />
+              </label>
+            </div>
+            <div className="toolbar-actions notification-approval-actions">
+              <button
+                className="primary-action"
+                disabled={!latestPostgresFinalHandoffClosurePackageDelivery}
+                onClick={() => {
+                  const request = postgresFinalHandoffClosurePackageAcknowledgementRequest(
+                    latestPostgresFinalHandoffClosurePackageDelivery,
+                  )
+                  if (request) onSavePostgresCutoverFinalHandoffClosurePackageAcknowledgement(request)
+                }}
+                type="button"
+              >
+                <ClipboardCheck size={15} />
+                Save Handoff Closure Acknowledgement
+              </button>
+            </div>
+            <div className="metadata-grid">
+              <Metadata
+                label="Closure acknowledgements"
+                value={String(postgresCutoverFinalHandoffClosurePackageAcknowledgementRecords.length)}
+              />
+              <Metadata
+                label="Latest delivery"
+                value={
+                  latestPostgresFinalHandoffClosurePackageDelivery
+                    ? new Date(latestPostgresFinalHandoffClosurePackageDelivery.createdAt).toLocaleString()
+                    : 'Not delivered'
+                }
+              />
+              <Metadata
+                label="Open deliveries"
+                value={String(
+                  postgresFinalHandoffClosurePackageDeliveryRecords.filter(
+                    (record) => !postgresFinalHandoffClosurePackageAcknowledgedDeliveryIds.has(record.id),
+                  ).length,
+                )}
+              />
+              <Metadata
+                label="Requested actions"
+                value={String(postgresFinalHandoffClosurePackageAckActionList().length)}
+              />
+            </div>
+            {latestPostgresCutoverFinalHandoffClosurePackageAcknowledgement ? (
+              <div className="connector-run-row">
+                <div>
+                  <strong>{latestPostgresCutoverFinalHandoffClosurePackageAcknowledgement.payload.reviewer}</strong>
+                  <span>
+                    v{latestPostgresCutoverFinalHandoffClosurePackageAcknowledgement.version} / {postgresCutoverFinalHandoffAcknowledgementLabel(latestPostgresCutoverFinalHandoffClosurePackageAcknowledgement.payload.status)} / {new Date(latestPostgresCutoverFinalHandoffClosurePackageAcknowledgement.createdAt).toLocaleString()}
+                  </span>
+                  <small>{latestPostgresCutoverFinalHandoffClosurePackageAcknowledgement.payload.evidence}</small>
+                </div>
+                <StatusChip
+                  status={latestPostgresCutoverFinalHandoffClosurePackageAcknowledgement.status}
+                  label={postgresCutoverFinalHandoffAcknowledgementLabel(
+                    latestPostgresCutoverFinalHandoffClosurePackageAcknowledgement.payload.status,
+                  )}
+                />
+              </div>
+            ) : (
+              <div className="empty-state compact">No final handoff closure package acknowledgement has been retained yet.</div>
+            )}
+          </div>
         </div>
         {postgresCutoverClosurePackageRecords.length > 1 ? (
           <div className="mapping-run-history">
