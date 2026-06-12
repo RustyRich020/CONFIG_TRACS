@@ -102,6 +102,9 @@ import type {
   TraceabilityExportReview,
   TraceabilityExportReviewStatus,
   TraceabilityGraphExportPackage,
+  TraceabilityResponseClosureRoute,
+  TraceabilityResponseClosureRouteStage,
+  TraceabilityResponseClosureRouteStatus,
   TraceabilityLink,
 } from './types'
 
@@ -362,6 +365,18 @@ function traceabilityResponseStatusLevel(status: TraceabilityDeliveryResponseSta
 
 function traceabilityResponseLabel(status: TraceabilityDeliveryResponseStatus) {
   return status === 'changes_requested' ? 'Changes requested' : titleize(status)
+}
+
+function traceabilityClosureRouteStatusLevel(status: TraceabilityResponseClosureRouteStatus): StatusLevel {
+  if (status === 'closed') return 'pass'
+  if (status === 'escalated') return 'blocking'
+  return 'warning'
+}
+
+function traceabilityClosureRouteLabel(status: TraceabilityResponseClosureRouteStatus) {
+  if (status === 'follow_up_open') return 'Follow-up open'
+  if (status === 'closure_ready') return 'Closure ready'
+  return titleize(status)
 }
 
 function externalReferenceDispositionStatusLevel(
@@ -1877,6 +1892,113 @@ function App() {
     )
   }
 
+  async function saveTraceabilityResponseClosureRoute({
+    closureNotes,
+    dueAt,
+    notify,
+    requestedActions,
+    responseRecord,
+    routeStage,
+    routedReviewers,
+    reviewer,
+    status,
+  }: {
+    closureNotes: string
+    dueAt: string
+    notify?: boolean
+    requestedActions: string[]
+    responseRecord: BackendRecord<TraceabilityDeliveryResponse>
+    routeStage: TraceabilityResponseClosureRouteStage
+    routedReviewers: string[]
+    reviewer: string
+    status: TraceabilityResponseClosureRouteStatus
+  }) {
+    const routedAt = new Date().toISOString()
+    const reviewerName = reviewer.trim() || 'TRACS Quality Reviewer'
+    const recipients = routedReviewers.length > 0 ? routedReviewers : [reviewerName]
+    const notificationId = `traceability_response_closure:${responseRecord.id}:${routedAt}`
+    const notificationSummary =
+      `${traceabilityClosureRouteLabel(status)} for ${responseRecord.payload.deliverySubject}. ${requestedActions.length} requested action(s) routed.`
+    const notificationHistory = notify
+      ? [{
+          notificationId,
+          routedAt,
+          channels: ['email', 'teams', 'sharepoint_folder'] as Array<'email' | 'teams' | 'sharepoint_folder'>,
+          recipients,
+          summary: notificationSummary,
+          evidence: `Closure follow-up notification prepared for ${recipients.join(', ')}.`,
+        }]
+      : []
+    const payload: TraceabilityResponseClosureRoute = {
+      routeId: `traceability_response_closure_route:${responseRecord.id}:${routedAt}`,
+      routedAt,
+      responseRecordId: responseRecord.id,
+      responseId: responseRecord.payload.responseId,
+      deliveryRecordId: responseRecord.payload.deliveryRecordId,
+      deliverySubject: responseRecord.payload.deliverySubject,
+      packageId: responseRecord.payload.packageId,
+      selectedEventId: responseRecord.payload.selectedEventId,
+      reviewer: reviewerName,
+      status,
+      routeStage,
+      routedReviewers: recipients,
+      dueAt,
+      closureNotes: closureNotes.trim() || 'No closure follow-up notes recorded.',
+      requestedActions,
+      sourceResponseStatus: responseRecord.payload.status,
+      channelSummary: responseRecord.payload.channelSummary,
+      notificationHistory,
+      auditHistory: [
+        {
+          action: notify ? 'closure_follow_up_notified' : 'closure_route_saved',
+          actor: reviewerName,
+          timestamp: routedAt,
+          status,
+          routeStage,
+          summary: notificationSummary,
+        },
+      ],
+      evidence: `${notificationSummary} Due ${dueAt || 'not scheduled'}.`,
+    }
+    const saved = await backendClient.saveRecord({
+      kind: 'traceability_response_closure_route',
+      label: responseRecord.payload.deliverySubject,
+      status: traceabilityClosureRouteStatusLevel(status),
+      summary: payload.evidence,
+      payload,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'traceability_response_closure_route',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record(
+      'traceability',
+      notify ? 'notify_response_closure' : 'save_response_closure_route',
+      `Traceability response closure route saved as backend record v${saved.version}.`,
+    )
+    if (notify) {
+      await deliverNotifications(
+        notificationToDeliveryPayload(
+          'traceability_response_closure',
+          `Traceability response closure ${responseRecord.payload.deliverySubject}`,
+          {
+            notificationId,
+            recipients,
+            summary: notificationSummary,
+            route: payload,
+          },
+        ),
+      )
+    }
+    return saved
+  }
+
   async function deliverNotifications(payload: NotificationDeliveryPayload) {
     const result = await backendClient.deliverNotification(payload)
     await refreshBackend()
@@ -2674,6 +2796,10 @@ function App() {
         ) : activeView === 'Traceability' ? (
           <TraceabilityView
             canonicalObjects={canonicalObjects}
+            closureRouteRecords={backendRecords.filter(
+              (record): record is BackendRecord<TraceabilityResponseClosureRoute> =>
+                record.kind === 'traceability_response_closure_route',
+            )}
             deliveryRecords={backendRecords.filter(
               (record): record is BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }> =>
                 record.kind === 'notification_delivery',
@@ -2686,6 +2812,7 @@ function App() {
             links={traceabilityLinks}
             onDeliverNotifications={deliverNotifications}
             onSaveDeliveryResponse={saveTraceabilityDeliveryResponse}
+            onSaveResponseClosureRoute={saveTraceabilityResponseClosureRoute}
             onSelectEvent={setSelectedQualityEventId}
             onSaveExportReview={saveTraceabilityExportReview}
             responseRecords={backendRecords.filter(
@@ -4808,12 +4935,14 @@ function ObjectExplorerView({ objects }: { objects: CanonicalObject[] }) {
 
 function TraceabilityView({
   canonicalObjects,
+  closureRouteRecords,
   deliveryRecords,
   evidenceRecords,
   events,
   links,
   onDeliverNotifications,
   onSaveDeliveryResponse,
+  onSaveResponseClosureRoute,
   onSelectEvent,
   onSaveExportReview,
   responseRecords,
@@ -4821,6 +4950,7 @@ function TraceabilityView({
   selectedEventId,
 }: {
   canonicalObjects: CanonicalObject[]
+  closureRouteRecords: BackendRecord<TraceabilityResponseClosureRoute>[]
   deliveryRecords: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>[]
   evidenceRecords: BackendRecord<ReadinessEvidencePacket>[]
   events: QualityEvent[]
@@ -4833,6 +4963,17 @@ function TraceabilityView({
     reviewer: string
     routeStage: TraceabilityDeliveryResponse['routeStage']
     status: TraceabilityDeliveryResponseStatus
+  }) => void
+  onSaveResponseClosureRoute: (request: {
+    closureNotes: string
+    dueAt: string
+    notify?: boolean
+    requestedActions: string[]
+    responseRecord: BackendRecord<TraceabilityDeliveryResponse>
+    routeStage: TraceabilityResponseClosureRouteStage
+    routedReviewers: string[]
+    reviewer: string
+    status: TraceabilityResponseClosureRouteStatus
   }) => void
   onSelectEvent: (eventId: string) => void
   onSaveExportReview: (request: {
@@ -4866,6 +5007,20 @@ function TraceabilityView({
     'Reviewer acknowledged receipt of the traceability export package and delivery evidence.',
   )
   const [deliveryResponseActions, setDeliveryResponseActions] = useState('')
+  const [closureRouteReviewer, setClosureRouteReviewer] = useState('TRACS Quality Owner')
+  const [closureRouteStatus, setClosureRouteStatus] =
+    useState<TraceabilityResponseClosureRouteStatus>('follow_up_open')
+  const [closureRouteStage, setClosureRouteStage] =
+    useState<TraceabilityResponseClosureRouteStage>('quality_follow_up')
+  const [closureRouteDueAt, setClosureRouteDueAt] = useState(() => {
+    const date = new Date()
+    date.setDate(date.getDate() + 7)
+    return date.toISOString().slice(0, 10)
+  })
+  const [closureRouteReviewers, setClosureRouteReviewers] = useState('TRACS Quality Owner')
+  const [closureRouteNotes, setClosureRouteNotes] = useState(
+    'Route reviewer response closure, confirm requested actions, and retain closure notification evidence.',
+  )
   const selectedEvent = events.find((event) => event.id === selectedEventId) ?? events[0]
   const canonicalById = useMemo(
     () => new Map(canonicalObjects.map((object) => [object.id, object])),
@@ -5005,8 +5160,13 @@ function TraceabilityView({
   )
   const latestTraceabilityDelivery = traceabilityDeliveryRecords[0]
   const latestDeliveryResponse = responseRecords[0]
+  const traceabilityClosureRoutes = closureRouteRecords.filter((record) =>
+    responseRecords.some((response) => response.id === record.payload.responseRecordId),
+  )
+  const latestClosureRoute = traceabilityClosureRoutes[0]
   const acknowledgedDeliveryIds = new Set(responseRecords.map((record) => record.payload.deliveryRecordId))
   const openDeliveryCount = traceabilityDeliveryRecords.filter((record) => !acknowledgedDeliveryIds.has(record.id)).length
+  const openClosureRouteCount = traceabilityClosureRoutes.filter((record) => record.payload.status !== 'closed').length
   function saveDeliveryResponse(deliveryRecord = latestTraceabilityDelivery) {
     if (!deliveryRecord) return
     onSaveDeliveryResponse({
@@ -5019,6 +5179,31 @@ function TraceabilityView({
       reviewer: deliveryResponseReviewer,
       routeStage: deliveryResponseRouteStage,
       status: deliveryResponseStatus,
+    })
+  }
+  function closureRouteRequest(responseRecord = latestDeliveryResponse, notify = false) {
+    if (!responseRecord) return
+    const reviewers = closureRouteReviewers
+      .split(',')
+      .map((routeReviewer) => routeReviewer.trim())
+      .filter(Boolean)
+    const requestedActions = [
+      ...responseRecord.payload.requestedActions,
+      ...deliveryResponseActions
+        .split('\n')
+        .map((action) => action.trim())
+        .filter(Boolean),
+    ].filter((action, index, actions) => actions.indexOf(action) === index)
+    onSaveResponseClosureRoute({
+      closureNotes: closureRouteNotes,
+      dueAt: closureRouteDueAt,
+      notify,
+      requestedActions,
+      responseRecord,
+      routeStage: closureRouteStage,
+      routedReviewers: reviewers,
+      reviewer: closureRouteReviewer,
+      status: closureRouteStatus,
     })
   }
 
@@ -5454,10 +5639,98 @@ function TraceabilityView({
         <div className="trace-path-summary">
           <Metadata label="Responses" value={String(responseRecords.length)} />
           <Metadata label="Open deliveries" value={String(openDeliveryCount)} />
+          <Metadata label="Open closure routes" value={String(openClosureRouteCount)} />
           <Metadata
             label="Latest response"
             value={latestDeliveryResponse ? traceabilityResponseLabel(latestDeliveryResponse.payload.status) : 'Not recorded'}
           />
+          <Metadata
+            label="Latest closure route"
+            value={latestClosureRoute ? traceabilityClosureRouteLabel(latestClosureRoute.payload.status) : 'Not routed'}
+          />
+        </div>
+        <div className="mapping-run-history">
+          <h4>Closure Notifications & Follow-Up Routing</h4>
+          <div className="trace-review-grid">
+            <label>
+              <span>Closure owner</span>
+              <input value={closureRouteReviewer} onChange={(event) => setClosureRouteReviewer(event.target.value)} />
+            </label>
+            <label>
+              <span>Closure status</span>
+              <select
+                value={closureRouteStatus}
+                onChange={(event) => setClosureRouteStatus(event.target.value as TraceabilityResponseClosureRouteStatus)}
+              >
+                <option value="follow_up_open">Follow-up open</option>
+                <option value="closure_ready">Closure ready</option>
+                <option value="closed">Closed</option>
+                <option value="escalated">Escalated</option>
+              </select>
+            </label>
+            <label>
+              <span>Route stage</span>
+              <select
+                value={closureRouteStage}
+                onChange={(event) => setClosureRouteStage(event.target.value as TraceabilityResponseClosureRouteStage)}
+              >
+                <option value="quality_follow_up">Quality follow-up</option>
+                <option value="closure_review">Closure review</option>
+                <option value="closed">Closed</option>
+                <option value="escalated">Escalated</option>
+              </select>
+            </label>
+            <label>
+              <span>Due date</span>
+              <input type="date" value={closureRouteDueAt} onChange={(event) => setClosureRouteDueAt(event.target.value)} />
+            </label>
+            <label className="trace-review-rationale">
+              <span>Closure reviewers</span>
+              <input value={closureRouteReviewers} onChange={(event) => setClosureRouteReviewers(event.target.value)} />
+            </label>
+            <label className="trace-review-rationale">
+              <span>Closure notes</span>
+              <textarea value={closureRouteNotes} onChange={(event) => setClosureRouteNotes(event.target.value)} />
+            </label>
+          </div>
+          <div className="toolbar-actions notification-approval-actions">
+            <button
+              className="secondary-action"
+              disabled={!latestDeliveryResponse}
+              onClick={() => closureRouteRequest()}
+              type="button"
+            >
+              <ClipboardCheck size={15} />
+              Save Follow-Up Route
+            </button>
+            <button
+              className="primary-action"
+              disabled={!latestDeliveryResponse}
+              onClick={() => closureRouteRequest(latestDeliveryResponse, true)}
+              type="button"
+            >
+              <Bell size={15} />
+              Notify Closure Reviewers
+            </button>
+          </div>
+          {traceabilityClosureRoutes.length > 0 ? (
+            <div className="mapping-run-history">
+              {traceabilityClosureRoutes.slice(0, 5).map((record) => (
+                <div className="mapping-run-row" key={record.id}>
+                  <div>
+                    <strong>{record.payload.deliverySubject}</strong>
+                    <span>
+                      v{record.version} / {record.payload.reviewer} / due {record.payload.dueAt || 'not scheduled'}
+                    </span>
+                    <small>{record.payload.evidence}</small>
+                  </div>
+                  <StatusChip status={record.status} label={traceabilityClosureRouteLabel(record.payload.status)} />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state compact">No traceability response closure routes have been retained yet.</div>
+          )}
         </div>
         {responseRecords.length > 0 ? (
           <div className="mapping-run-history">

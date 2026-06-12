@@ -184,6 +184,7 @@ export type SavedVersionKind =
   | 'notification_approval_renewal_closure'
   | 'traceability_export_review'
   | 'traceability_delivery_response'
+  | 'traceability_response_closure_route'
   | 'postgres_import_reconciliation'
   | 'postgres_cutover_approval'
   | 'postgres_cutover_checklist_package'
@@ -221,6 +222,7 @@ export type BackendRecordKind =
   | 'notification_approval_renewal_closure'
   | 'traceability_export_review'
   | 'traceability_delivery_response'
+  | 'traceability_response_closure_route'
   | 'postgres_import_reconciliation'
   | 'postgres_cutover_approval'
   | 'postgres_cutover_checklist_package'
@@ -653,6 +655,55 @@ export type TraceabilityDeliveryResponse = {
   evidence: string
 }
 
+export type TraceabilityResponseClosureRouteStage =
+  | 'quality_follow_up'
+  | 'closure_review'
+  | 'closed'
+  | 'escalated'
+
+export type TraceabilityResponseClosureRouteStatus =
+  | 'follow_up_open'
+  | 'closure_ready'
+  | 'closed'
+  | 'escalated'
+
+export type TraceabilityResponseClosureRoute = {
+  routeId: string
+  routedAt: string
+  responseRecordId: string
+  responseId: string
+  deliveryRecordId: string
+  deliverySubject: string
+  packageId?: string
+  selectedEventId?: string
+  reviewer: string
+  status: TraceabilityResponseClosureRouteStatus
+  routeStage: TraceabilityResponseClosureRouteStage
+  routedReviewers: string[]
+  dueAt: string
+  closureNotes: string
+  requestedActions: string[]
+  sourceResponseStatus: TraceabilityDeliveryResponseStatus
+  channelSummary: string
+  notificationHistory: Array<{
+    notificationId: string
+    routedAt: string
+    channels: Array<'email' | 'teams' | 'sharepoint_folder'>
+    recipients: string[]
+    summary: string
+    evidence: string
+  }>
+  auditHistory: Array<{
+    action: 'closure_route_saved' | 'closure_follow_up_notified'
+    actor: string
+    timestamp: string
+    status: TraceabilityResponseClosureRouteStatus
+    routeStage: TraceabilityResponseClosureRouteStage
+    summary: string
+  }>
+  evidence: string
+}
+
 export type ReportCatalogItem = {
   id: string
   title: string
@@ -880,7 +931,12 @@ export type ReadinessEvidencePacket = {
 export type NotificationDeliveryPayload = {
   deliveryId: string
   generatedAt: string
-  source: 'report_catalog' | 'readiness_evidence' | 'traceability_export' | 'notification_approval_renewal'
+  source:
+    | 'report_catalog'
+    | 'readiness_evidence'
+    | 'traceability_export'
+    | 'traceability_response_closure'
+    | 'notification_approval_renewal'
   channels: Array<'email' | 'teams' | 'sharepoint_folder'>
   recipients: string[]
   subject: string
