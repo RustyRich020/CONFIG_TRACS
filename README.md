@@ -125,6 +125,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Exports production cutover closure packages for final infrastructure handoff.
 - Delivers production cutover closure packages to infrastructure-owner final handoff channels.
 - Exports retry queue packages for notification operations review with aging metrics, due windows, delivery evidence, and required actions.
+- Delivers retry queue packages to notification operations reviewers with retained delivery evidence.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
@@ -273,6 +274,6 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add retry queue package notification delivery to notification operations reviewers.
-2. Add Closure SLA follow-up closure records with superseded route evidence.
-3. Add production cutover final handoff delivery acknowledgement tracking.
+1. Add Closure SLA follow-up closure records with superseded route evidence.
+2. Add production cutover final handoff delivery acknowledgement tracking.
+3. Add retry queue package acknowledgement and reviewer response tracking.

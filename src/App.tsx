@@ -671,6 +671,7 @@ function retryAgeLabel(minutes: number) {
 
 function deliverySourceLabel(source: NotificationDeliveryPayload['source']) {
   if (source === 'notification_closure_export_package') return 'Closure package'
+  if (source === 'notification_retry_queue_export_package') return 'Retry queue package'
   if (source === 'closure_sla_export_package') return 'Closure SLA package'
   if (source === 'closure_sla_response_follow_up') return 'Closure SLA follow-up'
   if (source === 'postgres_cutover_acknowledgement') return 'Cutover acknowledgement'
@@ -2329,6 +2330,29 @@ function App() {
       `Notification retry queue export package saved as backend record v${saved.version}.`,
     )
     return saved
+  }
+
+  async function deliverNotificationRetryQueueExportPackage({
+    download,
+    packagePayload,
+  }: {
+    download: boolean
+    packagePayload: NotificationRetryQueueExportPackage
+  }) {
+    const saved = await saveNotificationRetryQueueExportPackage({ download, packagePayload })
+    if (!saved) return
+    await deliverNotifications(
+      notificationToDeliveryPayload(
+        'notification_retry_queue_export_package',
+        'Notification retry queue operations review package',
+        {
+          notificationId: saved.payload.packageId,
+          recipients: saved.payload.operationsReviewers,
+          summary: `${saved.payload.operationsReviewers.join(', ')} retry queue package includes ${saved.payload.metrics.active} active retry item(s), ${saved.payload.metrics.overdue} overdue item(s), ${saved.payload.metrics.dueSoon} due-soon item(s), ${saved.payload.deliveryEvidence.length} delivery evidence record(s), and ${saved.payload.requiredActions.length} required action(s).`,
+          package: saved.payload,
+        },
+      ),
+    )
   }
 
   async function runNotificationSmokeFixtures() {
@@ -4140,6 +4164,7 @@ function App() {
             onDeliverPostgresCutoverOwnerReminder={deliverPostgresCutoverOwnerReminder}
             onDeliverPostgresCutoverClosurePackage={deliverPostgresCutoverClosurePackage}
             onDeliverClosureSlaExportPackage={deliverClosureSlaExportPackage}
+            onDeliverNotificationRetryQueueExportPackage={deliverNotificationRetryQueueExportPackage}
             onSaveClosureSlaDeliveryAcknowledgement={saveClosureSlaDeliveryAcknowledgement}
             onSaveClosureSlaResponseFollowUpRoute={saveClosureSlaResponseFollowUpRoute}
             onSaveNotificationDeliveryRetryControl={saveNotificationDeliveryRetryControl}
@@ -4807,6 +4832,7 @@ function BackendPersistenceView({
   onDeliverPostgresCutoverOwnerReminder,
   onDeliverPostgresCutoverClosurePackage,
   onDeliverClosureSlaExportPackage,
+  onDeliverNotificationRetryQueueExportPackage,
   onSaveClosureSlaDeliveryAcknowledgement,
   onSaveClosureSlaResponseFollowUpRoute,
   onSaveNotificationDeliveryRetryControl,
@@ -4890,6 +4916,10 @@ function BackendPersistenceView({
   onDeliverClosureSlaExportPackage: (request: {
     download: boolean
     packagePayload: ClosureSlaExportPackage
+  }) => void
+  onDeliverNotificationRetryQueueExportPackage: (request: {
+    download: boolean
+    packagePayload: NotificationRetryQueueExportPackage
   }) => void
   onSaveClosureSlaDeliveryAcknowledgement: (request: {
     deliveryRecord: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>
@@ -5267,6 +5297,7 @@ function BackendPersistenceView({
   )
   const retryControlledSources: NotificationDeliveryPayload['source'][] = [
     'notification_closure_export_package',
+    'notification_retry_queue_export_package',
     'closure_sla_export_package',
     'closure_sla_response_follow_up',
     'postgres_cutover_acknowledgement',
@@ -5362,6 +5393,9 @@ function BackendPersistenceView({
       ? 'warning'
       : 'pass'
   const retryQueueActiveSources = new Set(notificationDeliveryRetryRecords.map((record) => record.payload.source))
+  const retryQueuePackageDeliveryRecords = deliveryRecords.filter(
+    (record) => record.payload.request.source === 'notification_retry_queue_export_package',
+  )
   const notificationClosurePackageDeliveryRecords = deliveryRecords.filter(
     (record) => record.payload.request.source === 'notification_closure_export_package',
   )
@@ -7663,6 +7697,7 @@ function BackendPersistenceView({
                   }
                 >
                   <option value="notification_closure_export_package">Closure package</option>
+                  <option value="notification_retry_queue_export_package">Retry queue package</option>
                   <option value="closure_sla_export_package">Closure SLA package</option>
                   <option value="closure_sla_response_follow_up">Closure SLA follow-up</option>
                   <option value="postgres_cutover_acknowledgement">Cutover acknowledgement</option>
@@ -7849,9 +7884,23 @@ function BackendPersistenceView({
                   <Download size={15} />
                   Save & Download Retry Queue Package
                 </button>
+                <button
+                  className="primary-action"
+                  onClick={() =>
+                    onDeliverNotificationRetryQueueExportPackage({
+                      download: false,
+                      packagePayload: buildRetryQueueExportPackage(),
+                    })
+                  }
+                  type="button"
+                >
+                  <Bell size={15} />
+                  Save & Deliver to Operations Reviewers
+                </button>
               </div>
               <div className="metadata-grid">
                 <Metadata label="Queue packages" value={String(notificationRetryQueueExportPackageRecords.length)} />
+                <Metadata label="Package deliveries" value={String(retryQueuePackageDeliveryRecords.length)} />
                 <Metadata label="Operations reviewers" value={String(retryQueueOperationsReviewerList().length)} />
                 <Metadata label="Required actions" value={String(retryQueueRequiredActions().length)} />
                 <Metadata
@@ -7877,6 +7926,23 @@ function BackendPersistenceView({
               ) : (
                 <div className="empty-state compact">No retry queue export packages have been retained yet.</div>
               )}
+              {retryQueuePackageDeliveryRecords.length > 0 ? (
+                <div className="retry-aging-list">
+                  <h4>Retry queue package delivery evidence</h4>
+                  {retryQueuePackageDeliveryRecords.slice(0, 3).map((record) => (
+                    <div className="connector-run-row" key={record.id}>
+                      <div>
+                        <strong>{record.payload.request.subject}</strong>
+                        <span>
+                          v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
+                        </span>
+                        <small>{record.payload.result.evidence}</small>
+                      </div>
+                      <StatusChip status={record.status} label={record.status} />
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
             {retryControlsForSource.length > 0 ? (
               <div className="connector-run-history">

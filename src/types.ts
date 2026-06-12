@@ -1101,6 +1101,7 @@ export type NotificationDeliveryPayload = {
     | 'traceability_response_closure'
     | 'notification_approval_renewal'
     | 'notification_closure_export_package'
+    | 'notification_retry_queue_export_package'
     | 'closure_sla_export_package'
     | 'closure_sla_response_follow_up'
     | 'postgres_cutover_acknowledgement'
