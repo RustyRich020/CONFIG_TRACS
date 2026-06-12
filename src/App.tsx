@@ -77,6 +77,7 @@ import type {
   NotificationDeliveryResult,
   PostgresCutoverApproval,
   PostgresCutoverApprovalStatus,
+  PostgresCutoverChecklistPackage,
   PostgresMigrationChecklist,
   PostgresImportReconciliation,
   QualityEvent,
@@ -1863,6 +1864,93 @@ function App() {
     )
   }
 
+  async function savePostgresCutoverChecklistPackage({
+    download,
+    reviewerAudience,
+  }: {
+    download: boolean
+    reviewerAudience: string[]
+  }) {
+    const generatedAt = new Date().toISOString()
+    const reconciliationRecords = backendRecords.filter(
+      (record): record is BackendRecord<PostgresImportReconciliation> =>
+        record.kind === 'postgres_import_reconciliation',
+    )
+    const latestReconciliation = reconciliationRecords[0]
+    const latestApproval = backendRecords.find(
+      (record): record is BackendRecord<PostgresCutoverApproval> =>
+        record.kind === 'postgres_cutover_approval',
+    )
+    const gateReview = evaluatePostgresCutoverGates({
+      backendHealth,
+      latestReconciliation,
+      postgresMigrationChecklist,
+    })
+    const reconciliationTotals = reconciliationRecords.reduce(
+      (summary, record) => ({
+        runs: summary.runs + 1,
+        read: summary.read + record.payload.read,
+        importable: summary.importable + record.payload.importable,
+        imported: summary.imported + record.payload.imported,
+        skipped: summary.skipped + record.payload.skipped,
+        invalid: summary.invalid + record.payload.invalid,
+      }),
+      { runs: 0, read: 0, importable: 0, imported: 0, skipped: 0, invalid: 0 },
+    )
+    const recordKindCounts = backendRecords.reduce(
+      (summary, record) => {
+        summary[record.kind] = (summary[record.kind] ?? 0) + 1
+        return summary
+      },
+      {} as Record<string, number>,
+    )
+    const requiredActions = gateReview.gates
+      .filter((gate) => gate.status !== 'pass')
+      .map((gate) => `${gate.label}: ${gate.evidence}`)
+    const packagePayload: PostgresCutoverChecklistPackage = {
+      packageId: `postgres_cutover_checklist:${generatedAt}`,
+      generatedAt,
+      reviewerAudience,
+      status: gateReview.status,
+      backendHealth,
+      storageSchema,
+      migrationChecklist: postgresMigrationChecklist,
+      gateReview,
+      latestReconciliation: latestReconciliation?.payload,
+      latestApproval: latestApproval?.payload,
+      reconciliationTotals,
+      recordKindCounts,
+      requiredActions,
+      rollbackPlan: postgresMigrationChecklist?.rollback ?? latestApproval?.payload.rollbackPlan ?? [],
+      evidence: `Postgres cutover checklist package generated with ${gateReview.status} gate status, ${reconciliationTotals.runs} reconciliation run(s), and ${reviewerAudience.length} reviewer audience entry(ies).`,
+    }
+    const saved = await backendClient.saveRecord({
+      kind: 'postgres_cutover_checklist_package',
+      label: 'production Postgres cutover checklist package',
+      status: packagePayload.status,
+      summary: packagePayload.evidence,
+      payload: packagePayload,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'postgres_cutover_checklist_package',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    if (download) {
+      downloadJson('tracs-postgres-cutover-checklist-package.json', packagePayload)
+    }
+    record(
+      'backend',
+      download ? 'cutover_checklist_package_export' : 'cutover_checklist_package_save',
+      `Postgres cutover checklist package saved as backend record v${saved.version}.`,
+    )
+  }
+
   async function saveNotificationLiveChannelApproval({
     approvedChannels,
     rationale,
@@ -2431,12 +2519,17 @@ function App() {
               (record): record is BackendRecord<PostgresCutoverApproval> =>
                 record.kind === 'postgres_cutover_approval',
             )}
+            postgresCutoverPackageRecords={backendRecords.filter(
+              (record): record is BackendRecord<PostgresCutoverChecklistPackage> =>
+                record.kind === 'postgres_cutover_checklist_package',
+            )}
             onRefresh={refreshBackend}
             onRunAdapterDryRun={runAdapterDryRun}
             onRunNotificationSmokeFixtures={runNotificationSmokeFixtures}
             onDeliverNotificationApprovalRenewalRoute={deliverNotificationApprovalRenewalRoute}
             onSaveNotificationApprovalRenewalRoute={saveNotificationApprovalRenewalRoute}
             onSavePostgresCutoverApproval={savePostgresCutoverApproval}
+            onSavePostgresCutoverChecklistPackage={savePostgresCutoverChecklistPackage}
             onSaveSnapshot={saveBackendSnapshot}
             onSaveNotificationLiveApproval={saveNotificationLiveChannelApproval}
             storageSchema={storageSchema}
@@ -3068,12 +3161,14 @@ function BackendPersistenceView({
   notificationApprovalRecords,
   notificationRenewalRecords,
   postgresCutoverApprovalRecords,
+  postgresCutoverPackageRecords,
   onRefresh,
   onRunAdapterDryRun,
   onRunNotificationSmokeFixtures,
   onDeliverNotificationApprovalRenewalRoute,
   onSaveNotificationApprovalRenewalRoute,
   onSavePostgresCutoverApproval,
+  onSavePostgresCutoverChecklistPackage,
   onSaveSnapshot,
   onSaveNotificationLiveApproval,
   postgresMigrationChecklist,
@@ -3087,6 +3182,7 @@ function BackendPersistenceView({
   notificationApprovalRecords: BackendRecord<NotificationLiveChannelApproval>[]
   notificationRenewalRecords: BackendRecord<NotificationApprovalRenewalRoute>[]
   postgresCutoverApprovalRecords: BackendRecord<PostgresCutoverApproval>[]
+  postgresCutoverPackageRecords: BackendRecord<PostgresCutoverChecklistPackage>[]
   onRefresh: () => void
   onRunAdapterDryRun: (connectorId: string) => void
   onRunNotificationSmokeFixtures: () => void
@@ -3113,6 +3209,10 @@ function BackendPersistenceView({
     reviewer: string
     rollbackWindow: string
     status: PostgresCutoverApprovalStatus
+  }) => void
+  onSavePostgresCutoverChecklistPackage: (request: {
+    download: boolean
+    reviewerAudience: string[]
   }) => void
   onSaveSnapshot: () => void
   onSaveNotificationLiveApproval: (request: {
@@ -3157,6 +3257,9 @@ function BackendPersistenceView({
   const [postgresCutoverConditions, setPostgresCutoverConditions] = useState(
     'Apply-run reconciliation must be retained before production traffic is switched.',
   )
+  const [postgresPackageReviewers, setPostgresPackageReviewers] = useState(
+    'Infrastructure Owner, Database Administrator, Security Reviewer',
+  )
   const recordCounts = backendRecords.reduce(
     (summary, record) => {
       summary[record.kind] = (summary[record.kind] ?? 0) + 1
@@ -3185,6 +3288,7 @@ function BackendPersistenceView({
   )
   const latestNotificationRenewal = notificationRenewalRecords[0]
   const latestPostgresCutoverApproval = postgresCutoverApprovalRecords[0]
+  const latestPostgresCutoverPackage = postgresCutoverPackageRecords[0]
   const postgresCutoverGateReview = evaluatePostgresCutoverGates({
     backendHealth,
     latestReconciliation,
@@ -3228,6 +3332,13 @@ function BackendPersistenceView({
         .filter(Boolean),
       routeStage: renewalRouteStage,
     }
+  }
+
+  function postgresPackageReviewerList() {
+    return postgresPackageReviewers
+      .split(',')
+      .map((reviewer) => reviewer.trim())
+      .filter(Boolean)
   }
 
   return (
@@ -3827,6 +3938,98 @@ function BackendPersistenceView({
             ) : null}
           </div>
         </div>
+      </section>
+
+      <section className="panel notification-approval-panel">
+        <PanelHeader
+          icon={Download}
+          title="Production Cutover Checklist Package"
+          subtitle="Package Postgres health, schema, migration, reconciliation, approval, and rollback evidence for infrastructure reviewers."
+        />
+        <div className="notification-approval-grid">
+          <div className="notification-approval-form">
+            <div className="trace-review-grid">
+              <label className="trace-review-rationale">
+                <span>Reviewer audience</span>
+                <textarea
+                  value={postgresPackageReviewers}
+                  onChange={(event) => setPostgresPackageReviewers(event.target.value)}
+                />
+              </label>
+            </div>
+            <div className="toolbar-actions notification-approval-actions">
+              <button
+                className="secondary-action"
+                onClick={() =>
+                  onSavePostgresCutoverChecklistPackage({
+                    download: false,
+                    reviewerAudience: postgresPackageReviewerList(),
+                  })
+                }
+                type="button"
+              >
+                <ClipboardCheck size={15} />
+                Save Package
+              </button>
+              <button
+                className="primary-action"
+                onClick={() =>
+                  onSavePostgresCutoverChecklistPackage({
+                    download: true,
+                    reviewerAudience: postgresPackageReviewerList(),
+                  })
+                }
+                type="button"
+              >
+                <Download size={15} />
+                Save & Download
+              </button>
+            </div>
+          </div>
+          <div className="notification-approval-summary">
+            <div className="metadata-grid">
+              <Metadata label="Packages" value={String(postgresCutoverPackageRecords.length)} />
+              <Metadata label="Reviewer audience" value={String(postgresPackageReviewerList().length)} />
+              <Metadata label="Gate status" value={postgresCutoverGateReview.status} />
+              <Metadata label="Latest approval" value={latestPostgresCutoverApproval ? postgresCutoverApprovalLabel(latestPostgresCutoverApproval.payload.status) : 'Not signed'} />
+              <Metadata label="Latest package" value={latestPostgresCutoverPackage ? new Date(latestPostgresCutoverPackage.createdAt).toLocaleString() : 'Not generated'} />
+              <Metadata label="Required actions" value={String(postgresCutoverGateReview.gates.filter((gate) => gate.status !== 'pass').length)} />
+            </div>
+            {latestPostgresCutoverPackage ? (
+              <div className="connector-run-history">
+                <h4>Latest package</h4>
+                <div className="connector-run-row">
+                  <div>
+                    <strong>{latestPostgresCutoverPackage.label}</strong>
+                    <span>
+                      v{latestPostgresCutoverPackage.version} / {new Date(latestPostgresCutoverPackage.createdAt).toLocaleString()}
+                    </span>
+                    <small>{latestPostgresCutoverPackage.payload.evidence}</small>
+                  </div>
+                  <StatusChip status={latestPostgresCutoverPackage.status} label={latestPostgresCutoverPackage.status} />
+                </div>
+              </div>
+            ) : (
+              <div className="empty-state compact">No infrastructure checklist package has been generated yet.</div>
+            )}
+          </div>
+        </div>
+        {postgresCutoverPackageRecords.length > 1 ? (
+          <div className="mapping-run-history">
+            <h4>Package history</h4>
+            {postgresCutoverPackageRecords.slice(1, 5).map((record) => (
+              <div className="mapping-run-row" key={record.id}>
+                <div>
+                  <strong>{record.payload.packageId}</strong>
+                  <span>
+                    v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.reviewerAudience.join(', ')}
+                  </span>
+                </div>
+                <StatusChip status={record.status} label={record.status} />
+              </div>
+            ))}
+          </div>
+        ) : null}
       </section>
 
       <section className="panel storage-schema-panel">

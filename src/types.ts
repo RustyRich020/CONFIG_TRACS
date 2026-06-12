@@ -184,6 +184,7 @@ export type SavedVersionKind =
   | 'traceability_delivery_response'
   | 'postgres_import_reconciliation'
   | 'postgres_cutover_approval'
+  | 'postgres_cutover_checklist_package'
 
 export type SavedVersion = {
   id: string
@@ -218,6 +219,7 @@ export type BackendRecordKind =
   | 'traceability_delivery_response'
   | 'postgres_import_reconciliation'
   | 'postgres_cutover_approval'
+  | 'postgres_cutover_checklist_package'
 
 export type BackendRecord<TPayload = unknown> = {
   id: string
@@ -338,6 +340,34 @@ export type PostgresCutoverApproval = {
     status: PostgresCutoverApprovalStatus
     summary: string
   }>
+  evidence: string
+}
+
+export type PostgresCutoverChecklistPackage = {
+  packageId: string
+  generatedAt: string
+  reviewerAudience: string[]
+  status: StatusLevel
+  backendHealth: BackendHealth | null
+  storageSchema: RecordStoreSchema | null
+  migrationChecklist: PostgresMigrationChecklist | null
+  gateReview: {
+    status: StatusLevel
+    gates: PostgresCutoverGate[]
+  }
+  latestReconciliation?: PostgresImportReconciliation
+  latestApproval?: PostgresCutoverApproval
+  reconciliationTotals: {
+    runs: number
+    read: number
+    importable: number
+    imported: number
+    skipped: number
+    invalid: number
+  }
+  recordKindCounts: Record<string, number>
+  requiredActions: string[]
+  rollbackPlan: string[]
   evidence: string
 }
 

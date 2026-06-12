@@ -105,6 +105,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Adds an optional Postgres record store adapter and migration checklist for shared production persistence.
 - Adds Postgres import reconciliation summaries and Backend dashboard views for guarded migration runs.
 - Captures applied Postgres cutover approval gates with reviewer sign-off, reconciliation evidence, and rollback conditions.
+- Exports production Postgres cutover checklist packages for infrastructure reviewer handoff.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
@@ -253,7 +254,7 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add production cutover checklist export packages for infrastructure reviewers.
-2. Add notification renewal closure and superseded-approval evidence.
-3. Add external-reference load exception disposition and replay controls.
-4. Add traceability response closure notifications and follow-up routing.
+1. Add notification renewal closure and superseded-approval evidence.
+2. Add external-reference load exception disposition and replay controls.
+3. Add traceability response closure notifications and follow-up routing.
+4. Add infrastructure reviewer acknowledgement records for cutover packages.

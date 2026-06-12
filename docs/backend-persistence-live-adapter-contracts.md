@@ -366,6 +366,8 @@ Each guarded import run persists a `postgres_import_reconciliation` record in Po
 
 Production Postgres cutover approvals are persisted as `postgres_cutover_approval` records. The Backend workspace evaluates the active storage health, loaded migration checklist, latest import reconciliation run, applied-import evidence, and rollback plan before reviewer sign-off. Approval records retain reviewer, approval status, planned cutover timing, rollback window, conditions, gate-by-gate evidence, latest reconciliation payload, checklist gates, rollback steps, and audit history. A fully approved cutover should only be treated as production-ready when the gate status is `pass`; dry-run-only reconciliation keeps the approval conditional or warning until an applied import record is retained.
 
+Production cutover checklist packages are persisted as `postgres_cutover_checklist_package` records and can be downloaded as JSON for infrastructure reviewers. Each package binds backend health, storage schema, migration checklist, gate review, latest reconciliation, latest cutover approval, aggregate reconciliation totals, backend record-kind counts, required actions, rollback plan, reviewer audience, and package evidence. These packages are infrastructure handoff artifacts and do not by themselves enable production cutover.
+
 ## GitHub Implementation Plan
 
 1. Create branch: `codex/backend-persistence-adapter-contracts`
