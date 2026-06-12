@@ -410,6 +410,8 @@ Notification retry queue export packages are persisted as `notification_retry_qu
 
 Notification retry queue package notifications reuse the guarded notification delivery adapter with source `notification_retry_queue_export_package`. The Backend workspace can save a retry queue package and deliver it to retained notification operations reviewers, producing delivery evidence for email, Teams, and SharePoint folder channels while keeping retry-control and package records append-only.
 
+Notification retry queue package acknowledgements are persisted as `notification_retry_queue_acknowledgement` records. Each acknowledgement links to the delivered retry queue package notification, retains reviewer role, response status, queue closure readiness, requested actions, source retry metrics, source retry row count, delivery channel summary, response notes, and audit history. Acknowledgement records do not mutate retry-control, package, or delivery records; they provide append-only evidence that notification operations reviewers responded to the retry queue package before queue closure.
+
 ## GitHub Implementation Plan
 
 1. Create branch: `codex/backend-persistence-adapter-contracts`

@@ -181,6 +181,7 @@ export type SavedVersionKind =
   | 'notification_delivery'
   | 'notification_delivery_retry'
   | 'notification_retry_queue_export_package'
+  | 'notification_retry_queue_acknowledgement'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -231,6 +232,7 @@ export type BackendRecordKind =
   | 'notification_delivery'
   | 'notification_delivery_retry'
   | 'notification_retry_queue_export_package'
+  | 'notification_retry_queue_acknowledgement'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -1235,6 +1237,42 @@ export type NotificationRetryQueueExportPackage = {
     deliveries: number
     activeSources: number
   }
+  evidence: string
+}
+
+export type NotificationRetryQueueAcknowledgementStatus =
+  | 'acknowledged'
+  | 'acknowledged_with_actions'
+  | 'changes_requested'
+  | 'rejected'
+
+export type NotificationRetryQueueAcknowledgement = {
+  acknowledgementId: string
+  acknowledgedAt: string
+  deliveryRecordId: string
+  deliveryId: string
+  deliverySubject: string
+  packageRecordId?: string
+  packageId?: string
+  packageVersion?: number
+  reviewer: string
+  reviewerRole: 'notification_operations' | 'messaging_owner' | 'governance_reviewer' | 'platform_owner'
+  status: NotificationRetryQueueAcknowledgementStatus
+  responseNotes: string
+  requestedActions: string[]
+  channelSummary: string
+  packageStatus?: StatusLevel
+  sourceMetrics?: NotificationRetryQueueExportPackage['metrics']
+  sourceRequiredActions: string[]
+  sourceRetryRowCount: number
+  queueClosureReady: boolean
+  auditHistory: Array<{
+    action: 'retry_queue_package_acknowledged'
+    actor: string
+    timestamp: string
+    status: NotificationRetryQueueAcknowledgementStatus
+    summary: string
+  }>
   evidence: string
 }
 

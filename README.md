@@ -128,6 +128,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Captures production cutover final handoff delivery acknowledgements with reviewer response, readiness, and retained actions.
 - Exports retry queue packages for notification operations review with aging metrics, due windows, delivery evidence, and required actions.
 - Delivers retry queue packages to notification operations reviewers with retained delivery evidence.
+- Captures retry queue package acknowledgements with reviewer response, closure readiness, and retained actions.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
@@ -276,6 +277,6 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add retry queue package acknowledgement and reviewer response tracking.
-2. Add Closure SLA follow-up closure notification export packages.
-3. Add final handoff acknowledgement closure package evidence.
+1. Add Closure SLA follow-up closure notification export packages.
+2. Add final handoff acknowledgement closure package evidence.
+3. Add retry queue acknowledgement closure package evidence.
