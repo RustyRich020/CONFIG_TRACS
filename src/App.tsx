@@ -606,6 +606,39 @@ function notificationDeliveryRetryLabel(status: NotificationDeliveryRetryStatus)
   return 'Blocked'
 }
 
+function minutesBetween(startAt: string, endAt = new Date()) {
+  const startTime = Date.parse(startAt)
+  if (!Number.isFinite(startTime)) return null
+  return Math.floor((endAt.getTime() - startTime) / 60_000)
+}
+
+function addMinutesIso(startAt: string, minutes: number) {
+  const startTime = Date.parse(startAt)
+  if (!Number.isFinite(startTime)) return ''
+  return new Date(startTime + minutes * 60_000).toISOString()
+}
+
+function retryControlDueAt(control: NotificationDeliveryRetryControl) {
+  return control.retryDueAt || addMinutesIso(control.createdAt, control.retryDelayMinutes)
+}
+
+function retryDueLabel(dueAt: string, now = new Date()) {
+  const dueTime = Date.parse(dueAt)
+  if (!Number.isFinite(dueTime)) return 'No due date'
+  const minutes = Math.ceil((dueTime - now.getTime()) / 60_000)
+  if (minutes < 0) return `${Math.abs(minutes)} min overdue`
+  if (minutes === 0) return 'Due now'
+  if (minutes < 60) return `Due in ${minutes} min`
+  const hours = Math.ceil(minutes / 60)
+  return `Due in ${hours} hr`
+}
+
+function retryAgeLabel(minutes: number) {
+  if (minutes <= 0) return '0 min'
+  if (minutes < 60) return `${minutes} min`
+  return `${Math.ceil(minutes / 60)} hr`
+}
+
 function deliverySourceLabel(source: NotificationDeliveryPayload['source']) {
   if (source === 'notification_closure_export_package') return 'Closure package'
   if (source === 'closure_sla_export_package') return 'Closure SLA package'
@@ -2166,6 +2199,7 @@ function App() {
       attempt,
       maxRetries,
       retryDelayMinutes,
+      retryDueAt: addMinutesIso(createdAt, retryDelayMinutes),
       retryOnWarnings,
       retryEligible,
       status: retryStatus,
@@ -4555,6 +4589,7 @@ function BackendPersistenceView({
   const [deliveryRetryRationale, setDeliveryRetryRationale] = useState(
     'Retry retained because closure or cutover notification delivery produced warning or blocking evidence.',
   )
+  const [retryQueueMeasuredAt] = useState(() => new Date())
   const recordCounts = backendRecords.reduce(
     (summary, record) => {
       summary[record.kind] = (summary[record.kind] ?? 0) + 1
@@ -4707,6 +4742,65 @@ function BackendPersistenceView({
       (latestRetryableDelivery.status === 'blocking' ||
         (latestRetryableDelivery.status === 'warning' && deliveryRetryPolicy.retryOnWarnings))
     : false
+  const retryQueueRows = notificationDeliveryRetryRecords
+    .map((record) => {
+      const dueAt = retryControlDueAt(record.payload)
+      const ageMinutes = Math.max(0, minutesBetween(record.payload.createdAt, retryQueueMeasuredAt) ?? 0)
+      const dueTime = Date.parse(dueAt)
+      const minutesUntilDue = Number.isFinite(dueTime)
+        ? Math.ceil((dueTime - retryQueueMeasuredAt.getTime()) / 60_000)
+        : null
+      const active = record.payload.status === 'planned'
+      const dueStatus: StatusLevel = !active
+        ? 'pass'
+        : minutesUntilDue === null
+          ? 'warning'
+          : minutesUntilDue < 0
+            ? 'blocking'
+            : minutesUntilDue <= 60
+              ? 'warning'
+              : 'pass'
+      return {
+        record,
+        dueAt,
+        ageMinutes,
+        active,
+        minutesUntilDue,
+        status: dueStatus,
+      }
+    })
+    .sort((first, second) => {
+      const severity = { blocking: 0, warning: 1, pass: 2 } satisfies Record<StatusLevel, number>
+      const severityDelta = severity[first.status] - severity[second.status]
+      if (severityDelta !== 0) return severityDelta
+      return (first.minutesUntilDue ?? Number.MAX_SAFE_INTEGER) - (second.minutesUntilDue ?? Number.MAX_SAFE_INTEGER)
+    })
+  const retryQueueMetrics = retryQueueRows.reduce(
+    (summary, row) => {
+      summary.total += 1
+      if (row.active) summary.active += 1
+      if (row.record.payload.status === 'executed') summary.executed += 1
+      if (row.record.payload.status === 'blocked') summary.blocked += 1
+      if (row.active && row.status === 'blocking') summary.overdue += 1
+      if (row.active && row.status === 'warning') summary.dueSoon += 1
+      summary.oldestAgeMinutes = Math.max(summary.oldestAgeMinutes, row.active ? row.ageMinutes : 0)
+      return summary
+    },
+    {
+      total: 0,
+      active: 0,
+      executed: 0,
+      blocked: 0,
+      overdue: 0,
+      dueSoon: 0,
+      oldestAgeMinutes: 0,
+    },
+  )
+  const retryQueueStatus = retryQueueMetrics.overdue > 0
+    ? 'blocking'
+    : retryQueueMetrics.dueSoon > 0
+      ? 'warning'
+      : 'pass'
   const notificationClosurePackageDeliveryRecords = deliveryRecords.filter(
     (record) => record.payload.request.source === 'notification_closure_export_package',
   )
@@ -6537,6 +6631,47 @@ function BackendPersistenceView({
             ) : (
               <div className="empty-state compact">No delivery records are available for the selected retry source.</div>
             )}
+            <div className="connector-run-history retry-aging-dashboard">
+              <div className="dashboard-heading">
+                <h4>Retry Queue Aging</h4>
+                <StatusChip status={retryQueueStatus} label={retryQueueStatus} />
+              </div>
+              <div className="metadata-grid">
+                <Metadata label="Active queue" value={String(retryQueueMetrics.active)} />
+                <Metadata label="Overdue" value={String(retryQueueMetrics.overdue)} />
+                <Metadata label="Due soon" value={String(retryQueueMetrics.dueSoon)} />
+                <Metadata label="Executed" value={String(retryQueueMetrics.executed)} />
+                <Metadata label="Blocked" value={String(retryQueueMetrics.blocked)} />
+                <Metadata
+                  label="Oldest active age"
+                  value={
+                    retryQueueMetrics.oldestAgeMinutes > 0
+                      ? retryAgeLabel(retryQueueMetrics.oldestAgeMinutes)
+                      : 'none'
+                  }
+                />
+              </div>
+              {retryQueueRows.length > 0 ? (
+                <div className="retry-aging-list">
+                  {retryQueueRows.slice(0, 4).map((row) => (
+                    <div className="connector-run-row" key={row.record.id}>
+                      <div>
+                        <strong>{row.record.payload.subject}</strong>
+                        <span>
+                          {deliverySourceLabel(row.record.payload.source)} / attempt {row.record.payload.attempt} of {row.record.payload.maxRetries} / {row.active ? retryDueLabel(row.dueAt, retryQueueMeasuredAt) : notificationDeliveryRetryLabel(row.record.payload.status)}
+                        </span>
+                        <small>
+                          {notificationDeliveryRetryLabel(row.record.payload.status)} for {retryAgeLabel(row.ageMinutes)}; due {row.dueAt ? new Date(row.dueAt).toLocaleString() : 'not scheduled'}.
+                        </small>
+                      </div>
+                      <StatusChip status={row.status} label={row.active ? row.status : row.record.payload.status} />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-state compact">No retry controls have been planned or executed yet.</div>
+              )}
+            </div>
             {retryControlsForSource.length > 0 ? (
               <div className="connector-run-history">
                 <h4>Retry control evidence</h4>

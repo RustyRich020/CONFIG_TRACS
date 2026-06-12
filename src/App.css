@@ -482,6 +482,26 @@
   margin-top: 16px;
 }
 
+.retry-aging-dashboard {
+  border: 1px solid #dce9e7;
+  border-radius: 8px;
+  background: #f7fbfa;
+}
+
+.dashboard-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.retry-aging-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .mapping-grid {
   display: grid;
   grid-template-columns: minmax(360px, 1fr) minmax(440px, 1.2fr) minmax(320px, 0.9fr);

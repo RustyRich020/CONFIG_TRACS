@@ -1084,6 +1084,7 @@ export type NotificationDeliveryRetryControl = {
   attempt: number
   maxRetries: number
   retryDelayMinutes: number
+  retryDueAt: string
   retryOnWarnings: boolean
   retryEligible: boolean
   status: NotificationDeliveryRetryStatus
