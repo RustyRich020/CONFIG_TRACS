@@ -380,6 +380,8 @@ Production cutover checklist packages are persisted as `postgres_cutover_checkli
 
 Infrastructure reviewer acknowledgements are persisted as `postgres_cutover_acknowledgement` records. Each acknowledgement links to the latest retained cutover checklist package, records reviewer role, acknowledgement status, production readiness, backup and rollback confirmations, due date, required actions, notes, and audit history. The acknowledgement is append-only evidence that infrastructure owners reviewed the handoff package before production cutover.
 
+Infrastructure acknowledgement notifications reuse the guarded notification delivery adapter with source `postgres_cutover_acknowledgement`. The Backend workspace can save an acknowledgement and deliver it to the reviewer audience retained on the latest Postgres cutover checklist package, producing `notification_delivery` evidence for email, Teams, and SharePoint folder channels without mutating the acknowledgement or package records.
+
 ## GitHub Implementation Plan
 
 1. Create branch: `codex/backend-persistence-adapter-contracts`

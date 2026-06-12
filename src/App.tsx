@@ -2321,6 +2321,41 @@ function App() {
     return saved
   }
 
+  async function deliverPostgresCutoverAcknowledgement(request: {
+    acknowledgementNotes: string
+    backupConfirmed: boolean
+    dueAt: string
+    productionReadiness: PostgresCutoverAcknowledgement['productionReadiness']
+    requiredActions: string[]
+    reviewer: string
+    reviewerRole: PostgresCutoverAcknowledgement['reviewerRole']
+    rollbackConfirmed: boolean
+    status: PostgresCutoverAcknowledgementStatus
+  }) {
+    const saved = await savePostgresCutoverAcknowledgement(request)
+    if (!saved) return
+    const latestPackage = backendRecords.find(
+      (record): record is BackendRecord<PostgresCutoverChecklistPackage> =>
+        record.kind === 'postgres_cutover_checklist_package',
+    )
+    const recipients = latestPackage?.payload.reviewerAudience.length
+      ? latestPackage.payload.reviewerAudience
+      : [saved.payload.reviewer]
+    await deliverNotifications(
+      notificationToDeliveryPayload(
+        'postgres_cutover_acknowledgement',
+        'Postgres cutover infrastructure acknowledgement',
+        {
+          notificationId: saved.payload.acknowledgementId,
+          recipients,
+          summary: `${saved.payload.reviewer} recorded ${postgresCutoverAcknowledgementLabel(saved.payload.status)} for Postgres cutover package ${saved.payload.packageId ?? 'not linked'}.`,
+          acknowledgement: saved.payload,
+          package: latestPackage?.payload,
+        },
+      ),
+    )
+  }
+
   async function saveNotificationLiveChannelApproval({
     approvedChannels,
     rationale,
@@ -3106,6 +3141,7 @@ function App() {
             onRunAdapterDryRun={runAdapterDryRun}
             onRunNotificationSmokeFixtures={runNotificationSmokeFixtures}
             onDeliverNotificationApprovalRenewalRoute={deliverNotificationApprovalRenewalRoute}
+            onDeliverPostgresCutoverAcknowledgement={deliverPostgresCutoverAcknowledgement}
             onSaveNotificationApprovalRenewalClosure={saveNotificationApprovalRenewalClosure}
             onSaveNotificationClosureExportPackage={saveNotificationClosureExportPackage}
             onSaveNotificationApprovalRenewalRoute={saveNotificationApprovalRenewalRoute}
@@ -3752,6 +3788,7 @@ function BackendPersistenceView({
   onRunAdapterDryRun,
   onRunNotificationSmokeFixtures,
   onDeliverNotificationApprovalRenewalRoute,
+  onDeliverPostgresCutoverAcknowledgement,
   onSaveNotificationApprovalRenewalClosure,
   onSaveNotificationClosureExportPackage,
   onSaveNotificationApprovalRenewalRoute,
@@ -3786,6 +3823,17 @@ function BackendPersistenceView({
     reminderAt: string
     reviewers: string[]
     routeStage: NotificationApprovalRenewalRoute['routeStage']
+  }) => void
+  onDeliverPostgresCutoverAcknowledgement: (request: {
+    acknowledgementNotes: string
+    backupConfirmed: boolean
+    dueAt: string
+    productionReadiness: PostgresCutoverAcknowledgement['productionReadiness']
+    requiredActions: string[]
+    reviewer: string
+    reviewerRole: PostgresCutoverAcknowledgement['reviewerRole']
+    rollbackConfirmed: boolean
+    status: PostgresCutoverAcknowledgementStatus
   }) => void
   onSaveNotificationApprovalRenewalClosure: (request: {
     closureNotes: string
@@ -4020,6 +4068,9 @@ function BackendPersistenceView({
     (record): record is BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }> =>
       record.kind === 'notification_delivery',
   )
+  const postgresAcknowledgementDeliveryRecords = deliveryRecords.filter(
+    (record) => record.payload.request.source === 'postgres_cutover_acknowledgement',
+  )
   const deliveryEvidenceCounts = deliveryRecords.reduce(
     (summary, record) => {
       record.payload.result.channelResults.forEach((result) => {
@@ -4069,6 +4120,19 @@ function BackendPersistenceView({
       .split('\n')
       .map((action) => action.trim())
       .filter(Boolean)
+  }
+  function postgresAcknowledgementRequest() {
+    return {
+      acknowledgementNotes: postgresAcknowledgementNotes,
+      backupConfirmed: postgresBackupConfirmed,
+      dueAt: postgresAcknowledgementDueAt,
+      productionReadiness: postgresProductionReadiness,
+      requiredActions: postgresAcknowledgementActionList(),
+      reviewer: postgresAcknowledgementReviewer,
+      reviewerRole: postgresAcknowledgementRole,
+      rollbackConfirmed: postgresRollbackConfirmed,
+      status: postgresAcknowledgementStatus,
+    }
   }
 
   return (
@@ -5086,31 +5150,29 @@ function BackendPersistenceView({
             </div>
             <div className="toolbar-actions notification-approval-actions">
               <button
-                className="primary-action"
+                className="secondary-action"
                 disabled={!latestPostgresCutoverPackage}
-                onClick={() =>
-                  onSavePostgresCutoverAcknowledgement({
-                    acknowledgementNotes: postgresAcknowledgementNotes,
-                    backupConfirmed: postgresBackupConfirmed,
-                    dueAt: postgresAcknowledgementDueAt,
-                    productionReadiness: postgresProductionReadiness,
-                    requiredActions: postgresAcknowledgementActionList(),
-                    reviewer: postgresAcknowledgementReviewer,
-                    reviewerRole: postgresAcknowledgementRole,
-                    rollbackConfirmed: postgresRollbackConfirmed,
-                    status: postgresAcknowledgementStatus,
-                  })
-                }
+                onClick={() => onSavePostgresCutoverAcknowledgement(postgresAcknowledgementRequest())}
                 type="button"
               >
                 <ClipboardCheck size={15} />
                 Save Acknowledgement
+              </button>
+              <button
+                className="primary-action"
+                disabled={!latestPostgresCutoverPackage}
+                onClick={() => onDeliverPostgresCutoverAcknowledgement(postgresAcknowledgementRequest())}
+                type="button"
+              >
+                <Bell size={15} />
+                Save & Notify Reviewers
               </button>
             </div>
           </div>
           <div className="notification-approval-summary">
             <div className="metadata-grid">
               <Metadata label="Acknowledgements" value={String(postgresCutoverAcknowledgementRecords.length)} />
+              <Metadata label="Deliveries" value={String(postgresAcknowledgementDeliveryRecords.length)} />
               <Metadata
                 label="Latest status"
                 value={latestPostgresCutoverAcknowledgement ? postgresCutoverAcknowledgementLabel(latestPostgresCutoverAcknowledgement.payload.status) : 'Not acknowledged'}
@@ -5143,6 +5205,23 @@ function BackendPersistenceView({
             ) : (
               <div className="empty-state compact">No infrastructure acknowledgement has been retained yet.</div>
             )}
+            {postgresAcknowledgementDeliveryRecords.length > 0 ? (
+              <div className="connector-run-history">
+                <h4>Acknowledgement delivery evidence</h4>
+                {postgresAcknowledgementDeliveryRecords.slice(0, 3).map((record) => (
+                  <div className="connector-run-row" key={record.id}>
+                    <div>
+                      <strong>{record.payload.request.subject}</strong>
+                      <span>
+                        v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
+                      </span>
+                      <small>{record.payload.result.evidence}</small>
+                    </div>
+                    <StatusChip status={record.status} label={record.status} />
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
         {postgresCutoverAcknowledgementRecords.length > 1 ? (
