@@ -202,6 +202,7 @@ export type SavedVersionKind =
   | 'postgres_cutover_reminder_closure'
   | 'postgres_cutover_closure_package'
   | 'postgres_cutover_final_handoff_acknowledgement'
+  | 'postgres_cutover_final_handoff_closure_package'
 
 export type SavedVersion = {
   id: string
@@ -254,6 +255,7 @@ export type BackendRecordKind =
   | 'postgres_cutover_reminder_closure'
   | 'postgres_cutover_closure_package'
   | 'postgres_cutover_final_handoff_acknowledgement'
+  | 'postgres_cutover_final_handoff_closure_package'
 
 export type BackendRecord<TPayload = unknown> = {
   id: string
@@ -578,6 +580,43 @@ export type PostgresCutoverFinalHandoffAcknowledgement = {
     actor: string
     timestamp: string
     status: PostgresCutoverFinalHandoffAcknowledgementStatus
+    summary: string
+  }>
+  evidence: string
+}
+
+export type PostgresCutoverFinalHandoffClosurePackage = {
+  packageId: string
+  generatedAt: string
+  closureReviewers: string[]
+  status: StatusLevel
+  acknowledgementRecords: Array<BackendRecord<PostgresCutoverFinalHandoffAcknowledgement>>
+  closurePackage?: BackendRecord<PostgresCutoverClosurePackage>
+  deliveryEvidence: Array<BackendRecord<{
+    request: NotificationDeliveryPayload
+    result: NotificationDeliveryResult
+  }>>
+  metrics: {
+    totalAcknowledgements: number
+    acknowledged: number
+    acknowledgedWithActions: number
+    changesRequested: number
+    rejected: number
+    closureReady: number
+    retainedActions: number
+  }
+  requiredActions: string[]
+  reviewerNotes: string
+  sourceRecordCounts: {
+    closurePackages: number
+    acknowledgementRecords: number
+    deliveryRecords: number
+  }
+  auditHistory: Array<{
+    action: 'final_handoff_closure_package_generated'
+    actor: string
+    timestamp: string
+    status: StatusLevel
     summary: string
   }>
   evidence: string
