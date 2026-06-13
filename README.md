@@ -131,6 +131,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Captures retry queue package acknowledgements with reviewer response, closure readiness, and retained actions.
 - Exports retry queue acknowledgement closure packages with closure readiness, retained actions, and delivery evidence.
 - Delivers retry queue acknowledgement closure packages to notification operations reviewers with retained delivery evidence.
+- Captures retry queue acknowledgement closure package delivery acknowledgements with reviewer response and retained actions.
 - Exports Closure SLA follow-up closure packages with retained actions, superseded routes, and notification evidence.
 - Delivers Closure SLA follow-up closure packages to governance reviewers with retained delivery evidence.
 - Captures Closure SLA follow-up closure package delivery acknowledgements with reviewer response and retained actions.
@@ -285,6 +286,6 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add retry queue acknowledgement closure package delivery acknowledgement tracking.
-2. Add Closure SLA follow-up closure package acknowledgement closure evidence.
-3. Add final handoff closure package acknowledgement closeout evidence.
+1. Add Closure SLA follow-up closure package acknowledgement closure evidence.
+2. Add final handoff closure package acknowledgement closeout evidence.
+3. Add retry queue closure package acknowledgement closeout evidence.

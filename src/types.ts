@@ -183,6 +183,7 @@ export type SavedVersionKind =
   | 'notification_retry_queue_export_package'
   | 'notification_retry_queue_acknowledgement'
   | 'notification_retry_queue_acknowledgement_closure_package'
+  | 'notification_retry_queue_acknowledgement_closure_package_acknowledgement'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -239,6 +240,7 @@ export type BackendRecordKind =
   | 'notification_retry_queue_export_package'
   | 'notification_retry_queue_acknowledgement'
   | 'notification_retry_queue_acknowledgement_closure_package'
+  | 'notification_retry_queue_acknowledgement_closure_package_acknowledgement'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -1390,6 +1392,39 @@ export type NotificationRetryQueueAcknowledgementClosurePackage = {
     actor: string
     timestamp: string
     status: StatusLevel
+    summary: string
+  }>
+  evidence: string
+}
+
+export type NotificationRetryQueueAcknowledgementClosurePackageAcknowledgement = {
+  acknowledgementId: string
+  acknowledgedAt: string
+  deliveryRecordId: string
+  deliveryId: string
+  deliverySubject: string
+  packageRecordId?: string
+  packageId?: string
+  packageVersion?: number
+  reviewer: string
+  reviewerRole: NotificationRetryQueueAcknowledgement['reviewerRole']
+  status: NotificationRetryQueueAcknowledgementStatus
+  closureReady: boolean
+  responseNotes: string
+  requestedActions: string[]
+  channelSummary: string
+  packageStatus?: StatusLevel
+  sourceMetrics?: NotificationRetryQueueAcknowledgementClosurePackage['metrics']
+  sourceRequiredActions: string[]
+  sourceAcknowledgementCount: number
+  sourceRetryQueuePackageCount: number
+  sourceDeliveryEvidenceCount: number
+  auditHistory: Array<{
+    action: 'retry_queue_acknowledgement_closure_package_acknowledged'
+    actor: string
+    timestamp: string
+    status: NotificationRetryQueueAcknowledgementStatus
+    closureReady: boolean
     summary: string
   }>
   evidence: string
