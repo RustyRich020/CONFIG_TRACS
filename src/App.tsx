@@ -714,6 +714,7 @@ function deliverySourceLabel(source: NotificationDeliveryPayload['source']) {
   if (source === 'notification_closure_export_package') return 'Closure package'
   if (source === 'notification_retry_queue_export_package') return 'Retry queue package'
   if (source === 'notification_retry_queue_acknowledgement_closure_package') return 'Retry queue acknowledgement closure package'
+  if (source === 'closure_package_acknowledgement_closeout_export_package') return 'Closeout export package'
   if (source === 'closure_sla_export_package') return 'Closure SLA package'
   if (source === 'closure_sla_response_follow_up') return 'Closure SLA follow-up'
   if (source === 'closure_sla_follow_up_closure_export_package') return 'Closure SLA follow-up closure package'
@@ -2809,6 +2810,29 @@ function App() {
       `Closure package acknowledgement closeout export package saved as backend record v${saved.version}.`,
     )
     return saved
+  }
+
+  async function deliverClosurePackageAcknowledgementCloseoutExportPackage({
+    download,
+    packagePayload,
+  }: {
+    download: boolean
+    packagePayload: ClosurePackageAcknowledgementCloseoutExportPackage
+  }) {
+    const saved = await saveClosurePackageAcknowledgementCloseoutExportPackage({ download, packagePayload })
+    if (!saved) return
+    await deliverNotifications(
+      notificationToDeliveryPayload(
+        'closure_package_acknowledgement_closeout_export_package',
+        'Closure package acknowledgement closeout export package',
+        {
+          notificationId: saved.payload.packageId,
+          recipients: saved.payload.governanceReviewers,
+          summary: `${saved.payload.governanceReviewers.join(', ')} closeout export package includes ${saved.payload.metrics.totalCloseouts} closeout record(s), ${saved.payload.metrics.retainedActions} retained action(s), ${saved.payload.metrics.deliveryEvidenceRecords} delivery evidence record(s), and ${saved.payload.requiredActions.length} required action(s).`,
+          package: saved.payload,
+        },
+      ),
+    )
   }
 
   async function runNotificationSmokeFixtures() {
@@ -5388,6 +5412,9 @@ function App() {
             onDeliverClosureSlaFollowUpClosureExportPackage={deliverClosureSlaFollowUpClosureExportPackage}
             onDeliverNotificationRetryQueueExportPackage={deliverNotificationRetryQueueExportPackage}
             onDeliverNotificationRetryQueueAcknowledgementClosurePackage={deliverNotificationRetryQueueAcknowledgementClosurePackage}
+            onDeliverClosurePackageAcknowledgementCloseoutExportPackage={
+              deliverClosurePackageAcknowledgementCloseoutExportPackage
+            }
             onSaveClosureSlaDeliveryAcknowledgement={saveClosureSlaDeliveryAcknowledgement}
             onSaveClosureSlaResponseFollowUpRoute={saveClosureSlaResponseFollowUpRoute}
             onSaveClosureSlaResponseFollowUpClosure={saveClosureSlaResponseFollowUpClosure}
@@ -6097,6 +6124,7 @@ function BackendPersistenceView({
   onDeliverClosureSlaFollowUpClosureExportPackage,
   onDeliverNotificationRetryQueueExportPackage,
   onDeliverNotificationRetryQueueAcknowledgementClosurePackage,
+  onDeliverClosurePackageAcknowledgementCloseoutExportPackage,
   onSaveClosureSlaDeliveryAcknowledgement,
   onSaveClosureSlaResponseFollowUpClosure,
   onSaveClosureSlaFollowUpClosureExportPackage,
@@ -6222,6 +6250,10 @@ function BackendPersistenceView({
   onDeliverNotificationRetryQueueAcknowledgementClosurePackage: (request: {
     download: boolean
     packagePayload: NotificationRetryQueueAcknowledgementClosurePackage
+  }) => void
+  onDeliverClosurePackageAcknowledgementCloseoutExportPackage: (request: {
+    download: boolean
+    packagePayload: ClosurePackageAcknowledgementCloseoutExportPackage
   }) => void
   onSaveClosureSlaDeliveryAcknowledgement: (request: {
     deliveryRecord: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>
@@ -6896,6 +6928,7 @@ function BackendPersistenceView({
     'notification_closure_export_package',
     'notification_retry_queue_export_package',
     'notification_retry_queue_acknowledgement_closure_package',
+    'closure_package_acknowledgement_closeout_export_package',
     'closure_sla_export_package',
     'closure_sla_response_follow_up',
     'closure_sla_follow_up_closure_export_package',
@@ -7139,6 +7172,10 @@ function BackendPersistenceView({
         ? 'warning'
         : 'pass'
   const latestCloseoutExportPackage = closurePackageAcknowledgementCloseoutExportPackageRecords[0]
+  const closeoutExportDeliveryRecords = deliveryRecords.filter(
+    (record) => record.payload.request.source === 'closure_package_acknowledgement_closeout_export_package',
+  )
+  const latestCloseoutExportDelivery = closeoutExportDeliveryRecords[0]
   const closeoutExportStatusRows = [
     ...closureSlaFollowUpClosurePackageAcknowledgementClosureRecords.map((record) => record.payload.status),
     ...postgresCutoverFinalHandoffClosurePackageAcknowledgementClosureRecords.map((record) => record.payload.status),
@@ -10869,6 +10906,7 @@ function BackendPersistenceView({
                   <option value="notification_closure_export_package">Closure package</option>
                   <option value="notification_retry_queue_export_package">Retry queue package</option>
                   <option value="notification_retry_queue_acknowledgement_closure_package">Retry queue acknowledgement closure package</option>
+                  <option value="closure_package_acknowledgement_closeout_export_package">Closeout export package</option>
                   <option value="closure_sla_export_package">Closure SLA package</option>
                   <option value="closure_sla_response_follow_up">Closure SLA follow-up</option>
                   <option value="closure_sla_follow_up_closure_export_package">Closure SLA follow-up closure package</option>
@@ -11670,6 +11708,19 @@ function BackendPersistenceView({
                       <Download size={15} />
                       Save & Download Closeout Export
                     </button>
+                    <button
+                      className="primary-action"
+                      onClick={() =>
+                        onDeliverClosurePackageAcknowledgementCloseoutExportPackage({
+                          download: false,
+                          packagePayload: buildCloseoutExportPackage(),
+                        })
+                      }
+                      type="button"
+                    >
+                      <Bell size={15} />
+                      Save & Notify Closeout Owners
+                    </button>
                   </div>
                   <div className="metadata-grid">
                     <Metadata
@@ -11682,6 +11733,11 @@ function BackendPersistenceView({
                     <Metadata label="Retry queue" value={String(closeoutExportMetrics.retryQueueCloseouts)} />
                     <Metadata label="Retained actions" value={String(closeoutExportMetrics.retainedActions)} />
                     <Metadata label="Required actions" value={String(closeoutExportRequiredActions().length)} />
+                    <Metadata label="Package deliveries" value={String(closeoutExportDeliveryRecords.length)} />
+                    <Metadata
+                      label="Latest delivery"
+                      value={latestCloseoutExportDelivery ? new Date(latestCloseoutExportDelivery.createdAt).toLocaleString() : 'Not delivered'}
+                    />
                   </div>
                   {latestCloseoutExportPackage ? (
                     <div className="connector-run-row">
@@ -11697,6 +11753,23 @@ function BackendPersistenceView({
                   ) : (
                     <div className="empty-state compact">No closure package acknowledgement closeout export package has been retained yet.</div>
                   )}
+                  {closeoutExportDeliveryRecords.length > 0 ? (
+                    <div className="retry-aging-list">
+                      <h4>Closeout export package delivery evidence</h4>
+                      {closeoutExportDeliveryRecords.slice(0, 3).map((record) => (
+                        <div className="connector-run-row" key={record.id}>
+                          <div>
+                            <strong>{record.payload.request.subject}</strong>
+                            <span>
+                              v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
+                            </span>
+                            <small>{record.payload.result.evidence}</small>
+                          </div>
+                          <StatusChip status={record.status} label={record.status} />
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>
