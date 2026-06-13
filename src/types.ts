@@ -208,6 +208,7 @@ export type SavedVersionKind =
   | 'postgres_cutover_final_handoff_acknowledgement'
   | 'postgres_cutover_final_handoff_closure_package'
   | 'postgres_cutover_final_handoff_closure_package_acknowledgement'
+  | 'postgres_cutover_final_handoff_closure_package_acknowledgement_closure'
 
 export type SavedVersion = {
   id: string
@@ -266,6 +267,7 @@ export type BackendRecordKind =
   | 'postgres_cutover_final_handoff_acknowledgement'
   | 'postgres_cutover_final_handoff_closure_package'
   | 'postgres_cutover_final_handoff_closure_package_acknowledgement'
+  | 'postgres_cutover_final_handoff_closure_package_acknowledgement_closure'
 
 export type BackendRecord<TPayload = unknown> = {
   id: string
@@ -659,6 +661,53 @@ export type PostgresCutoverFinalHandoffClosurePackageAcknowledgement = {
     timestamp: string
     status: PostgresCutoverFinalHandoffAcknowledgementStatus
     closureReady: boolean
+    summary: string
+  }>
+  evidence: string
+}
+
+export type PostgresCutoverFinalHandoffClosurePackageAcknowledgementClosure = {
+  closureId: string
+  closedAt: string
+  reviewer: string
+  status: PostgresCutoverReminderClosureStatus
+  acknowledgementRecords: Array<BackendRecord<PostgresCutoverFinalHandoffClosurePackageAcknowledgement>>
+  closurePackages: Array<BackendRecord<PostgresCutoverFinalHandoffClosurePackage>>
+  deliveryEvidence: Array<BackendRecord<{
+    request: NotificationDeliveryPayload
+    result: NotificationDeliveryResult
+  }>>
+  metrics: {
+    totalAcknowledgements: number
+    acknowledged: number
+    acknowledgedWithActions: number
+    changesRequested: number
+    rejected: number
+    closureReady: number
+    retainedActions: number
+  }
+  retainedActions: string[]
+  closureNotes: string
+  supersededEvidence: string[]
+  supersededAcknowledgements: Array<{
+    acknowledgementId: string
+    reviewer: string
+    reviewerRole: PostgresCutoverFinalHandoffAcknowledgement['reviewerRole']
+    status: PostgresCutoverFinalHandoffAcknowledgementStatus
+    acknowledgedAt: string
+    evidence: string
+  }>
+  sourceRecordCounts: {
+    acknowledgementRecords: number
+    closurePackages: number
+    deliveryRecords: number
+    supersededAcknowledgements: number
+  }
+  auditHistory: Array<{
+    action: 'final_handoff_closure_package_acknowledgement_closed'
+    actor: string
+    timestamp: string
+    status: PostgresCutoverReminderClosureStatus
     summary: string
   }>
   evidence: string

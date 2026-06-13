@@ -139,6 +139,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Exports final handoff acknowledgement closure packages with readiness, retained actions, and delivery evidence.
 - Delivers final handoff acknowledgement closure packages to infrastructure reviewers with retained delivery evidence.
 - Captures final handoff acknowledgement closure package delivery acknowledgements with reviewer response and retained actions.
+- Closes final handoff closure package acknowledgements with retained actions and superseded acknowledgement evidence.
 - Exports an integration contract JSON file from the active deployment state.
 
 ## Current Scope
@@ -287,6 +288,6 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add final handoff closure package acknowledgement closeout evidence.
-2. Add retry queue closure package acknowledgement closeout evidence.
-3. Add closure package acknowledgement closeout export packages.
+1. Add retry queue closure package acknowledgement closeout evidence.
+2. Add closure package acknowledgement closeout export packages.
+3. Add closeout package notification delivery for infrastructure and governance owners.
