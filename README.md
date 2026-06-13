@@ -137,6 +137,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Delivers closure package acknowledgement closeout export packages to infrastructure and governance owners.
 - Captures closeout export package delivery acknowledgements with reviewer response and retained actions.
 - Closes closeout export package acknowledgements with retained actions and superseded acknowledgement evidence.
+- Closes closeout package notification records with export, delivery, acknowledgement, retry, and closure evidence.
 - Exports Closure SLA follow-up closure packages with retained actions, superseded routes, and notification evidence.
 - Delivers Closure SLA follow-up closure packages to governance reviewers with retained delivery evidence.
 - Captures Closure SLA follow-up closure package delivery acknowledgements with reviewer response and retained actions.
@@ -293,6 +294,6 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add closeout package acknowledgement closeout notification closure records.
-2. Add closeout acknowledgement closure package notification delivery.
-3. Add closeout acknowledgement closure package delivery acknowledgement tracking.
+1. Add closeout acknowledgement closure package notification delivery.
+2. Add closeout acknowledgement closure package delivery acknowledgement tracking.
+3. Add closeout acknowledgement closure package acknowledgement closeout evidence.
