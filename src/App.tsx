@@ -58,6 +58,7 @@ import type {
   CanonicalLoadResult,
   CanonicalLoadRequest,
   CanonicalObject,
+  ClosurePackageAcknowledgementCloseoutExportPackage,
   ClosureSlaDeliveryAcknowledgement,
   ClosureSlaDeliveryAcknowledgementStatus,
   ClosureSlaExportPackage,
@@ -2773,6 +2774,43 @@ function App() {
     return saved
   }
 
+  async function saveClosurePackageAcknowledgementCloseoutExportPackage({
+    download,
+    packagePayload,
+  }: {
+    download: boolean
+    packagePayload: ClosurePackageAcknowledgementCloseoutExportPackage
+  }) {
+    const saved = await backendClient.saveRecord({
+      kind: 'closure_package_acknowledgement_closeout_export_package',
+      label: 'Closure package acknowledgement closeout export package',
+      status: packagePayload.status,
+      summary: packagePayload.evidence,
+      payload: packagePayload,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'closure_package_acknowledgement_closeout_export_package',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    if (download) {
+      downloadJson('tracs-closure-package-acknowledgement-closeout-export-package.json', packagePayload)
+    }
+    record(
+      'notification',
+      download
+        ? 'closure_package_acknowledgement_closeout_export_download'
+        : 'closure_package_acknowledgement_closeout_export_save',
+      `Closure package acknowledgement closeout export package saved as backend record v${saved.version}.`,
+    )
+    return saved
+  }
+
   async function runNotificationSmokeFixtures() {
     const result = await backendClient.runNotificationSmokeFixtures()
     await refreshBackend()
@@ -5289,6 +5327,10 @@ function App() {
               (record): record is BackendRecord<ClosureSlaFollowUpClosurePackageAcknowledgementClosure> =>
                 record.kind === 'closure_sla_follow_up_closure_package_acknowledgement_closure',
             )}
+            closurePackageAcknowledgementCloseoutExportPackageRecords={backendRecords.filter(
+              (record): record is BackendRecord<ClosurePackageAcknowledgementCloseoutExportPackage> =>
+                record.kind === 'closure_package_acknowledgement_closeout_export_package',
+            )}
             traceabilityClosureRouteRecords={backendRecords.filter(
               (record): record is BackendRecord<TraceabilityResponseClosureRoute> =>
                 record.kind === 'traceability_response_closure_route',
@@ -5353,6 +5395,9 @@ function App() {
             onSaveClosureSlaFollowUpClosurePackageAcknowledgement={saveClosureSlaFollowUpClosurePackageAcknowledgement}
             onSaveClosureSlaFollowUpClosurePackageAcknowledgementClosure={
               saveClosureSlaFollowUpClosurePackageAcknowledgementClosure
+            }
+            onSaveClosurePackageAcknowledgementCloseoutExportPackage={
+              saveClosurePackageAcknowledgementCloseoutExportPackage
             }
             onSaveNotificationDeliveryRetryControl={saveNotificationDeliveryRetryControl}
             onSaveNotificationRetryQueueExportPackage={saveNotificationRetryQueueExportPackage}
@@ -6009,6 +6054,7 @@ function BackendPersistenceView({
   adapterDryRuns,
   backendHealth,
   backendRecords,
+  closurePackageAcknowledgementCloseoutExportPackageRecords,
   closureSlaDeliveryAcknowledgementRecords,
   closureSlaExportPackageRecords,
   closureSlaFollowUpClosurePackageAcknowledgementClosureRecords,
@@ -6055,6 +6101,7 @@ function BackendPersistenceView({
   onSaveClosureSlaResponseFollowUpClosure,
   onSaveClosureSlaFollowUpClosureExportPackage,
   onSaveClosureSlaFollowUpClosurePackageAcknowledgementClosure,
+  onSaveClosurePackageAcknowledgementCloseoutExportPackage,
   onSaveClosureSlaFollowUpClosurePackageAcknowledgement,
   onSaveClosureSlaResponseFollowUpRoute,
   onSaveNotificationDeliveryRetryControl,
@@ -6086,6 +6133,7 @@ function BackendPersistenceView({
   adapterDryRuns: Record<string, AdapterDryRunResult>
   backendHealth: BackendHealth | null
   backendRecords: BackendRecord[]
+  closurePackageAcknowledgementCloseoutExportPackageRecords: BackendRecord<ClosurePackageAcknowledgementCloseoutExportPackage>[]
   closureSlaDeliveryAcknowledgementRecords: BackendRecord<ClosureSlaDeliveryAcknowledgement>[]
   closureSlaExportPackageRecords: BackendRecord<ClosureSlaExportPackage>[]
   closureSlaFollowUpClosurePackageAcknowledgementClosureRecords: BackendRecord<ClosureSlaFollowUpClosurePackageAcknowledgementClosure>[]
@@ -6221,6 +6269,10 @@ function BackendPersistenceView({
     reviewer: string
     status: ClosureSlaResponseFollowUpClosureStatus
     supersededEvidence: string[]
+  }) => void
+  onSaveClosurePackageAcknowledgementCloseoutExportPackage: (request: {
+    download: boolean
+    packagePayload: ClosurePackageAcknowledgementCloseoutExportPackage
   }) => void
   onSaveNotificationDeliveryRetryControl: (request: {
     deliveryRecord: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>
@@ -6646,6 +6698,12 @@ function BackendPersistenceView({
   )
   const [retryQueueClosurePackageAckSupersededEvidence, setRetryQueueClosurePackageAckSupersededEvidence] = useState(
     'Prior retry queue acknowledgement closure package acknowledgements retained as superseded evidence.',
+  )
+  const [closeoutExportReviewers, setCloseoutExportReviewers] = useState(
+    'Governance Reviewer, Notification Operations Owner, Infrastructure Owner',
+  )
+  const [closeoutExportNotes, setCloseoutExportNotes] = useState(
+    'Export package retained all available closure package acknowledgement closeouts across Closure SLA, final handoff, and retry queue workflows for governance review.',
   )
   const [retryQueueMeasuredAt] = useState(() => new Date())
   const recordCounts = backendRecords.reduce(
@@ -7080,6 +7138,46 @@ function BackendPersistenceView({
             closureSlaFollowUpClosurePackageAcknowledgementClosureMetrics.totalAcknowledgements
         ? 'warning'
         : 'pass'
+  const latestCloseoutExportPackage = closurePackageAcknowledgementCloseoutExportPackageRecords[0]
+  const closeoutExportStatusRows = [
+    ...closureSlaFollowUpClosurePackageAcknowledgementClosureRecords.map((record) => record.payload.status),
+    ...postgresCutoverFinalHandoffClosurePackageAcknowledgementClosureRecords.map((record) => record.payload.status),
+    ...notificationRetryQueueAcknowledgementClosurePackageAcknowledgementClosureRecords.map(
+      (record) => record.payload.status,
+    ),
+  ]
+  const closeoutExportMetrics = {
+    totalCloseouts: closeoutExportStatusRows.length,
+    closureSlaCloseouts: closureSlaFollowUpClosurePackageAcknowledgementClosureRecords.length,
+    finalHandoffCloseouts: postgresCutoverFinalHandoffClosurePackageAcknowledgementClosureRecords.length,
+    retryQueueCloseouts: notificationRetryQueueAcknowledgementClosurePackageAcknowledgementClosureRecords.length,
+    closed: closeoutExportStatusRows.filter((status) => status === 'closed').length,
+    closedWithActions: closeoutExportStatusRows.filter((status) => status === 'closed_with_actions').length,
+    rejected: closeoutExportStatusRows.filter((status) => status === 'rejected').length,
+    deferred: closeoutExportStatusRows.filter((status) => status === 'deferred').length,
+    retainedActions: [
+      ...closureSlaFollowUpClosurePackageAcknowledgementClosureRecords,
+      ...postgresCutoverFinalHandoffClosurePackageAcknowledgementClosureRecords,
+      ...notificationRetryQueueAcknowledgementClosurePackageAcknowledgementClosureRecords,
+    ].reduce((total, record) => total + record.payload.retainedActions.length, 0),
+    supersededAcknowledgements: [
+      ...closureSlaFollowUpClosurePackageAcknowledgementClosureRecords,
+      ...postgresCutoverFinalHandoffClosurePackageAcknowledgementClosureRecords,
+      ...notificationRetryQueueAcknowledgementClosurePackageAcknowledgementClosureRecords,
+    ].reduce((total, record) => total + record.payload.supersededAcknowledgements.length, 0),
+    deliveryEvidenceRecords: [
+      ...closureSlaFollowUpClosurePackageAcknowledgementClosureRecords,
+      ...postgresCutoverFinalHandoffClosurePackageAcknowledgementClosureRecords,
+      ...notificationRetryQueueAcknowledgementClosurePackageAcknowledgementClosureRecords,
+    ].reduce((total, record) => total + record.payload.deliveryEvidence.length, 0),
+  }
+  const closeoutExportStatus: StatusLevel = closeoutExportMetrics.rejected > 0
+    ? 'blocking'
+    : closeoutExportMetrics.totalCloseouts === 0 ||
+        closeoutExportMetrics.closedWithActions > 0 ||
+        closeoutExportMetrics.deferred > 0
+      ? 'warning'
+      : 'pass'
   const closureSlaFollowUpClosureMetrics = closureSlaResponseFollowUpClosureRecords.reduce(
     (summary, record) => {
       summary.totalClosures += 1
@@ -7551,6 +7649,73 @@ function BackendPersistenceView({
       reviewer: postgresFinalHandoffClosurePackageAckClosureReviewer,
       status: postgresFinalHandoffClosurePackageAckClosureStatus,
       supersededEvidence: postgresFinalHandoffClosurePackageAckSupersededEvidenceList(),
+    }
+  }
+  function closeoutExportReviewerList() {
+    return closeoutExportReviewers
+      .split(',')
+      .map((reviewer) => reviewer.trim())
+      .filter(Boolean)
+  }
+  function closeoutExportRequiredActions() {
+    const actions = [
+      closeoutExportMetrics.totalCloseouts > 0
+        ? null
+        : 'Retain at least one closure package acknowledgement closeout before exporting governance evidence.',
+      closeoutExportMetrics.closureSlaCloseouts > 0
+        ? null
+        : 'Retain Closure SLA follow-up closure package acknowledgement closeout evidence.',
+      closeoutExportMetrics.finalHandoffCloseouts > 0
+        ? null
+        : 'Retain final handoff closure package acknowledgement closeout evidence.',
+      closeoutExportMetrics.retryQueueCloseouts > 0
+        ? null
+        : 'Retain retry queue closure package acknowledgement closeout evidence.',
+      closeoutExportMetrics.rejected > 0
+        ? `Resolve ${closeoutExportMetrics.rejected} rejected closeout record(s) before governance closure.`
+        : null,
+      closeoutExportMetrics.deferred > 0
+        ? `Disposition ${closeoutExportMetrics.deferred} deferred closeout record(s) before final governance handoff.`
+        : null,
+      closeoutExportMetrics.closedWithActions > 0
+        ? `Confirm retained actions for ${closeoutExportMetrics.closedWithActions} closeout record(s).`
+        : null,
+    ]
+    return actions.filter((action): action is string => Boolean(action))
+  }
+  function buildCloseoutExportPackage(): ClosurePackageAcknowledgementCloseoutExportPackage {
+    const generatedAt = new Date().toISOString()
+    const reviewers = closeoutExportReviewerList()
+    const governanceReviewers = reviewers.length > 0 ? reviewers : ['Governance Reviewer']
+    const requiredActions = closeoutExportRequiredActions()
+    return {
+      packageId: `closure_package_acknowledgement_closeout_export:${generatedAt}`,
+      generatedAt,
+      governanceReviewers,
+      status: closeoutExportStatus,
+      closeoutRecords: {
+        closureSla: closureSlaFollowUpClosurePackageAcknowledgementClosureRecords,
+        finalHandoff: postgresCutoverFinalHandoffClosurePackageAcknowledgementClosureRecords,
+        retryQueue: notificationRetryQueueAcknowledgementClosurePackageAcknowledgementClosureRecords,
+      },
+      metrics: closeoutExportMetrics,
+      requiredActions,
+      reviewerNotes: closeoutExportNotes.trim() || 'No closure package acknowledgement closeout export notes recorded.',
+      sourceRecordCounts: {
+        closureSlaCloseouts: closureSlaFollowUpClosurePackageAcknowledgementClosureRecords.length,
+        finalHandoffCloseouts: postgresCutoverFinalHandoffClosurePackageAcknowledgementClosureRecords.length,
+        retryQueueCloseouts: notificationRetryQueueAcknowledgementClosurePackageAcknowledgementClosureRecords.length,
+      },
+      auditHistory: [
+        {
+          action: 'closure_package_acknowledgement_closeout_export_generated',
+          actor: governanceReviewers.join(', '),
+          timestamp: generatedAt,
+          status: closeoutExportStatus,
+          summary: `Closure package acknowledgement closeout export generated with ${closeoutExportMetrics.totalCloseouts} closeout record(s).`,
+        },
+      ],
+      evidence: `Closure package acknowledgement closeout export package generated for ${governanceReviewers.join(', ')} with ${closeoutExportMetrics.totalCloseouts} closeout record(s), ${closeoutExportMetrics.retainedActions} retained action(s), and ${requiredActions.length} required action(s).`,
     }
   }
   function retryQueueOperationsReviewerList() {
@@ -11455,6 +11620,82 @@ function BackendPersistenceView({
                     </div>
                   ) : (
                     <div className="empty-state compact">No retry queue acknowledgement closure package closeout has been retained yet.</div>
+                  )}
+                </div>
+                <div className="retry-aging-list">
+                  <div className="dashboard-heading">
+                    <h4>Closure package acknowledgement closeout export</h4>
+                    <StatusChip status={closeoutExportStatus} label={closeoutExportStatus} />
+                  </div>
+                  <div className="trace-review-grid">
+                    <label className="trace-review-rationale">
+                      <span>Governance reviewers</span>
+                      <textarea
+                        value={closeoutExportReviewers}
+                        onChange={(event) => setCloseoutExportReviewers(event.target.value)}
+                      />
+                    </label>
+                    <label className="trace-review-rationale">
+                      <span>Export package notes</span>
+                      <textarea
+                        value={closeoutExportNotes}
+                        onChange={(event) => setCloseoutExportNotes(event.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <div className="toolbar-actions notification-approval-actions">
+                    <button
+                      className="secondary-action"
+                      onClick={() =>
+                        onSaveClosurePackageAcknowledgementCloseoutExportPackage({
+                          download: false,
+                          packagePayload: buildCloseoutExportPackage(),
+                        })
+                      }
+                      type="button"
+                    >
+                      <ClipboardCheck size={15} />
+                      Save Closeout Export Package
+                    </button>
+                    <button
+                      className="primary-action"
+                      onClick={() =>
+                        onSaveClosurePackageAcknowledgementCloseoutExportPackage({
+                          download: true,
+                          packagePayload: buildCloseoutExportPackage(),
+                        })
+                      }
+                      type="button"
+                    >
+                      <Download size={15} />
+                      Save & Download Closeout Export
+                    </button>
+                  </div>
+                  <div className="metadata-grid">
+                    <Metadata
+                      label="Export packages"
+                      value={String(closurePackageAcknowledgementCloseoutExportPackageRecords.length)}
+                    />
+                    <Metadata label="Closeouts" value={String(closeoutExportMetrics.totalCloseouts)} />
+                    <Metadata label="Closure SLA" value={String(closeoutExportMetrics.closureSlaCloseouts)} />
+                    <Metadata label="Final handoff" value={String(closeoutExportMetrics.finalHandoffCloseouts)} />
+                    <Metadata label="Retry queue" value={String(closeoutExportMetrics.retryQueueCloseouts)} />
+                    <Metadata label="Retained actions" value={String(closeoutExportMetrics.retainedActions)} />
+                    <Metadata label="Required actions" value={String(closeoutExportRequiredActions().length)} />
+                  </div>
+                  {latestCloseoutExportPackage ? (
+                    <div className="connector-run-row">
+                      <div>
+                        <strong>{latestCloseoutExportPackage.payload.governanceReviewers.join(', ')}</strong>
+                        <span>
+                          v{latestCloseoutExportPackage.version} / {new Date(latestCloseoutExportPackage.createdAt).toLocaleString()} / {latestCloseoutExportPackage.payload.metrics.totalCloseouts} closeout record(s)
+                        </span>
+                        <small>{latestCloseoutExportPackage.payload.evidence}</small>
+                      </div>
+                      <StatusChip status={latestCloseoutExportPackage.status} label={latestCloseoutExportPackage.status} />
+                    </div>
+                  ) : (
+                    <div className="empty-state compact">No closure package acknowledgement closeout export package has been retained yet.</div>
                   )}
                 </div>
               </div>

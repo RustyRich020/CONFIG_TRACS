@@ -436,6 +436,8 @@ Notification retry queue acknowledgement closure package delivery acknowledgemen
 
 Notification retry queue acknowledgement closure package acknowledgement closeouts are persisted as `notification_retry_queue_acknowledgement_closure_package_acknowledgement_closure` records. Each closeout retains retry queue closure package acknowledgement records, related closure packages, package delivery evidence, acknowledgement readiness metrics, retained actions, closeout notes, superseded acknowledgement evidence, source record counts, and audit history. Closeout records do not mutate acknowledgement, closure package, delivery, retry queue package, or retry-control records; they provide append-only notification operations closeout evidence after retry queue closure package reviewer responses have been dispositioned.
 
+Closure package acknowledgement closeout export packages are persisted as `closure_package_acknowledgement_closeout_export_package` records. Each package consolidates Closure SLA follow-up closure package acknowledgement closeouts, production final handoff closure package acknowledgement closeouts, and notification retry queue closure package acknowledgement closeouts into one governance export artifact. The package retains source closeout records, source-specific counts, disposition metrics, retained action totals, superseded acknowledgement totals, delivery evidence counts, required actions, reviewer notes, and package audit history. Export packages can be downloaded as JSON and do not mutate any source closeout, acknowledgement, package, delivery, retry-control, or route records.
+
 ## GitHub Implementation Plan
 
 1. Create branch: `codex/backend-persistence-adapter-contracts`

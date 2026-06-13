@@ -185,6 +185,7 @@ export type SavedVersionKind =
   | 'notification_retry_queue_acknowledgement_closure_package'
   | 'notification_retry_queue_acknowledgement_closure_package_acknowledgement'
   | 'notification_retry_queue_acknowledgement_closure_package_acknowledgement_closure'
+  | 'closure_package_acknowledgement_closeout_export_package'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -245,6 +246,7 @@ export type BackendRecordKind =
   | 'notification_retry_queue_acknowledgement_closure_package'
   | 'notification_retry_queue_acknowledgement_closure_package_acknowledgement'
   | 'notification_retry_queue_acknowledgement_closure_package_acknowledgement_closure'
+  | 'closure_package_acknowledgement_closeout_export_package'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -1889,6 +1891,46 @@ export type ClosureSlaFollowUpClosurePackageAcknowledgementClosure = {
     actor: string
     timestamp: string
     status: ClosureSlaResponseFollowUpClosureStatus
+    summary: string
+  }>
+  evidence: string
+}
+
+export type ClosurePackageAcknowledgementCloseoutExportPackage = {
+  packageId: string
+  generatedAt: string
+  governanceReviewers: string[]
+  status: StatusLevel
+  closeoutRecords: {
+    closureSla: Array<BackendRecord<ClosureSlaFollowUpClosurePackageAcknowledgementClosure>>
+    finalHandoff: Array<BackendRecord<PostgresCutoverFinalHandoffClosurePackageAcknowledgementClosure>>
+    retryQueue: Array<BackendRecord<NotificationRetryQueueAcknowledgementClosurePackageAcknowledgementClosure>>
+  }
+  metrics: {
+    totalCloseouts: number
+    closureSlaCloseouts: number
+    finalHandoffCloseouts: number
+    retryQueueCloseouts: number
+    closed: number
+    closedWithActions: number
+    rejected: number
+    deferred: number
+    retainedActions: number
+    supersededAcknowledgements: number
+    deliveryEvidenceRecords: number
+  }
+  requiredActions: string[]
+  reviewerNotes: string
+  sourceRecordCounts: {
+    closureSlaCloseouts: number
+    finalHandoffCloseouts: number
+    retryQueueCloseouts: number
+  }
+  auditHistory: Array<{
+    action: 'closure_package_acknowledgement_closeout_export_generated'
+    actor: string
+    timestamp: string
+    status: StatusLevel
     summary: string
   }>
   evidence: string
