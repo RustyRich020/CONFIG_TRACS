@@ -440,6 +440,8 @@ Closure package acknowledgement closeout export packages are persisted as `closu
 
 Closure package acknowledgement closeout export package notifications reuse the guarded notification delivery adapter with source `closure_package_acknowledgement_closeout_export_package`. The Backend workspace can save a fresh closeout export package and deliver it to retained infrastructure and governance owners, producing delivery evidence for email, Teams, and SharePoint folder channels while keeping source closeouts and export packages append-only. The source is also available in delivery retry controls for governed retry planning and execution.
 
+Closure package acknowledgement closeout export package delivery acknowledgements are persisted as `closure_package_acknowledgement_closeout_export_package_acknowledgement` records. Each acknowledgement links to the delivered closeout export package notification, retains reviewer role, response status, closeout-ready disposition, requested actions, source package metrics, source required actions, closeout count, delivery evidence count, channel summary, response notes, and audit history. Acknowledgement records do not mutate source closeouts, export packages, notification deliveries, or retry-control records; they provide append-only reviewer response evidence before closeout export package acknowledgement closure.
+
 ## GitHub Implementation Plan
 
 1. Create branch: `codex/backend-persistence-adapter-contracts`

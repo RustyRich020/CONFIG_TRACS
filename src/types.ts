@@ -186,6 +186,7 @@ export type SavedVersionKind =
   | 'notification_retry_queue_acknowledgement_closure_package_acknowledgement'
   | 'notification_retry_queue_acknowledgement_closure_package_acknowledgement_closure'
   | 'closure_package_acknowledgement_closeout_export_package'
+  | 'closure_package_acknowledgement_closeout_export_package_acknowledgement'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -247,6 +248,7 @@ export type BackendRecordKind =
   | 'notification_retry_queue_acknowledgement_closure_package_acknowledgement'
   | 'notification_retry_queue_acknowledgement_closure_package_acknowledgement_closure'
   | 'closure_package_acknowledgement_closeout_export_package'
+  | 'closure_package_acknowledgement_closeout_export_package_acknowledgement'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -1932,6 +1934,38 @@ export type ClosurePackageAcknowledgementCloseoutExportPackage = {
     actor: string
     timestamp: string
     status: StatusLevel
+    summary: string
+  }>
+  evidence: string
+}
+
+export type ClosurePackageAcknowledgementCloseoutExportPackageAcknowledgement = {
+  acknowledgementId: string
+  acknowledgedAt: string
+  deliveryRecordId: string
+  deliveryId: string
+  deliverySubject: string
+  packageRecordId?: string
+  packageId?: string
+  packageVersion?: number
+  reviewer: string
+  reviewerRole: 'governance_reviewer' | 'infrastructure_owner' | 'notification_operations' | 'platform_owner'
+  status: ClosureSlaDeliveryAcknowledgementStatus
+  closeoutReady: boolean
+  responseNotes: string
+  requestedActions: string[]
+  channelSummary: string
+  packageStatus?: StatusLevel
+  sourceMetrics?: ClosurePackageAcknowledgementCloseoutExportPackage['metrics']
+  sourceRequiredActions: string[]
+  sourceCloseoutCount: number
+  sourceDeliveryEvidenceCount: number
+  auditHistory: Array<{
+    action: 'closure_package_acknowledgement_closeout_export_acknowledged'
+    actor: string
+    timestamp: string
+    status: ClosureSlaDeliveryAcknowledgementStatus
+    closeoutReady: boolean
     summary: string
   }>
   evidence: string
