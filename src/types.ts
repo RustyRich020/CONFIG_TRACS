@@ -184,6 +184,7 @@ export type SavedVersionKind =
   | 'notification_retry_queue_acknowledgement'
   | 'notification_retry_queue_acknowledgement_closure_package'
   | 'notification_retry_queue_acknowledgement_closure_package_acknowledgement'
+  | 'notification_retry_queue_acknowledgement_closure_package_acknowledgement_closure'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -243,6 +244,7 @@ export type BackendRecordKind =
   | 'notification_retry_queue_acknowledgement'
   | 'notification_retry_queue_acknowledgement_closure_package'
   | 'notification_retry_queue_acknowledgement_closure_package_acknowledgement'
+  | 'notification_retry_queue_acknowledgement_closure_package_acknowledgement_closure'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -1476,6 +1478,53 @@ export type NotificationRetryQueueAcknowledgementClosurePackageAcknowledgement =
     timestamp: string
     status: NotificationRetryQueueAcknowledgementStatus
     closureReady: boolean
+    summary: string
+  }>
+  evidence: string
+}
+
+export type NotificationRetryQueueAcknowledgementClosurePackageAcknowledgementClosure = {
+  closureId: string
+  closedAt: string
+  reviewer: string
+  status: PostgresCutoverReminderClosureStatus
+  acknowledgementRecords: Array<BackendRecord<NotificationRetryQueueAcknowledgementClosurePackageAcknowledgement>>
+  closurePackages: Array<BackendRecord<NotificationRetryQueueAcknowledgementClosurePackage>>
+  deliveryEvidence: Array<BackendRecord<{
+    request: NotificationDeliveryPayload
+    result: NotificationDeliveryResult
+  }>>
+  metrics: {
+    totalAcknowledgements: number
+    acknowledged: number
+    acknowledgedWithActions: number
+    changesRequested: number
+    rejected: number
+    closureReady: number
+    retainedActions: number
+  }
+  retainedActions: string[]
+  closureNotes: string
+  supersededEvidence: string[]
+  supersededAcknowledgements: Array<{
+    acknowledgementId: string
+    reviewer: string
+    reviewerRole: NotificationRetryQueueAcknowledgement['reviewerRole']
+    status: NotificationRetryQueueAcknowledgementStatus
+    acknowledgedAt: string
+    evidence: string
+  }>
+  sourceRecordCounts: {
+    acknowledgementRecords: number
+    closurePackages: number
+    deliveryRecords: number
+    supersededAcknowledgements: number
+  }
+  auditHistory: Array<{
+    action: 'retry_queue_acknowledgement_closure_package_acknowledgement_closed'
+    actor: string
+    timestamp: string
+    status: PostgresCutoverReminderClosureStatus
     summary: string
   }>
   evidence: string

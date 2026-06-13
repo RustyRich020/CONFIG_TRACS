@@ -95,6 +95,7 @@ import type {
   NotificationRetryQueueAcknowledgement,
   NotificationRetryQueueAcknowledgementClosurePackage,
   NotificationRetryQueueAcknowledgementClosurePackageAcknowledgement,
+  NotificationRetryQueueAcknowledgementClosurePackageAcknowledgementClosure,
   NotificationRetryQueueAcknowledgementStatus,
   NotificationRetryQueueExportPackage,
   PostgresCutoverApproval,
@@ -2654,6 +2655,124 @@ function App() {
     return saved
   }
 
+  async function saveNotificationRetryQueueAcknowledgementClosurePackageAcknowledgementClosure({
+    closureNotes,
+    retainedActions,
+    reviewer,
+    status,
+    supersededEvidence,
+  }: {
+    closureNotes: string
+    retainedActions: string[]
+    reviewer: string
+    status: PostgresCutoverReminderClosureStatus
+    supersededEvidence: string[]
+  }) {
+    const closedAt = new Date().toISOString()
+    const reviewerName = reviewer.trim() || 'Notification Operations Reviewer'
+    const acknowledgementRecords = backendRecords.filter(
+      (record): record is BackendRecord<NotificationRetryQueueAcknowledgementClosurePackageAcknowledgement> =>
+        record.kind === 'notification_retry_queue_acknowledgement_closure_package_acknowledgement',
+    )
+    const closurePackages = backendRecords.filter(
+      (record): record is BackendRecord<NotificationRetryQueueAcknowledgementClosurePackage> =>
+        record.kind === 'notification_retry_queue_acknowledgement_closure_package',
+    )
+    const deliveryEvidence = backendRecords.filter(
+      (record): record is BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }> => {
+        if (record.kind !== 'notification_delivery') return false
+        const payload = record.payload as { request?: NotificationDeliveryPayload }
+        return payload.request?.source === 'notification_retry_queue_acknowledgement_closure_package'
+      },
+    )
+    const metrics = acknowledgementRecords.reduce(
+      (summary, record) => {
+        summary.totalAcknowledgements += 1
+        if (record.payload.status === 'acknowledged') summary.acknowledged += 1
+        if (record.payload.status === 'acknowledged_with_actions') summary.acknowledgedWithActions += 1
+        if (record.payload.status === 'changes_requested') summary.changesRequested += 1
+        if (record.payload.status === 'rejected') summary.rejected += 1
+        if (record.payload.closureReady) summary.closureReady += 1
+        summary.retainedActions += record.payload.requestedActions.length
+        return summary
+      },
+      {
+        totalAcknowledgements: 0,
+        acknowledged: 0,
+        acknowledgedWithActions: 0,
+        changesRequested: 0,
+        rejected: 0,
+        closureReady: 0,
+        retainedActions: 0,
+      },
+    )
+    const sourceActions = acknowledgementRecords.flatMap((record) => record.payload.requestedActions)
+    const actions = [...sourceActions, ...retainedActions]
+      .map((action) => action.trim())
+      .filter((action, index, values) => action.length > 0 && values.indexOf(action) === index)
+    const supersededAcknowledgements = acknowledgementRecords.slice(1).map((record) => ({
+      acknowledgementId: record.payload.acknowledgementId,
+      reviewer: record.payload.reviewer,
+      reviewerRole: record.payload.reviewerRole,
+      status: record.payload.status,
+      acknowledgedAt: record.payload.acknowledgedAt,
+      evidence: record.payload.evidence,
+    }))
+    const payload: NotificationRetryQueueAcknowledgementClosurePackageAcknowledgementClosure = {
+      closureId: `notification_retry_queue_acknowledgement_closure_package_ack_closure:${closedAt}`,
+      closedAt,
+      reviewer: reviewerName,
+      status,
+      acknowledgementRecords,
+      closurePackages,
+      deliveryEvidence,
+      metrics,
+      retainedActions: actions,
+      closureNotes: closureNotes.trim() || 'No retry queue acknowledgement closure package acknowledgement closeout notes recorded.',
+      supersededEvidence,
+      supersededAcknowledgements,
+      sourceRecordCounts: {
+        acknowledgementRecords: acknowledgementRecords.length,
+        closurePackages: closurePackages.length,
+        deliveryRecords: deliveryEvidence.length,
+        supersededAcknowledgements: supersededAcknowledgements.length,
+      },
+      auditHistory: [
+        {
+          action: 'retry_queue_acknowledgement_closure_package_acknowledgement_closed',
+          actor: reviewerName,
+          timestamp: closedAt,
+          status,
+          summary: `${reviewerName} recorded ${postgresCutoverReminderClosureLabel(status)} closeout for retry queue acknowledgement closure package acknowledgements.`,
+        },
+      ],
+      evidence: `${reviewerName} recorded ${postgresCutoverReminderClosureLabel(status)} closeout for ${acknowledgementRecords.length} retry queue acknowledgement closure package acknowledgement record(s) with ${actions.length} retained action(s) and ${supersededEvidence.length} superseded evidence note(s).`,
+    }
+    const saved = await backendClient.saveRecord({
+      kind: 'notification_retry_queue_acknowledgement_closure_package_acknowledgement_closure',
+      label: 'Retry queue acknowledgement closure package acknowledgement closeout',
+      status: postgresCutoverReminderClosureStatusLevel(status),
+      summary: payload.evidence,
+      payload,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'notification_retry_queue_acknowledgement_closure_package_acknowledgement_closure',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record(
+      'notification',
+      'retry_queue_acknowledgement_closure_package_acknowledgement_closure',
+      `Notification retry queue acknowledgement closure package acknowledgement closeout saved as backend record v${saved.version}.`,
+    )
+    return saved
+  }
+
   async function runNotificationSmokeFixtures() {
     const result = await backendClient.runNotificationSmokeFixtures()
     await refreshBackend()
@@ -5138,6 +5257,10 @@ function App() {
               (record): record is BackendRecord<NotificationRetryQueueAcknowledgementClosurePackageAcknowledgement> =>
                 record.kind === 'notification_retry_queue_acknowledgement_closure_package_acknowledgement',
             )}
+            notificationRetryQueueAcknowledgementClosurePackageAcknowledgementClosureRecords={backendRecords.filter(
+              (record): record is BackendRecord<NotificationRetryQueueAcknowledgementClosurePackageAcknowledgementClosure> =>
+                record.kind === 'notification_retry_queue_acknowledgement_closure_package_acknowledgement_closure',
+            )}
             closureSlaExportPackageRecords={backendRecords.filter(
               (record): record is BackendRecord<ClosureSlaExportPackage> =>
                 record.kind === 'closure_sla_export_package',
@@ -5236,6 +5359,9 @@ function App() {
             onSaveNotificationRetryQueueAcknowledgement={saveNotificationRetryQueueAcknowledgement}
             onSaveNotificationRetryQueueAcknowledgementClosurePackageAcknowledgement={
               saveNotificationRetryQueueAcknowledgementClosurePackageAcknowledgement
+            }
+            onSaveNotificationRetryQueueAcknowledgementClosurePackageAcknowledgementClosure={
+              saveNotificationRetryQueueAcknowledgementClosurePackageAcknowledgementClosure
             }
             onSaveNotificationRetryQueueAcknowledgementClosurePackage={saveNotificationRetryQueueAcknowledgementClosurePackage}
             onSaveNotificationApprovalRenewalClosure={saveNotificationApprovalRenewalClosure}
@@ -5896,6 +6022,7 @@ function BackendPersistenceView({
   notificationDeliveryRetryRecords,
   notificationRetryQueueAcknowledgementRecords,
   notificationRetryQueueAcknowledgementClosurePackageAcknowledgementRecords,
+  notificationRetryQueueAcknowledgementClosurePackageAcknowledgementClosureRecords,
   notificationRetryQueueAcknowledgementClosurePackageRecords,
   notificationRetryQueueExportPackageRecords,
   notificationRenewalRecords,
@@ -5933,6 +6060,7 @@ function BackendPersistenceView({
   onSaveNotificationDeliveryRetryControl,
   onSaveNotificationRetryQueueAcknowledgement,
   onSaveNotificationRetryQueueAcknowledgementClosurePackageAcknowledgement,
+  onSaveNotificationRetryQueueAcknowledgementClosurePackageAcknowledgementClosure,
   onSaveNotificationRetryQueueAcknowledgementClosurePackage,
   onSaveNotificationRetryQueueExportPackage,
   onSaveNotificationApprovalRenewalClosure,
@@ -5971,6 +6099,7 @@ function BackendPersistenceView({
   notificationDeliveryRetryRecords: BackendRecord<NotificationDeliveryRetryControl>[]
   notificationRetryQueueAcknowledgementRecords: BackendRecord<NotificationRetryQueueAcknowledgement>[]
   notificationRetryQueueAcknowledgementClosurePackageAcknowledgementRecords: BackendRecord<NotificationRetryQueueAcknowledgementClosurePackageAcknowledgement>[]
+  notificationRetryQueueAcknowledgementClosurePackageAcknowledgementClosureRecords: BackendRecord<NotificationRetryQueueAcknowledgementClosurePackageAcknowledgementClosure>[]
   notificationRetryQueueAcknowledgementClosurePackageRecords: BackendRecord<NotificationRetryQueueAcknowledgementClosurePackage>[]
   notificationRetryQueueExportPackageRecords: BackendRecord<NotificationRetryQueueExportPackage>[]
   notificationRenewalRecords: BackendRecord<NotificationApprovalRenewalRoute>[]
@@ -6118,6 +6247,13 @@ function BackendPersistenceView({
     reviewer: string
     reviewerRole: NotificationRetryQueueAcknowledgementClosurePackageAcknowledgement['reviewerRole']
     status: NotificationRetryQueueAcknowledgementStatus
+  }) => void
+  onSaveNotificationRetryQueueAcknowledgementClosurePackageAcknowledgementClosure: (request: {
+    closureNotes: string
+    retainedActions: string[]
+    reviewer: string
+    status: PostgresCutoverReminderClosureStatus
+    supersededEvidence: string[]
   }) => void
   onSaveNotificationRetryQueueAcknowledgementClosurePackage: (request: {
     download: boolean
@@ -6498,6 +6634,19 @@ function BackendPersistenceView({
   const [retryQueueClosurePackageAckNotes, setRetryQueueClosurePackageAckNotes] = useState(
     'Notification operations owner acknowledged the retry queue acknowledgement closure package delivery and retained closeout response evidence.',
   )
+  const [retryQueueClosurePackageAckClosureReviewer, setRetryQueueClosurePackageAckClosureReviewer] =
+    useState('Notification Operations Owner')
+  const [retryQueueClosurePackageAckClosureStatus, setRetryQueueClosurePackageAckClosureStatus] =
+    useState<PostgresCutoverReminderClosureStatus>('closed_with_actions')
+  const [retryQueueClosurePackageAckClosureActions, setRetryQueueClosurePackageAckClosureActions] = useState(
+    'Confirm retry queue acknowledgement closure package actions are dispositioned before notification operations closeout.',
+  )
+  const [retryQueueClosurePackageAckClosureNotes, setRetryQueueClosurePackageAckClosureNotes] = useState(
+    'Closeout retained retry queue acknowledgement closure package acknowledgements, delivery evidence, readiness disposition, and retained actions for notification operations review.',
+  )
+  const [retryQueueClosurePackageAckSupersededEvidence, setRetryQueueClosurePackageAckSupersededEvidence] = useState(
+    'Prior retry queue acknowledgement closure package acknowledgements retained as superseded evidence.',
+  )
   const [retryQueueMeasuredAt] = useState(() => new Date())
   const recordCounts = backendRecords.reduce(
     (summary, record) => {
@@ -6799,12 +6948,46 @@ function BackendPersistenceView({
   const latestRetryQueueAcknowledgementClosurePackage = notificationRetryQueueAcknowledgementClosurePackageRecords[0]
   const latestRetryQueueAcknowledgementClosurePackageAcknowledgement =
     notificationRetryQueueAcknowledgementClosurePackageAcknowledgementRecords[0]
+  const latestRetryQueueAcknowledgementClosurePackageAcknowledgementClosure =
+    notificationRetryQueueAcknowledgementClosurePackageAcknowledgementClosureRecords[0]
   const latestRetryQueueAcknowledgementClosurePackageDelivery = retryQueueAcknowledgementClosurePackageDeliveryRecords[0]
   const retryQueueAcknowledgementClosurePackageAcknowledgedDeliveryIds = new Set(
     notificationRetryQueueAcknowledgementClosurePackageAcknowledgementRecords.map(
       (record) => record.payload.deliveryRecordId,
     ),
   )
+  const retryQueueAcknowledgementClosurePackageAcknowledgementClosureMetrics =
+    notificationRetryQueueAcknowledgementClosurePackageAcknowledgementRecords.reduce(
+      (summary, record) => {
+        summary.totalAcknowledgements += 1
+        if (record.payload.status === 'acknowledged') summary.acknowledged += 1
+        if (record.payload.status === 'acknowledged_with_actions') summary.acknowledgedWithActions += 1
+        if (record.payload.status === 'changes_requested') summary.changesRequested += 1
+        if (record.payload.status === 'rejected') summary.rejected += 1
+        if (record.payload.closureReady) summary.closureReady += 1
+        summary.retainedActions += record.payload.requestedActions.length
+        return summary
+      },
+      {
+        totalAcknowledgements: 0,
+        acknowledged: 0,
+        acknowledgedWithActions: 0,
+        changesRequested: 0,
+        rejected: 0,
+        closureReady: 0,
+        retainedActions: 0,
+      },
+    )
+  const retryQueueAcknowledgementClosurePackageAcknowledgementClosureStatus: StatusLevel =
+    retryQueueAcknowledgementClosurePackageAcknowledgementClosureMetrics.rejected > 0
+      ? 'blocking'
+      : retryQueueAcknowledgementClosurePackageAcknowledgementClosureMetrics.totalAcknowledgements === 0 ||
+          retryQueueAcknowledgementClosurePackageAcknowledgementClosureMetrics.acknowledgedWithActions > 0 ||
+          retryQueueAcknowledgementClosurePackageAcknowledgementClosureMetrics.changesRequested > 0 ||
+          retryQueueAcknowledgementClosurePackageAcknowledgementClosureMetrics.closureReady <
+            retryQueueAcknowledgementClosurePackageAcknowledgementClosureMetrics.totalAcknowledgements
+        ? 'warning'
+        : 'pass'
   const latestRetryQueuePackageDelivery = retryQueuePackageDeliveryRecords[0]
   const openRetryQueuePackageDeliveryCount = retryQueuePackageDeliveryRecords.filter(
     (record) => !retryQueueAcknowledgedDeliveryIds.has(record.id),
@@ -7388,6 +7571,18 @@ function BackendPersistenceView({
       .map((action) => action.trim())
       .filter(Boolean)
   }
+  function retryQueueAcknowledgementClosurePackageAckClosureActionList() {
+    return retryQueueClosurePackageAckClosureActions
+      .split('\n')
+      .map((action) => action.trim())
+      .filter(Boolean)
+  }
+  function retryQueueAcknowledgementClosurePackageAckSupersededEvidenceList() {
+    return retryQueueClosurePackageAckSupersededEvidence
+      .split('\n')
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+  }
   function retryQueueClosurePackageReviewerList() {
     return retryQueueClosurePackageReviewers
       .split(',')
@@ -7462,6 +7657,15 @@ function BackendPersistenceView({
       reviewer: retryQueueClosurePackageAckReviewer,
       reviewerRole: retryQueueClosurePackageAckReviewerRole,
       status: retryQueueClosurePackageAckStatus,
+    }
+  }
+  function retryQueueAcknowledgementClosurePackageAcknowledgementClosureRequest() {
+    return {
+      closureNotes: retryQueueClosurePackageAckClosureNotes,
+      retainedActions: retryQueueAcknowledgementClosurePackageAckClosureActionList(),
+      reviewer: retryQueueClosurePackageAckClosureReviewer,
+      status: retryQueueClosurePackageAckClosureStatus,
+      supersededEvidence: retryQueueAcknowledgementClosurePackageAckSupersededEvidenceList(),
     }
   }
   function retryQueueRequiredActions() {
@@ -11136,6 +11340,121 @@ function BackendPersistenceView({
                     </div>
                   ) : (
                     <div className="empty-state compact">No retry queue acknowledgement closure package acknowledgement has been retained yet.</div>
+                  )}
+                </div>
+                <div className="retry-aging-list">
+                  <div className="dashboard-heading">
+                    <h4>Retry queue closure acknowledgement closeout</h4>
+                    <StatusChip
+                      status={postgresCutoverReminderClosureStatusLevel(retryQueueClosurePackageAckClosureStatus)}
+                      label={postgresCutoverReminderClosureLabel(retryQueueClosurePackageAckClosureStatus)}
+                    />
+                  </div>
+                  <div className="trace-review-grid">
+                    <label>
+                      <span>Closeout reviewer</span>
+                      <input
+                        value={retryQueueClosurePackageAckClosureReviewer}
+                        onChange={(event) => setRetryQueueClosurePackageAckClosureReviewer(event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>Closeout disposition</span>
+                      <select
+                        value={retryQueueClosurePackageAckClosureStatus}
+                        onChange={(event) =>
+                          setRetryQueueClosurePackageAckClosureStatus(
+                            event.target.value as PostgresCutoverReminderClosureStatus,
+                          )
+                        }
+                      >
+                        <option value="closed">Closed</option>
+                        <option value="closed_with_actions">Closed with actions</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="deferred">Deferred</option>
+                      </select>
+                    </label>
+                    <label className="trace-review-rationale">
+                      <span>Retained closeout actions</span>
+                      <textarea
+                        value={retryQueueClosurePackageAckClosureActions}
+                        onChange={(event) => setRetryQueueClosurePackageAckClosureActions(event.target.value)}
+                      />
+                    </label>
+                    <label className="trace-review-rationale">
+                      <span>Closeout notes</span>
+                      <textarea
+                        value={retryQueueClosurePackageAckClosureNotes}
+                        onChange={(event) => setRetryQueueClosurePackageAckClosureNotes(event.target.value)}
+                      />
+                    </label>
+                    <label className="trace-review-rationale">
+                      <span>Superseded acknowledgement evidence</span>
+                      <textarea
+                        value={retryQueueClosurePackageAckSupersededEvidence}
+                        onChange={(event) => setRetryQueueClosurePackageAckSupersededEvidence(event.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <div className="toolbar-actions notification-approval-actions">
+                    <button
+                      className="primary-action"
+                      disabled={notificationRetryQueueAcknowledgementClosurePackageAcknowledgementRecords.length === 0}
+                      onClick={() =>
+                        onSaveNotificationRetryQueueAcknowledgementClosurePackageAcknowledgementClosure(
+                          retryQueueAcknowledgementClosurePackageAcknowledgementClosureRequest(),
+                        )
+                      }
+                      type="button"
+                    >
+                      <ClipboardCheck size={15} />
+                      Save Retry Queue Closeout
+                    </button>
+                  </div>
+                  <div className="metadata-grid">
+                    <Metadata
+                      label="Closeouts"
+                      value={String(notificationRetryQueueAcknowledgementClosurePackageAcknowledgementClosureRecords.length)}
+                    />
+                    <Metadata
+                      label="Acknowledgements"
+                      value={String(retryQueueAcknowledgementClosurePackageAcknowledgementClosureMetrics.totalAcknowledgements)}
+                    />
+                    <Metadata
+                      label="Closure ready"
+                      value={String(retryQueueAcknowledgementClosurePackageAcknowledgementClosureMetrics.closureReady)}
+                    />
+                    <Metadata
+                      label="Retained actions"
+                      value={String(retryQueueAcknowledgementClosurePackageAcknowledgementClosureMetrics.retainedActions)}
+                    />
+                    <Metadata
+                      label="Closeout status"
+                      value={retryQueueAcknowledgementClosurePackageAcknowledgementClosureStatus}
+                    />
+                    <Metadata
+                      label="Superseded notes"
+                      value={String(retryQueueAcknowledgementClosurePackageAckSupersededEvidenceList().length)}
+                    />
+                  </div>
+                  {latestRetryQueueAcknowledgementClosurePackageAcknowledgementClosure ? (
+                    <div className="connector-run-row">
+                      <div>
+                        <strong>{latestRetryQueueAcknowledgementClosurePackageAcknowledgementClosure.payload.reviewer}</strong>
+                        <span>
+                          v{latestRetryQueueAcknowledgementClosurePackageAcknowledgementClosure.version} / {postgresCutoverReminderClosureLabel(latestRetryQueueAcknowledgementClosurePackageAcknowledgementClosure.payload.status)} / {new Date(latestRetryQueueAcknowledgementClosurePackageAcknowledgementClosure.createdAt).toLocaleString()}
+                        </span>
+                        <small>{latestRetryQueueAcknowledgementClosurePackageAcknowledgementClosure.payload.evidence}</small>
+                      </div>
+                      <StatusChip
+                        status={latestRetryQueueAcknowledgementClosurePackageAcknowledgementClosure.status}
+                        label={postgresCutoverReminderClosureLabel(
+                          latestRetryQueueAcknowledgementClosurePackageAcknowledgementClosure.payload.status,
+                        )}
+                      />
+                    </div>
+                  ) : (
+                    <div className="empty-state compact">No retry queue acknowledgement closure package closeout has been retained yet.</div>
                   )}
                 </div>
               </div>
