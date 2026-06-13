@@ -194,6 +194,7 @@ export type SavedVersionKind =
   | 'closure_sla_response_follow_up_closure'
   | 'closure_sla_follow_up_closure_export_package'
   | 'closure_sla_follow_up_closure_package_acknowledgement'
+  | 'closure_sla_follow_up_closure_package_acknowledgement_closure'
   | 'traceability_export_review'
   | 'traceability_delivery_response'
   | 'traceability_response_closure_route'
@@ -251,6 +252,7 @@ export type BackendRecordKind =
   | 'closure_sla_response_follow_up_closure'
   | 'closure_sla_follow_up_closure_export_package'
   | 'closure_sla_follow_up_closure_package_acknowledgement'
+  | 'closure_sla_follow_up_closure_package_acknowledgement_closure'
   | 'traceability_export_review'
   | 'traceability_delivery_response'
   | 'traceability_response_closure_route'
@@ -1743,6 +1745,52 @@ export type ClosureSlaFollowUpClosurePackageAcknowledgement = {
     timestamp: string
     status: ClosureSlaDeliveryAcknowledgementStatus
     closureReady: boolean
+    summary: string
+  }>
+  evidence: string
+}
+
+export type ClosureSlaFollowUpClosurePackageAcknowledgementClosure = {
+  closureId: string
+  closedAt: string
+  reviewer: string
+  status: ClosureSlaResponseFollowUpClosureStatus
+  acknowledgementRecords: Array<BackendRecord<ClosureSlaFollowUpClosurePackageAcknowledgement>>
+  closurePackages: Array<BackendRecord<ClosureSlaFollowUpClosureExportPackage>>
+  deliveryEvidence: Array<BackendRecord<{
+    request: NotificationDeliveryPayload
+    result: NotificationDeliveryResult
+  }>>
+  metrics: {
+    totalAcknowledgements: number
+    acknowledged: number
+    approved: number
+    changesRequested: number
+    rejected: number
+    closureReady: number
+    retainedActions: number
+  }
+  retainedActions: string[]
+  closureNotes: string
+  supersededEvidence: string[]
+  supersededAcknowledgements: Array<{
+    acknowledgementId: string
+    reviewer: string
+    status: ClosureSlaDeliveryAcknowledgementStatus
+    acknowledgedAt: string
+    evidence: string
+  }>
+  sourceRecordCounts: {
+    acknowledgementRecords: number
+    closurePackages: number
+    deliveryRecords: number
+    supersededAcknowledgements: number
+  }
+  auditHistory: Array<{
+    action: 'closure_sla_follow_up_closure_package_acknowledgement_closed'
+    actor: string
+    timestamp: string
+    status: ClosureSlaResponseFollowUpClosureStatus
     summary: string
   }>
   evidence: string
