@@ -150,6 +150,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Delivers closeout acknowledgement final acknowledgement closeout evidence to governance reviewers with retained notification evidence.
 - Captures final acknowledgement closeout delivery acknowledgements with reviewer response and retained actions.
 - Retains final acknowledgement closeout acknowledgement closure evidence with delivery acknowledgements, delivery evidence, retained actions, and superseded acknowledgement evidence.
+- Delivers final acknowledgement closeout acknowledgement closure evidence to governance reviewers with retained notification evidence.
 - Exports Closure SLA follow-up closure packages with retained actions, superseded routes, and notification evidence.
 - Delivers Closure SLA follow-up closure packages to governance reviewers with retained delivery evidence.
 - Captures Closure SLA follow-up closure package delivery acknowledgements with reviewer response and retained actions.
@@ -306,6 +307,6 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add closeout acknowledgement closure package acknowledgement closeout final acknowledgement closeout acknowledgement closure notification delivery.
-2. Add closeout acknowledgement closure package acknowledgement closeout final acknowledgement closeout acknowledgement closure delivery acknowledgement tracking.
-3. Add closeout acknowledgement closure package acknowledgement closeout final acknowledgement closeout acknowledgement closure final evidence.
+1. Add closeout acknowledgement closure package acknowledgement closeout final acknowledgement closeout acknowledgement closure delivery acknowledgement tracking.
+2. Add closeout acknowledgement closure package acknowledgement closeout final acknowledgement closeout acknowledgement closure final evidence.
+3. Add closeout acknowledgement closure package acknowledgement closeout final acknowledgement closeout acknowledgement closure final notification delivery.
