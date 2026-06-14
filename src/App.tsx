@@ -726,6 +726,7 @@ function deliverySourceLabel(source: NotificationDeliveryPayload['source']) {
   if (source === 'closure_package_acknowledgement_closeout_export_package') return 'Closeout export package'
   if (source === 'closure_package_acknowledgement_closeout_notification_closure_package') return 'Closeout notification closure package'
   if (source === 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package') return 'Closeout acknowledgement closeout package'
+  if (source === 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_acknowledgement_final_evidence') return 'Closeout acknowledgement final evidence'
   if (source === 'closure_sla_export_package') return 'Closure SLA package'
   if (source === 'closure_sla_response_follow_up') return 'Closure SLA follow-up'
   if (source === 'closure_sla_follow_up_closure_export_package') return 'Closure SLA follow-up closure package'
@@ -3621,12 +3622,14 @@ function App() {
   }
 
   async function saveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence({
+    download = false,
     finalEvidenceNotes,
     retainedActions,
     reviewer,
     status,
     supersededEvidence,
   }: {
+    download?: boolean
     finalEvidenceNotes: string
     retainedActions: string[]
     reviewer: string
@@ -3740,12 +3743,63 @@ function App() {
         payload: saved,
       }),
     )
+    if (download) {
+      downloadJson('tracs-closeout-acknowledgement-final-evidence.json', payload)
+    }
     record(
       'notification',
-      'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_acknowledgement_final_evidence',
+      download
+        ? 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_acknowledgement_final_evidence_download'
+        : 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_acknowledgement_final_evidence',
       `Closeout acknowledgement closeout final evidence saved as backend record v${saved.version}.`,
     )
     return saved
+  }
+
+  async function deliverClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence({
+    download,
+    finalEvidenceNotes,
+    retainedActions,
+    reviewer,
+    status,
+    supersededEvidence,
+  }: {
+    download: boolean
+    finalEvidenceNotes: string
+    retainedActions: string[]
+    reviewer: string
+    status: ClosureSlaResponseFollowUpClosureStatus
+    supersededEvidence: string[]
+  }) {
+    const saved =
+      await saveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence({
+        download,
+        finalEvidenceNotes,
+        retainedActions,
+        reviewer,
+        status,
+        supersededEvidence,
+      })
+    if (!saved) return
+    const recipients = [
+      saved.payload.reviewer,
+      ...saved.payload.acknowledgementRecords.map((record) => record.payload.reviewer),
+      ...saved.payload.closeoutPackages.flatMap((record) => record.payload.closeoutReviewers),
+    ]
+      .map((recipient) => recipient.trim())
+      .filter((recipient, index, values) => recipient.length > 0 && values.indexOf(recipient) === index)
+    await deliverNotifications(
+      notificationToDeliveryPayload(
+        'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_acknowledgement_final_evidence',
+        'Closeout acknowledgement closeout final evidence',
+        {
+          notificationId: saved.payload.evidenceId,
+          recipients,
+          summary: `${saved.payload.reviewer} finalized ${saved.payload.metrics.totalAcknowledgements} closeout acknowledgement closeout package acknowledgement record(s), ${saved.payload.metrics.retainedActions} retained action(s), and ${saved.payload.supersededEvidence.length} superseded evidence note(s).`,
+          package: saved.payload,
+        },
+      ),
+    )
   }
 
   async function runNotificationSmokeFixtures() {
@@ -6397,6 +6451,9 @@ function App() {
             onDeliverClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackage={
               deliverClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackage
             }
+            onDeliverClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence={
+              deliverClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence
+            }
             onSaveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgement={
               saveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgement
             }
@@ -7122,6 +7179,7 @@ function BackendPersistenceView({
   onDeliverClosurePackageAcknowledgementCloseoutExportPackage,
   onDeliverClosurePackageAcknowledgementCloseoutNotificationClosurePackage,
   onDeliverClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackage,
+  onDeliverClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence,
   onSaveClosureSlaDeliveryAcknowledgement,
   onSaveClosureSlaResponseFollowUpClosure,
   onSaveClosureSlaFollowUpClosureExportPackage,
@@ -7278,6 +7336,14 @@ function BackendPersistenceView({
     download: boolean
     packagePayload: ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackage
   }) => void
+  onDeliverClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence: (request: {
+    download: boolean
+    finalEvidenceNotes: string
+    retainedActions: string[]
+    reviewer: string
+    status: ClosureSlaResponseFollowUpClosureStatus
+    supersededEvidence: string[]
+  }) => void
   onSaveClosureSlaDeliveryAcknowledgement: (request: {
     deliveryRecord: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>
     requestedActions: string[]
@@ -7386,6 +7452,7 @@ function BackendPersistenceView({
     status: ClosureSlaDeliveryAcknowledgementStatus
   }) => void
   onSaveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence: (request: {
+    download?: boolean
     finalEvidenceNotes: string
     retainedActions: string[]
     reviewer: string
@@ -8157,6 +8224,7 @@ function BackendPersistenceView({
     'closure_package_acknowledgement_closeout_export_package',
     'closure_package_acknowledgement_closeout_notification_closure_package',
     'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package',
+    'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_acknowledgement_final_evidence',
     'closure_sla_export_package',
     'closure_sla_response_follow_up',
     'closure_sla_follow_up_closure_export_package',
@@ -8571,6 +8639,14 @@ function BackendPersistenceView({
     )
   const latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence =
     closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidenceRecords[0]
+  const closeoutNotificationClosurePackageAcknowledgementClosurePackageFinalEvidenceDeliveryRecords =
+    deliveryRecords.filter(
+      (record) =>
+        record.payload.request.source ===
+        'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_acknowledgement_final_evidence',
+    )
+  const latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageFinalEvidenceDelivery =
+    closeoutNotificationClosurePackageAcknowledgementClosurePackageFinalEvidenceDeliveryRecords[0]
   const closeoutNotificationClosurePackageAcknowledgementClosurePackageFinalEvidenceStatus: StatusLevel =
     closeoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementMetrics.rejected > 0
       ? 'blocking'
@@ -12670,6 +12746,7 @@ function BackendPersistenceView({
                   <option value="closure_package_acknowledgement_closeout_export_package">Closeout export package</option>
                   <option value="closure_package_acknowledgement_closeout_notification_closure_package">Closeout acknowledgement closure package</option>
                   <option value="closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package">Closeout acknowledgement closeout package</option>
+                  <option value="closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_acknowledgement_final_evidence">Closeout acknowledgement final evidence</option>
                   <option value="closure_sla_export_package">Closure SLA package</option>
                   <option value="closure_sla_response_follow_up">Closure SLA follow-up</option>
                   <option value="closure_sla_follow_up_closure_export_package">Closure SLA follow-up closure package</option>
@@ -14747,6 +14824,40 @@ function BackendPersistenceView({
                             <ClipboardCheck size={15} />
                             Save Final Evidence
                           </button>
+                          <button
+                            className="secondary-action"
+                            disabled={
+                              closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementRecords.length ===
+                              0
+                            }
+                            onClick={() =>
+                              onSaveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence({
+                                ...closeoutNotificationClosurePackageAcknowledgementClosurePackageFinalEvidenceRequest(),
+                                download: true,
+                              })
+                            }
+                            type="button"
+                          >
+                            <Download size={15} />
+                            Save & Download Final Evidence
+                          </button>
+                          <button
+                            className="secondary-action"
+                            disabled={
+                              closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementRecords.length ===
+                              0
+                            }
+                            onClick={() =>
+                              onDeliverClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence({
+                                ...closeoutNotificationClosurePackageAcknowledgementClosurePackageFinalEvidenceRequest(),
+                                download: false,
+                              })
+                            }
+                            type="button"
+                          >
+                            <Bell size={15} />
+                            Save & Notify Final Evidence
+                          </button>
                         </div>
                         <div className="metadata-grid">
                           <Metadata
@@ -14784,6 +14895,22 @@ function BackendPersistenceView({
                                 .length,
                             )}
                           />
+                          <Metadata
+                            label="Final evidence deliveries"
+                            value={String(
+                              closeoutNotificationClosurePackageAcknowledgementClosurePackageFinalEvidenceDeliveryRecords.length,
+                            )}
+                          />
+                          <Metadata
+                            label="Latest delivery"
+                            value={
+                              latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageFinalEvidenceDelivery
+                                ? new Date(
+                                    latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageFinalEvidenceDelivery.createdAt,
+                                  ).toLocaleString()
+                                : 'Not delivered'
+                            }
+                          />
                         </div>
                         {latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence ? (
                           <div className="connector-run-row">
@@ -14817,6 +14944,25 @@ function BackendPersistenceView({
                         ) : (
                           <div className="empty-state compact">No closeout acknowledgement closeout final evidence has been retained yet.</div>
                         )}
+                        {closeoutNotificationClosurePackageAcknowledgementClosurePackageFinalEvidenceDeliveryRecords.length > 0 ? (
+                          <div className="retry-aging-list">
+                            <h4>Closeout acknowledgement closeout final evidence delivery evidence</h4>
+                            {closeoutNotificationClosurePackageAcknowledgementClosurePackageFinalEvidenceDeliveryRecords
+                              .slice(0, 3)
+                              .map((record) => (
+                                <div className="connector-run-row" key={record.id}>
+                                  <div>
+                                    <strong>{record.payload.request.subject}</strong>
+                                    <span>
+                                      v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
+                                    </span>
+                                    <small>{record.payload.result.evidence}</small>
+                                  </div>
+                                  <StatusChip status={record.status} label={record.status} />
+                                </div>
+                              ))}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   </div>

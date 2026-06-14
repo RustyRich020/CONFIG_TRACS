@@ -1301,6 +1301,7 @@ export type NotificationDeliveryPayload = {
     | 'closure_package_acknowledgement_closeout_export_package'
     | 'closure_package_acknowledgement_closeout_notification_closure_package'
     | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package'
+    | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_acknowledgement_final_evidence'
     | 'closure_sla_export_package'
     | 'closure_sla_response_follow_up'
     | 'closure_sla_follow_up_closure_export_package'
