@@ -193,6 +193,7 @@ export type SavedVersionKind =
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement'
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure'
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package'
+  | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_acknowledgement'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -261,6 +262,7 @@ export type BackendRecordKind =
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement'
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure'
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package'
+  | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_acknowledgement'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -2242,6 +2244,39 @@ export type ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAckno
     actor: string
     timestamp: string
     status: StatusLevel
+    summary: string
+  }>
+  evidence: string
+}
+
+export type ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgement = {
+  acknowledgementId: string
+  acknowledgedAt: string
+  deliveryRecordId: string
+  deliveryId: string
+  deliverySubject: string
+  packageRecordId?: string
+  packageId?: string
+  packageVersion?: number
+  reviewer: string
+  reviewerRole: 'governance_reviewer' | 'infrastructure_owner' | 'notification_operations' | 'platform_owner'
+  status: ClosureSlaDeliveryAcknowledgementStatus
+  finalEvidenceReady: boolean
+  responseNotes: string
+  requestedActions: string[]
+  channelSummary: string
+  packageStatus?: StatusLevel
+  sourceMetrics?: ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackage['metrics']
+  sourceRequiredActions: string[]
+  sourceCloseoutRecordCount: number
+  sourceDeliveryEvidenceCount: number
+  sourceSupersededEvidenceCount: number
+  auditHistory: Array<{
+    action: 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_acknowledged'
+    actor: string
+    timestamp: string
+    status: ClosureSlaDeliveryAcknowledgementStatus
+    finalEvidenceReady: boolean
     summary: string
   }>
   evidence: string
