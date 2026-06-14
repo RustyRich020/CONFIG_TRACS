@@ -153,6 +153,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Delivers final acknowledgement closeout acknowledgement closure evidence to governance reviewers with retained notification evidence.
 - Captures final acknowledgement closure delivery acknowledgements with reviewer response and retained actions.
 - Retains final acknowledgement closure final evidence with delivery acknowledgements, closure evidence, retained actions, and superseded acknowledgement evidence.
+- Delivers final acknowledgement closure final evidence to governance reviewers with retained notification evidence.
 - Exports Closure SLA follow-up closure packages with retained actions, superseded routes, and notification evidence.
 - Delivers Closure SLA follow-up closure packages to governance reviewers with retained delivery evidence.
 - Captures Closure SLA follow-up closure package delivery acknowledgements with reviewer response and retained actions.
@@ -309,6 +310,6 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add closeout acknowledgement closure package acknowledgement closeout final acknowledgement closeout acknowledgement closure final notification delivery.
-2. Add closeout acknowledgement closure package acknowledgement closeout final acknowledgement closeout acknowledgement closure final delivery acknowledgement tracking.
-3. Add closeout acknowledgement closure package acknowledgement closeout final acknowledgement closeout acknowledgement closure final closeout evidence.
+1. Add closeout acknowledgement closure package acknowledgement closeout final acknowledgement closeout acknowledgement closure final delivery acknowledgement tracking.
+2. Add closeout acknowledgement closure package acknowledgement closeout final acknowledgement closeout acknowledgement closure final closeout evidence.
+3. Add closeout acknowledgement closure package acknowledgement closeout final acknowledgement closeout acknowledgement closure final closeout notification delivery.
