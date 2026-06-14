@@ -203,6 +203,7 @@ export type SavedVersionKind =
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledgement_closure_delivery_acknowledgement_closure_delivery_acknowledgement_final_evidence'
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledgement_closure_delivery_acknowledgement_closure_delivery_acknowledgement_final_evidence_delivery_acknowledgement'
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledgement_closure_delivery_acknowledgement_closure_delivery_acknowledgement_final_evidence_delivery_acknowledgement_closeout_evidence'
+  | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledgement_closure_delivery_acknowledgement_closure_delivery_acknowledgement_final_evidence_delivery_acknowledgement_closeout_evidence_delivery_acknowledgement'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -281,6 +282,7 @@ export type BackendRecordKind =
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledgement_closure_delivery_acknowledgement_closure_delivery_acknowledgement_final_evidence'
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledgement_closure_delivery_acknowledgement_closure_delivery_acknowledgement_final_evidence_delivery_acknowledgement'
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledgement_closure_delivery_acknowledgement_closure_delivery_acknowledgement_final_evidence_delivery_acknowledgement_closeout_evidence'
+  | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledgement_closure_delivery_acknowledgement_closure_delivery_acknowledgement_final_evidence_delivery_acknowledgement_closeout_evidence_delivery_acknowledgement'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -2682,6 +2684,40 @@ export type ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAckno
     actor: string
     timestamp: string
     status: ClosureSlaResponseFollowUpClosureStatus
+    summary: string
+  }>
+  evidence: string
+}
+
+export type ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement = {
+  acknowledgementId: string
+  acknowledgedAt: string
+  deliveryRecordId: string
+  deliveryId: string
+  deliverySubject: string
+  closeoutRecordId?: string
+  closeoutId?: string
+  closeoutVersion?: number
+  reviewer: string
+  reviewerRole: 'governance_reviewer' | 'infrastructure_owner' | 'notification_operations' | 'platform_owner'
+  status: ClosureSlaDeliveryAcknowledgementStatus
+  acknowledgementClosureReady: boolean
+  responseNotes: string
+  requestedActions: string[]
+  channelSummary: string
+  closeoutStatus?: ClosureSlaResponseFollowUpClosureStatus
+  sourceMetrics?: ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidence['metrics']
+  sourceRetainedActions: string[]
+  sourceAcknowledgementCount: number
+  sourceFinalEvidenceCount: number
+  sourceDeliveryEvidenceCount: number
+  sourceSupersededEvidenceCount: number
+  auditHistory: Array<{
+    action: 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledgement_closure_delivery_acknowledgement_closure_delivery_acknowledgement_final_evidence_delivery_acknowledgement_closeout_evidence_delivery_acknowledged'
+    actor: string
+    timestamp: string
+    status: ClosureSlaDeliveryAcknowledgementStatus
+    acknowledgementClosureReady: boolean
     summary: string
   }>
   evidence: string
