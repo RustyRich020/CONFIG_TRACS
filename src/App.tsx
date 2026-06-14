@@ -68,6 +68,7 @@ import type {
   ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackage,
   ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgement,
   ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence,
+  ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement,
   ClosureSlaDeliveryAcknowledgement,
   ClosureSlaDeliveryAcknowledgementStatus,
   ClosureSlaExportPackage,
@@ -727,6 +728,7 @@ function deliverySourceLabel(source: NotificationDeliveryPayload['source']) {
   if (source === 'closure_package_acknowledgement_closeout_notification_closure_package') return 'Closeout notification closure package'
   if (source === 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package') return 'Closeout acknowledgement closeout package'
   if (source === 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_acknowledgement_final_evidence') return 'Closeout acknowledgement final evidence'
+  if (source === 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledgement') return 'Closeout acknowledgement final evidence acknowledgement'
   if (source === 'closure_sla_export_package') return 'Closure SLA package'
   if (source === 'closure_sla_response_follow_up') return 'Closure SLA follow-up'
   if (source === 'closure_sla_follow_up_closure_export_package') return 'Closure SLA follow-up closure package'
@@ -3802,6 +3804,107 @@ function App() {
     )
   }
 
+  async function saveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement({
+    closeoutReady,
+    deliveryRecord,
+    requestedActions,
+    responseNotes,
+    reviewer,
+    reviewerRole,
+    status,
+  }: {
+    closeoutReady: boolean
+    deliveryRecord: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>
+    requestedActions: string[]
+    responseNotes: string
+    reviewer: string
+    reviewerRole: ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement['reviewerRole']
+    status: ClosureSlaDeliveryAcknowledgementStatus
+  }) {
+    const acknowledgedAt = new Date().toISOString()
+    const reviewerName = reviewer.trim() || 'Governance Reviewer'
+    const deliveryEvidence = (
+      deliveryRecord.payload.request.evidence as {
+        package?: ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence
+      }
+    )?.package
+    const finalEvidenceRecord = backendRecords.find(
+      (record): record is BackendRecord<ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence> =>
+        record.kind ===
+          'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_acknowledgement_final_evidence' &&
+        (record.payload as ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence)
+          .evidenceId === deliveryEvidence?.evidenceId,
+    )
+    const sourceActions = deliveryEvidence?.retainedActions ?? []
+    const retainedActions = [...sourceActions, ...requestedActions]
+      .map((action) => action.trim())
+      .filter((action, index, values) => action.length > 0 && values.indexOf(action) === index)
+    const channelSummary = deliveryRecord.payload.result.channelResults
+      .map((channel) => `${titleize(channel.channel)} ${channel.mode}/${channel.status}`)
+      .join(', ')
+    const payload: ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement = {
+      acknowledgementId: `closure_package_acknowledgement_closeout_notification_closure_package_final_evidence_ack:${deliveryRecord.id}:${acknowledgedAt}`,
+      acknowledgedAt,
+      deliveryRecordId: deliveryRecord.id,
+      deliveryId: deliveryRecord.payload.request.deliveryId,
+      deliverySubject: deliveryRecord.payload.request.subject,
+      finalEvidenceRecordId: finalEvidenceRecord?.id,
+      evidenceId: deliveryEvidence?.evidenceId,
+      finalEvidenceVersion: finalEvidenceRecord?.version,
+      reviewer: reviewerName,
+      reviewerRole,
+      status,
+      closeoutReady,
+      responseNotes:
+        responseNotes.trim() ||
+        'No closeout acknowledgement final evidence acknowledgement response notes recorded.',
+      requestedActions: retainedActions,
+      channelSummary,
+      finalEvidenceStatus: deliveryEvidence?.status,
+      sourceMetrics: deliveryEvidence?.metrics,
+      sourceRetainedActions: sourceActions,
+      sourceAcknowledgementCount: deliveryEvidence?.acknowledgementRecords.length ?? 0,
+      sourcePackageCount: deliveryEvidence?.closeoutPackages.length ?? 0,
+      sourceDeliveryEvidenceCount: deliveryEvidence?.deliveryEvidence.length ?? 0,
+      sourceSupersededEvidenceCount: deliveryEvidence?.supersededEvidence.length ?? 0,
+      auditHistory: [
+        {
+          action:
+            'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledged',
+          actor: reviewerName,
+          timestamp: acknowledgedAt,
+          status,
+          closeoutReady,
+          summary: `${reviewerName} recorded ${closureSlaDeliveryAcknowledgementLabel(status)} for closeout acknowledgement final evidence delivery.`,
+        },
+      ],
+      evidence: `${reviewerName} recorded ${closureSlaDeliveryAcknowledgementLabel(status)} for ${deliveryRecord.payload.request.subject}. ${retainedActions.length} requested action(s) retained.`,
+    }
+    const saved = await backendClient.saveRecord({
+      kind: 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledgement',
+      label: 'Closeout acknowledgement final evidence acknowledgement',
+      status: closureSlaDeliveryAcknowledgementStatusLevel(status),
+      summary: payload.evidence,
+      payload,
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledgement',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record(
+      'notification',
+      'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledgement',
+      `Closeout acknowledgement final evidence acknowledgement saved as backend record v${saved.version}.`,
+    )
+    return saved
+  }
+
   async function runNotificationSmokeFixtures() {
     const result = await backendClient.runNotificationSmokeFixtures()
     await refreshBackend()
@@ -6362,6 +6465,11 @@ function App() {
                 record.kind ===
                 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_acknowledgement_final_evidence',
             )}
+            closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementRecords={backendRecords.filter(
+              (record): record is BackendRecord<ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement> =>
+                record.kind ===
+                'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledgement',
+            )}
             traceabilityClosureRouteRecords={backendRecords.filter(
               (record): record is BackendRecord<TraceabilityResponseClosureRoute> =>
                 record.kind === 'traceability_response_closure_route',
@@ -6468,6 +6576,9 @@ function App() {
             }
             onSaveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence={
               saveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence
+            }
+            onSaveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement={
+              saveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement
             }
             onSaveNotificationDeliveryRetryControl={saveNotificationDeliveryRetryControl}
             onSaveNotificationRetryQueueExportPackage={saveNotificationRetryQueueExportPackage}
@@ -7133,6 +7244,7 @@ function BackendPersistenceView({
   closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageRecords,
   closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementRecords,
   closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidenceRecords,
+  closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementRecords,
   closurePackageAcknowledgementCloseoutExportPackageRecords,
   closureSlaDeliveryAcknowledgementRecords,
   closureSlaExportPackageRecords,
@@ -7194,6 +7306,7 @@ function BackendPersistenceView({
   onSaveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackage,
   onSaveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgement,
   onSaveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence,
+  onSaveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement,
   onSaveClosureSlaFollowUpClosurePackageAcknowledgement,
   onSaveClosureSlaResponseFollowUpRoute,
   onSaveNotificationDeliveryRetryControl,
@@ -7234,6 +7347,7 @@ function BackendPersistenceView({
   closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageRecords: BackendRecord<ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackage>[]
   closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementRecords: BackendRecord<ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgement>[]
   closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidenceRecords: BackendRecord<ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence>[]
+  closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementRecords: BackendRecord<ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement>[]
   closurePackageAcknowledgementCloseoutExportPackageRecords: BackendRecord<ClosurePackageAcknowledgementCloseoutExportPackage>[]
   closureSlaDeliveryAcknowledgementRecords: BackendRecord<ClosureSlaDeliveryAcknowledgement>[]
   closureSlaExportPackageRecords: BackendRecord<ClosureSlaExportPackage>[]
@@ -7458,6 +7572,15 @@ function BackendPersistenceView({
     reviewer: string
     status: ClosureSlaResponseFollowUpClosureStatus
     supersededEvidence: string[]
+  }) => void
+  onSaveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement: (request: {
+    closeoutReady: boolean
+    deliveryRecord: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>
+    requestedActions: string[]
+    responseNotes: string
+    reviewer: string
+    reviewerRole: ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement['reviewerRole']
+    status: ClosureSlaDeliveryAcknowledgementStatus
   }) => void
   onSaveNotificationDeliveryRetryControl: (request: {
     deliveryRecord: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>
@@ -8030,6 +8153,37 @@ function BackendPersistenceView({
     closeoutNotificationClosurePackageAckClosurePackageFinalEvidenceSuperseded,
     setCloseoutNotificationClosurePackageAckClosurePackageFinalEvidenceSuperseded,
   ] = useState('Prior closeout acknowledgement closeout package acknowledgements retained as superseded evidence.')
+  const [
+    closeoutNotificationClosurePackageFinalEvidenceAckReviewer,
+    setCloseoutNotificationClosurePackageFinalEvidenceAckReviewer,
+  ] = useState('Governance Reviewer')
+  const [
+    closeoutNotificationClosurePackageFinalEvidenceAckReviewerRole,
+    setCloseoutNotificationClosurePackageFinalEvidenceAckReviewerRole,
+  ] =
+    useState<ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement['reviewerRole']>(
+      'governance_reviewer',
+    )
+  const [
+    closeoutNotificationClosurePackageFinalEvidenceAckStatus,
+    setCloseoutNotificationClosurePackageFinalEvidenceAckStatus,
+  ] = useState<ClosureSlaDeliveryAcknowledgementStatus>('acknowledged')
+  const [
+    closeoutNotificationClosurePackageFinalEvidenceCloseoutReady,
+    setCloseoutNotificationClosurePackageFinalEvidenceCloseoutReady,
+  ] = useState(false)
+  const [
+    closeoutNotificationClosurePackageFinalEvidenceAckActions,
+    setCloseoutNotificationClosurePackageFinalEvidenceAckActions,
+  ] = useState(
+    'Confirm retained closeout acknowledgement final evidence actions are dispositioned before final acknowledgement closeout.',
+  )
+  const [
+    closeoutNotificationClosurePackageFinalEvidenceAckNotes,
+    setCloseoutNotificationClosurePackageFinalEvidenceAckNotes,
+  ] = useState(
+    'Reviewer acknowledged the closeout acknowledgement final evidence delivery and retained response evidence for final closeout tracking.',
+  )
   const [retryQueueMeasuredAt] = useState(() => new Date())
   const recordCounts = backendRecords.reduce(
     (summary, record) => {
@@ -8657,6 +8811,35 @@ function BackendPersistenceView({
             closeoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementMetrics.totalAcknowledgements
         ? 'warning'
         : 'pass'
+  const latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement =
+    closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementRecords[0]
+  const closeoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgedDeliveryIds = new Set(
+    closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementRecords.map(
+      (record) => record.payload.deliveryRecordId,
+    ),
+  )
+  const closeoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementMetrics =
+    closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementRecords.reduce(
+      (summary, record) => {
+        summary.totalAcknowledgements += 1
+        if (record.payload.status === 'acknowledged') summary.acknowledged += 1
+        if (record.payload.status === 'approved') summary.approved += 1
+        if (record.payload.status === 'changes_requested') summary.changesRequested += 1
+        if (record.payload.status === 'rejected') summary.rejected += 1
+        if (record.payload.closeoutReady) summary.closeoutReady += 1
+        summary.retainedActions += record.payload.requestedActions.length
+        return summary
+      },
+      {
+        totalAcknowledgements: 0,
+        acknowledged: 0,
+        approved: 0,
+        changesRequested: 0,
+        rejected: 0,
+        closeoutReady: 0,
+        retainedActions: 0,
+      },
+    )
   const closeoutNotificationClosurePackageAcknowledgementClosurePackageMetrics =
     closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosureRecords.reduce(
       (summary, record) => {
@@ -9590,6 +9773,26 @@ function BackendPersistenceView({
       reviewer: closeoutNotificationClosurePackageAckClosurePackageFinalEvidenceReviewer,
       status: closeoutNotificationClosurePackageAckClosurePackageFinalEvidenceStatus,
       supersededEvidence: closeoutNotificationClosurePackageAcknowledgementClosurePackageFinalEvidenceSupersededList(),
+    }
+  }
+  function closeoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementActionList() {
+    return closeoutNotificationClosurePackageFinalEvidenceAckActions
+      .split('\n')
+      .map((action) => action.trim())
+      .filter(Boolean)
+  }
+  function closeoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementRequest(
+    deliveryRecord = latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageFinalEvidenceDelivery,
+  ) {
+    if (!deliveryRecord) return
+    return {
+      closeoutReady: closeoutNotificationClosurePackageFinalEvidenceCloseoutReady,
+      deliveryRecord,
+      requestedActions: closeoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementActionList(),
+      responseNotes: closeoutNotificationClosurePackageFinalEvidenceAckNotes,
+      reviewer: closeoutNotificationClosurePackageFinalEvidenceAckReviewer,
+      reviewerRole: closeoutNotificationClosurePackageFinalEvidenceAckReviewerRole,
+      status: closeoutNotificationClosurePackageFinalEvidenceAckStatus,
     }
   }
   function retryQueueOperationsReviewerList() {
@@ -14963,6 +15166,165 @@ function BackendPersistenceView({
                               ))}
                           </div>
                         ) : null}
+                        <div className="retry-aging-list">
+                          <h4>Closeout acknowledgement final evidence acknowledgement</h4>
+                          <div className="notification-approval-form">
+                            <label>
+                              Reviewer
+                              <input
+                                value={closeoutNotificationClosurePackageFinalEvidenceAckReviewer}
+                                onChange={(event) =>
+                                  setCloseoutNotificationClosurePackageFinalEvidenceAckReviewer(event.target.value)
+                                }
+                              />
+                            </label>
+                            <label>
+                              Reviewer role
+                              <select
+                                value={closeoutNotificationClosurePackageFinalEvidenceAckReviewerRole}
+                                onChange={(event) =>
+                                  setCloseoutNotificationClosurePackageFinalEvidenceAckReviewerRole(
+                                    event.target
+                                      .value as ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement['reviewerRole'],
+                                  )
+                                }
+                              >
+                                <option value="governance_reviewer">Governance reviewer</option>
+                                <option value="infrastructure_owner">Infrastructure owner</option>
+                                <option value="notification_operations">Notification operations</option>
+                                <option value="platform_owner">Platform owner</option>
+                              </select>
+                            </label>
+                            <label>
+                              Response status
+                              <select
+                                value={closeoutNotificationClosurePackageFinalEvidenceAckStatus}
+                                onChange={(event) =>
+                                  setCloseoutNotificationClosurePackageFinalEvidenceAckStatus(
+                                    event.target.value as ClosureSlaDeliveryAcknowledgementStatus,
+                                  )
+                                }
+                              >
+                                <option value="acknowledged">Acknowledged</option>
+                                <option value="approved">Approved</option>
+                                <option value="changes_requested">Changes requested</option>
+                                <option value="rejected">Rejected</option>
+                              </select>
+                            </label>
+                            <label className="toggle-field">
+                              <input
+                                type="checkbox"
+                                checked={closeoutNotificationClosurePackageFinalEvidenceCloseoutReady}
+                                onChange={(event) =>
+                                  setCloseoutNotificationClosurePackageFinalEvidenceCloseoutReady(
+                                    event.target.checked,
+                                  )
+                                }
+                              />
+                              Final closeout ready
+                            </label>
+                            <label className="wide-field">
+                              Requested actions
+                              <textarea
+                                value={closeoutNotificationClosurePackageFinalEvidenceAckActions}
+                                onChange={(event) =>
+                                  setCloseoutNotificationClosurePackageFinalEvidenceAckActions(event.target.value)
+                                }
+                              />
+                            </label>
+                            <label className="wide-field">
+                              Response notes
+                              <textarea
+                                value={closeoutNotificationClosurePackageFinalEvidenceAckNotes}
+                                onChange={(event) =>
+                                  setCloseoutNotificationClosurePackageFinalEvidenceAckNotes(event.target.value)
+                                }
+                              />
+                            </label>
+                          </div>
+                          <div className="toolbar-actions notification-approval-actions">
+                            <button
+                              className="primary-action"
+                              disabled={!latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageFinalEvidenceDelivery}
+                              onClick={() => {
+                                const request =
+                                  closeoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementRequest()
+                                if (request) {
+                                  onSaveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement(
+                                    request,
+                                  )
+                                }
+                              }}
+                              type="button"
+                            >
+                              <ClipboardCheck size={15} />
+                              Save Final Evidence Acknowledgement
+                            </button>
+                          </div>
+                          <div className="metadata-grid">
+                            <Metadata
+                              label="Acknowledgements"
+                              value={String(
+                                closeoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementMetrics.totalAcknowledgements,
+                              )}
+                            />
+                            <Metadata
+                              label="Open deliveries"
+                              value={String(
+                                closeoutNotificationClosurePackageAcknowledgementClosurePackageFinalEvidenceDeliveryRecords.filter(
+                                  (record) =>
+                                    !closeoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgedDeliveryIds.has(
+                                      record.id,
+                                    ),
+                                ).length,
+                              )}
+                            />
+                            <Metadata
+                              label="Closeout ready"
+                              value={String(
+                                closeoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementMetrics.closeoutReady,
+                              )}
+                            />
+                            <Metadata
+                              label="Retained actions"
+                              value={String(
+                                closeoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementMetrics.retainedActions,
+                              )}
+                            />
+                          </div>
+                          {latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement ? (
+                            <div className="connector-run-row">
+                              <div>
+                                <strong>
+                                  {
+                                    latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement
+                                      .payload.reviewer
+                                  }
+                                </strong>
+                                <span>
+                                  v{latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement.version} / {closureSlaDeliveryAcknowledgementLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement.payload.status)} / {new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement.createdAt).toLocaleString()}
+                                </span>
+                                <small>
+                                  {
+                                    latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement
+                                      .payload.evidence
+                                  }
+                                </small>
+                              </div>
+                              <StatusChip
+                                status={latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement.status}
+                                label={closureSlaDeliveryAcknowledgementLabel(
+                                  latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement
+                                    .payload.status,
+                                )}
+                              />
+                            </div>
+                          ) : (
+                            <div className="empty-state compact">
+                              No closeout acknowledgement final evidence acknowledgement has been retained yet.
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>

@@ -195,6 +195,7 @@ export type SavedVersionKind =
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package'
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_acknowledgement'
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_acknowledgement_final_evidence'
+  | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledgement'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -265,6 +266,7 @@ export type BackendRecordKind =
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package'
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_acknowledgement'
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_acknowledgement_final_evidence'
+  | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledgement'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -1302,6 +1304,7 @@ export type NotificationDeliveryPayload = {
     | 'closure_package_acknowledgement_closeout_notification_closure_package'
     | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package'
     | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_acknowledgement_final_evidence'
+    | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledgement'
     | 'closure_sla_export_package'
     | 'closure_sla_response_follow_up'
     | 'closure_sla_follow_up_closure_export_package'
@@ -2329,6 +2332,40 @@ export type ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAckno
     actor: string
     timestamp: string
     status: ClosureSlaResponseFollowUpClosureStatus
+    summary: string
+  }>
+  evidence: string
+}
+
+export type ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement = {
+  acknowledgementId: string
+  acknowledgedAt: string
+  deliveryRecordId: string
+  deliveryId: string
+  deliverySubject: string
+  finalEvidenceRecordId?: string
+  evidenceId?: string
+  finalEvidenceVersion?: number
+  reviewer: string
+  reviewerRole: 'governance_reviewer' | 'infrastructure_owner' | 'notification_operations' | 'platform_owner'
+  status: ClosureSlaDeliveryAcknowledgementStatus
+  closeoutReady: boolean
+  responseNotes: string
+  requestedActions: string[]
+  channelSummary: string
+  finalEvidenceStatus?: ClosureSlaResponseFollowUpClosureStatus
+  sourceMetrics?: ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence['metrics']
+  sourceRetainedActions: string[]
+  sourceAcknowledgementCount: number
+  sourcePackageCount: number
+  sourceDeliveryEvidenceCount: number
+  sourceSupersededEvidenceCount: number
+  auditHistory: Array<{
+    action: 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledged'
+    actor: string
+    timestamp: string
+    status: ClosureSlaDeliveryAcknowledgementStatus
+    closeoutReady: boolean
     summary: string
   }>
   evidence: string
