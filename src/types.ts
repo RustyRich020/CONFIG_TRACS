@@ -192,6 +192,7 @@ export type SavedVersionKind =
   | 'closure_package_acknowledgement_closeout_notification_closure_package'
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement'
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure'
+  | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -259,6 +260,7 @@ export type BackendRecordKind =
   | 'closure_package_acknowledgement_closeout_notification_closure_package'
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement'
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure'
+  | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -1294,6 +1296,7 @@ export type NotificationDeliveryPayload = {
     | 'notification_retry_queue_acknowledgement_closure_package'
     | 'closure_package_acknowledgement_closeout_export_package'
     | 'closure_package_acknowledgement_closeout_notification_closure_package'
+    | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package'
     | 'closure_sla_export_package'
     | 'closure_sla_response_follow_up'
     | 'closure_sla_follow_up_closure_export_package'
@@ -2197,6 +2200,48 @@ export type ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAckno
     actor: string
     timestamp: string
     status: ClosureSlaResponseFollowUpClosureStatus
+    summary: string
+  }>
+  evidence: string
+}
+
+export type ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackage = {
+  packageId: string
+  generatedAt: string
+  closeoutReviewers: string[]
+  status: StatusLevel
+  acknowledgementCloseoutRecords: Array<BackendRecord<ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosure>>
+  closurePackages: Array<BackendRecord<ClosurePackageAcknowledgementCloseoutNotificationClosurePackage>>
+  acknowledgementRecords: Array<BackendRecord<ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgement>>
+  deliveryEvidence: Array<BackendRecord<{
+    request: NotificationDeliveryPayload
+    result: NotificationDeliveryResult
+  }>>
+  metrics: {
+    closeoutRecords: number
+    closed: number
+    closedWithActions: number
+    rejected: number
+    closurePackages: number
+    acknowledgementRecords: number
+    deliveryRecords: number
+    retainedActions: number
+    supersededAcknowledgements: number
+    supersededEvidence: number
+  }
+  requiredActions: string[]
+  reviewerNotes: string
+  sourceRecordCounts: {
+    closeoutRecords: number
+    closurePackages: number
+    acknowledgementRecords: number
+    deliveryRecords: number
+  }
+  auditHistory: Array<{
+    action: 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_generated'
+    actor: string
+    timestamp: string
+    status: StatusLevel
     summary: string
   }>
   evidence: string

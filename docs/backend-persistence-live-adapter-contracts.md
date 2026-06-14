@@ -452,6 +452,8 @@ Closeout acknowledgement closure package delivery acknowledgements are persisted
 
 Closeout acknowledgement closure package acknowledgement closeouts are persisted as `closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure` records. Each closeout retains closeout acknowledgement closure package acknowledgement records, related closure packages, package delivery evidence, acknowledgement readiness metrics, retained actions, closeout notes, superseded acknowledgement evidence, source record counts, and audit history. Closeout records do not mutate acknowledgement, closure package, delivery, retry-control, notification closure, or retained source evidence; they provide append-only governance closeout evidence after downstream reviewer responses have been dispositioned.
 
+Closeout acknowledgement closeout packages are persisted as `closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package` records and can be delivered through the guarded notification delivery adapter with source `closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package`. Each package retains acknowledgement closeout records, related closure packages, acknowledgement records, delivery evidence, required actions, reviewer notes, package metrics, source record counts, and package audit history. Delivery produces append-only notification evidence for downstream infrastructure, governance, and notification-operations reviewers without mutating acknowledgement closeouts or retained source evidence.
+
 ## GitHub Implementation Plan
 
 1. Create branch: `codex/backend-persistence-adapter-contracts`
