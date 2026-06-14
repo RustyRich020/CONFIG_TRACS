@@ -196,6 +196,7 @@ export type SavedVersionKind =
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_acknowledgement'
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_acknowledgement_final_evidence'
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledgement'
+  | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledgement_closure'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -267,6 +268,7 @@ export type BackendRecordKind =
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_acknowledgement'
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_closure_package_acknowledgement_final_evidence'
   | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledgement'
+  | 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledgement_closure'
   | 'notification_live_channel_approval'
   | 'notification_approval_renewal'
   | 'notification_approval_renewal_closure'
@@ -2366,6 +2368,55 @@ export type ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAckno
     timestamp: string
     status: ClosureSlaDeliveryAcknowledgementStatus
     closeoutReady: boolean
+    summary: string
+  }>
+  evidence: string
+}
+
+export type ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosure = {
+  closeoutId: string
+  closedAt: string
+  reviewer: string
+  status: ClosureSlaResponseFollowUpClosureStatus
+  acknowledgementRecords: Array<BackendRecord<ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement>>
+  finalEvidenceRecords: Array<BackendRecord<ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence>>
+  deliveryEvidence: Array<BackendRecord<{
+    request: NotificationDeliveryPayload
+    result: NotificationDeliveryResult
+  }>>
+  metrics: {
+    totalAcknowledgements: number
+    acknowledged: number
+    approved: number
+    changesRequested: number
+    rejected: number
+    closeoutReady: number
+    retainedActions: number
+    finalEvidenceRecords: number
+    deliveryRecords: number
+  }
+  retainedActions: string[]
+  closeoutNotes: string
+  supersededEvidence: string[]
+  supersededAcknowledgements: Array<{
+    acknowledgementId: string
+    reviewer: string
+    reviewerRole: ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement['reviewerRole']
+    status: ClosureSlaDeliveryAcknowledgementStatus
+    acknowledgedAt: string
+    evidence: string
+  }>
+  sourceRecordCounts: {
+    acknowledgementRecords: number
+    finalEvidenceRecords: number
+    deliveryRecords: number
+    supersededAcknowledgements: number
+  }
+  auditHistory: Array<{
+    action: 'closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledgement_closed'
+    actor: string
+    timestamp: string
+    status: ClosureSlaResponseFollowUpClosureStatus
     summary: string
   }>
   evidence: string
