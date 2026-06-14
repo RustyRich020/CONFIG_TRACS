@@ -462,6 +462,8 @@ Closeout acknowledgement final evidence delivery acknowledgements are persisted 
 
 Closeout acknowledgement final acknowledgement closeout evidence is persisted as `closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledgement_closure` records. Each closeout evidence record retains final evidence acknowledgement records, related final evidence records, final evidence delivery evidence, acknowledgement readiness metrics, retained actions, closeout notes, superseded acknowledgement evidence, source record counts, and audit history. Closeout evidence records do not mutate final evidence acknowledgements, final evidence records, notification deliveries, closeout packages, or source acknowledgement evidence; they provide append-only governance evidence before final acknowledgement closeout notification delivery.
 
+Closeout acknowledgement final acknowledgement closeout evidence can be delivered through the guarded notification delivery adapter with source `closure_package_acknowledgement_closeout_notification_closure_package_acknowledgement_final_evidence_acknowledgement_closure`. Delivery recipients are derived from the closeout reviewer, final evidence acknowledgement reviewers, and related final evidence reviewers. Delivery produces append-only notification evidence and retry-control eligibility without mutating final acknowledgement closeout evidence, final evidence acknowledgements, final evidence records, or retained source evidence.
+
 ## GitHub Implementation Plan
 
 1. Create branch: `codex/backend-persistence-adapter-contracts`
