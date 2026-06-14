@@ -161,6 +161,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Retains final acknowledgement closure final closeout acknowledgement closure evidence with delivery acknowledgements, closeout evidence records, notification evidence, retained actions, and superseded acknowledgement evidence.
 - Delivers final acknowledgement closure final closeout acknowledgement closure evidence to governance reviewers with retained notification evidence.
 - Captures final acknowledgement closure final closeout acknowledgement closure delivery acknowledgements with reviewer response and retained actions.
+- Retains final acknowledgement closure final closeout acknowledgement closure closeout evidence with delivery acknowledgements, closure evidence records, notification evidence, retained actions, and superseded acknowledgement evidence.
 - Exports Closure SLA follow-up closure packages with retained actions, superseded routes, and notification evidence.
 - Delivers Closure SLA follow-up closure packages to governance reviewers with retained delivery evidence.
 - Captures Closure SLA follow-up closure package delivery acknowledgements with reviewer response and retained actions.
@@ -317,6 +318,6 @@ npm run build
 
 Use the canonical load and report config paths to move deeper into live connector-backed records:
 
-1. Add closeout acknowledgement closure package acknowledgement closeout final acknowledgement closeout acknowledgement closure final closeout acknowledgement closure closeout evidence.
-2. Add closeout acknowledgement closure package acknowledgement closeout final acknowledgement closeout acknowledgement closure final closeout acknowledgement closure closeout notification delivery.
-3. Add closeout acknowledgement closure package acknowledgement closeout final acknowledgement closeout acknowledgement closure final closeout acknowledgement closure closeout delivery acknowledgement tracking.
+1. Add closeout acknowledgement closure package acknowledgement closeout final acknowledgement closeout acknowledgement closure final closeout acknowledgement closure closeout notification delivery.
+2. Add closeout acknowledgement closure package acknowledgement closeout final acknowledgement closeout acknowledgement closure final closeout acknowledgement closure closeout delivery acknowledgement tracking.
+3. Add closeout acknowledgement closure package acknowledgement closeout final acknowledgement closeout acknowledgement closure final closeout acknowledgement closure final evidence.
