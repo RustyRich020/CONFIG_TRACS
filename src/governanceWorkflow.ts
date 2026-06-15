@@ -1,0 +1,206 @@
+import type { BackendRecord, BackendRecordKind, StatusLevel } from './types'
+
+export type GovernanceWorkflowStage =
+  | 'source'
+  | 'package'
+  | 'delivery'
+  | 'acknowledgement'
+  | 'closure'
+  | 'closeout'
+  | 'final_evidence'
+  | 'retry'
+
+export type GovernanceWorkflowItem = {
+  record: BackendRecord
+  workflowType: string
+  workflowLabel: string
+  stage: GovernanceWorkflowStage
+  stageLabel: string
+  actionLabel: string
+  owner: string
+  ageDays: number
+  status: StatusLevel
+}
+
+export type GovernanceWorkflowSummary = {
+  total: number
+  blocking: number
+  warning: number
+  pass: number
+  byStage: Record<GovernanceWorkflowStage, number>
+  actionItems: number
+  latestUpdatedAt?: string
+}
+
+const emptyStageCounts: Record<GovernanceWorkflowStage, number> = {
+  acknowledgement: 0,
+  closeout: 0,
+  closure: 0,
+  delivery: 0,
+  final_evidence: 0,
+  package: 0,
+  retry: 0,
+  source: 0,
+}
+
+export function deriveGovernanceWorkflowQueue(records: BackendRecord[]): {
+  items: GovernanceWorkflowItem[]
+  summary: GovernanceWorkflowSummary
+} {
+  const items = records
+    .filter(isGovernanceRecord)
+    .map(toGovernanceWorkflowItem)
+    .sort((first, second) => {
+      const statusDelta = statusRank(second.status) - statusRank(first.status)
+      if (statusDelta !== 0) return statusDelta
+      return new Date(second.record.updatedAt).getTime() - new Date(first.record.updatedAt).getTime()
+    })
+
+  const summary = items.reduce(
+    (current, item) => {
+      current.total += 1
+      current[item.status] += 1
+      current.byStage[item.stage] += 1
+      if (item.status !== 'pass') current.actionItems += 1
+      if (!current.latestUpdatedAt || new Date(item.record.updatedAt) > new Date(current.latestUpdatedAt)) {
+        current.latestUpdatedAt = item.record.updatedAt
+      }
+      return current
+    },
+    {
+      total: 0,
+      blocking: 0,
+      warning: 0,
+      pass: 0,
+      byStage: { ...emptyStageCounts },
+      actionItems: 0,
+      latestUpdatedAt: undefined,
+    } as GovernanceWorkflowSummary,
+  )
+
+  return { items, summary }
+}
+
+function isGovernanceRecord(record: BackendRecord) {
+  return (
+    record.kind === 'notification_delivery' ||
+    record.kind === 'notification_delivery_retry' ||
+    record.kind.includes('acknowledgement') ||
+    record.kind.includes('closure') ||
+    record.kind.includes('closeout') ||
+    record.kind.includes('evidence') ||
+    record.kind.includes('cutover')
+  )
+}
+
+function toGovernanceWorkflowItem(record: BackendRecord): GovernanceWorkflowItem {
+  const stage = governanceStage(record.kind)
+  const payload = asObject(record.payload)
+  const workflowType = workflowTypeFor(record)
+  const status = governanceStatus(record, stage)
+
+  return {
+    record,
+    workflowType,
+    workflowLabel: labelize(workflowType),
+    stage,
+    stageLabel: labelize(stage),
+    actionLabel: actionLabelFor(status, stage),
+    owner: ownerFor(payload, record.label),
+    ageDays: daysSince(record.updatedAt),
+    status,
+  }
+}
+
+function governanceStage(kind: BackendRecordKind): GovernanceWorkflowStage {
+  if (kind === 'notification_delivery_retry' || kind.includes('retry_queue')) return 'retry'
+  if (kind === 'notification_delivery' || kind.endsWith('_delivery')) return 'delivery'
+  if (kind.endsWith('_delivery_acknowledgement') || kind.endsWith('_acknowledgement')) return 'acknowledgement'
+  if (kind.includes('final_evidence')) return 'final_evidence'
+  if (kind.includes('closeout_evidence') || kind.includes('closeout')) return 'closeout'
+  if (kind.endsWith('_closure') || kind.includes('_closure_')) return 'closure'
+  if (kind.includes('package')) return 'package'
+  return 'source'
+}
+
+function workflowTypeFor(record: BackendRecord) {
+  const payload = asObject(record.payload)
+  const request = asObject(payload.request)
+  const source = typeof request.source === 'string' ? request.source : undefined
+  if (source) return source
+
+  if (record.kind.includes('postgres_cutover')) return 'production_cutover'
+  if (record.kind.includes('retry_queue')) return 'notification_retry_queue'
+  if (record.kind.includes('closure_sla')) return 'closure_sla'
+  if (record.kind.includes('traceability')) return 'traceability'
+  if (record.kind.includes('notification')) return 'notification_governance'
+  if (record.kind.includes('closure_package')) return 'closure_package_governance'
+  return record.kind
+}
+
+function governanceStatus(record: BackendRecord, stage: GovernanceWorkflowStage): StatusLevel {
+  const payload = asObject(record.payload)
+  const payloadStatus = typeof payload.status === 'string' ? payload.status : ''
+
+  if (record.status === 'blocking' || /rejected|failed|blocked|overdue/.test(payloadStatus)) return 'blocking'
+  if (record.status === 'warning') return 'warning'
+  if (
+    /pending|draft|queued|active|changes_requested|with_actions/.test(payloadStatus) ||
+    stage === 'delivery' ||
+    stage === 'retry'
+  ) {
+    return 'warning'
+  }
+  return 'pass'
+}
+
+function ownerFor(payload: Record<string, unknown>, fallback: string) {
+  const ownerFields = [
+    payload.reviewer,
+    payload.owner,
+    payload.actor,
+    firstText(payload.reviewers),
+    firstText(payload.recipients),
+    firstText(payload.routedReviewers),
+    firstText(payload.infrastructureOwners),
+    firstText(payload.messagingOwners),
+  ]
+  return ownerFields.find((value): value is string => typeof value === 'string' && value.trim().length > 0) ?? fallback
+}
+
+function actionLabelFor(status: StatusLevel, stage: GovernanceWorkflowStage) {
+  if (status === 'blocking') return `Escalate ${labelize(stage)}`
+  if (status === 'warning') return `Review ${labelize(stage)}`
+  return `Retain ${labelize(stage)}`
+}
+
+function daysSince(value: string) {
+  const timestamp = new Date(value).getTime()
+  if (Number.isNaN(timestamp)) return 0
+  return Math.max(0, Math.floor((Date.now() - timestamp) / 86_400_000))
+}
+
+function statusRank(status: StatusLevel) {
+  if (status === 'blocking') return 3
+  if (status === 'warning') return 2
+  return 1
+}
+
+function labelize(value: string) {
+  return value
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function asObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+}
+
+function firstText(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.find((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+  }
+  return undefined
+}

@@ -1187,6 +1187,36 @@
   font-size: 11px;
 }
 
+.backend-record-row small {
+  display: block;
+  margin-top: 6px;
+  color: #526565;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.governance-work-queue-panel {
+  margin-top: 18px;
+}
+
+.governance-work-queue-list {
+  padding-top: 6px;
+}
+
+.queue-record-side {
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 140px;
+  text-align: right;
+}
+
+.queue-record-side span {
+  margin-top: 0;
+  max-width: 180px;
+}
+
 .adapter-contract-card {
   padding: 13px 0;
   border-top: 1px solid #edf2f1;

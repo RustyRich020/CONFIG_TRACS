@@ -46,6 +46,7 @@ import {
   testAllConnectors,
   testConnector,
 } from './foundation'
+import { deriveGovernanceWorkflowQueue } from './governanceWorkflow'
 import { createSavedVersion, loadSavedVersions, persistSavedVersions } from './persistence'
 import type {
   AppConfig,
@@ -10696,6 +10697,11 @@ function BackendPersistenceView({
     },
     {} as Record<string, number>,
   )
+  const governanceWorkflowQueue = useMemo(
+    () => deriveGovernanceWorkflowQueue(backendRecords),
+    [backendRecords],
+  )
+  const governanceWorkQueueItems = governanceWorkflowQueue.items.slice(0, 8)
   const reconciliationRecords = backendRecords.filter(
     (record): record is BackendRecord<PostgresImportReconciliation> =>
       record.kind === 'postgres_import_reconciliation',
@@ -13233,6 +13239,58 @@ function BackendPersistenceView({
             <div className="empty-state compact">Save a deployment snapshot or run an adapter dry run.</div>
           )}
         </section>
+      </section>
+
+      <section className="panel governance-work-queue-panel">
+        <PanelHeader
+          icon={ClipboardCheck}
+          title="Governance Work Queue"
+          subtitle="Normalized workflow view across packages, deliveries, acknowledgements, closures, closeouts, retries, and final evidence."
+        />
+        <div className="metadata-grid">
+          <Metadata label="Governance records" value={String(governanceWorkflowQueue.summary.total)} />
+          <Metadata label="Action items" value={String(governanceWorkflowQueue.summary.actionItems)} />
+          <Metadata label="Blocking" value={String(governanceWorkflowQueue.summary.blocking)} />
+          <Metadata label="Warnings" value={String(governanceWorkflowQueue.summary.warning)} />
+          <Metadata label="Retained" value={String(governanceWorkflowQueue.summary.pass)} />
+          <Metadata
+            label="Latest update"
+            value={
+              governanceWorkflowQueue.summary.latestUpdatedAt
+                ? new Date(governanceWorkflowQueue.summary.latestUpdatedAt).toLocaleString()
+                : 'No governance records'
+            }
+          />
+        </div>
+        <div className="version-summary backend-summary">
+          <span>{governanceWorkflowQueue.summary.byStage.package} packages</span>
+          <span>{governanceWorkflowQueue.summary.byStage.delivery} deliveries</span>
+          <span>{governanceWorkflowQueue.summary.byStage.acknowledgement} acknowledgements</span>
+          <span>{governanceWorkflowQueue.summary.byStage.closure} closures</span>
+          <span>{governanceWorkflowQueue.summary.byStage.closeout} closeouts</span>
+          <span>{governanceWorkflowQueue.summary.byStage.final_evidence} final evidence</span>
+        </div>
+        {governanceWorkQueueItems.length > 0 ? (
+          <div className="backend-record-list governance-work-queue-list">
+            {governanceWorkQueueItems.map((item) => (
+              <div className="backend-record-row" key={item.record.id}>
+                <div>
+                  <strong>{item.actionLabel}</strong>
+                  <span>
+                    {item.workflowLabel} / {item.stageLabel} / v{item.record.version} / {item.ageDays} day(s)
+                  </span>
+                  <small>{item.record.summary}</small>
+                </div>
+                <div className="queue-record-side">
+                  <span>{item.owner}</span>
+                  <StatusChip status={item.status} label={item.status} />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state compact">Governance records will appear here after packages, deliveries, or acknowledgements are saved.</div>
+        )}
       </section>
 
       <section className="backend-grid lower">
