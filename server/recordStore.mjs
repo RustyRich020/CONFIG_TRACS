@@ -67,6 +67,7 @@ export const recordStoreSchema = {
         { name: 'version', type: 'integer', constraints: 'not null' },
         { name: 'status', type: 'text', constraints: 'not null' },
         { name: 'summary', type: 'text', constraints: 'not null' },
+        { name: 'workflow_json', type: 'json', constraints: 'nullable' },
         { name: 'payload_json', type: 'json', constraints: 'not null' },
         { name: 'created_at', type: 'timestamp', constraints: 'not null indexed' },
         { name: 'updated_at', type: 'timestamp', constraints: 'not null' },
@@ -152,8 +153,103 @@ function summarizeStatus(records) {
   return 'pass'
 }
 
+function asObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+}
+
+function firstText(value) {
+  return Array.isArray(value) ? value.find((entry) => typeof entry === 'string' && entry.trim()) : undefined
+}
+
+function isGovernanceRecordKind(kind) {
+  return (
+    kind === 'notification_delivery' ||
+    kind === 'notification_delivery_retry' ||
+    kind.includes('acknowledgement') ||
+    kind.includes('closure') ||
+    kind.includes('closeout') ||
+    kind.includes('evidence') ||
+    kind.includes('cutover')
+  )
+}
+
+function governanceStage(kind) {
+  if (kind === 'notification_delivery_retry' || kind.includes('retry_queue')) return 'retry'
+  if (kind === 'notification_delivery' || kind.endsWith('_delivery')) return 'delivery'
+  if (kind.endsWith('_delivery_acknowledgement') || kind.endsWith('_acknowledgement')) return 'acknowledgement'
+  if (kind.includes('final_evidence')) return 'final_evidence'
+  if (kind.includes('closeout_evidence') || kind.includes('closeout')) return 'closeout'
+  if (kind.includes('follow_up_route')) return 'closure'
+  if (kind.endsWith('_closure') || kind.includes('_closure_')) return 'closure'
+  if (kind.includes('package')) return 'package'
+  return 'source'
+}
+
+function workflowTypeFor(kind, payload) {
+  const request = asObject(payload.request)
+  if (typeof request.source === 'string' && request.source.trim()) return request.source
+  if (kind.includes('postgres_cutover')) return 'production_cutover'
+  if (kind.includes('retry_queue')) return 'notification_retry_queue'
+  if (kind.includes('closure_sla')) return 'closure_sla'
+  if (kind.includes('traceability')) return 'traceability'
+  if (kind.includes('notification')) return 'notification_governance'
+  if (kind.includes('closure_package')) return 'closure_package_governance'
+  return kind
+}
+
+function ownerFor(payload, fallback) {
+  const ownerFields = [
+    payload.owner,
+    payload.actor,
+    payload.reviewer,
+    firstText(payload.reviewers),
+    firstText(payload.recipients),
+    firstText(payload.routedReviewers),
+    firstText(payload.infrastructureOwners),
+    firstText(payload.messagingOwners),
+  ]
+  return ownerFields.find((value) => typeof value === 'string' && value.trim()) ?? fallback
+}
+
+function parentRecordIdFor(payload) {
+  const nestedDelivery = asObject(payload.deliveryRecord)
+  const nestedPackage = asObject(payload.packageRecord)
+  const candidates = [
+    payload.parentRecordId,
+    payload.deliveryRecordId,
+    payload.originalDeliveryRecordId,
+    payload.responseRecordId,
+    payload.packageRecordId,
+    payload.closureRecordId,
+    payload.recordId,
+    nestedDelivery.id,
+    nestedPackage.id,
+  ]
+  return candidates.find((value) => typeof value === 'string' && value.trim())
+}
+
+function dueAtFor(payload) {
+  return [payload.dueAt, payload.retryDueAt, payload.reminderAt, payload.nextReviewAt, payload.routeDueAt].find(
+    (value) => typeof value === 'string' && value.trim(),
+  )
+}
+
+function inferWorkflowMetadata({ kind, label, payload }) {
+  if (!isGovernanceRecordKind(kind)) return undefined
+  const payloadObject = asObject(payload)
+  return {
+    metadataVersion: 'workflow_metadata_v1',
+    workflowType: workflowTypeFor(kind, payloadObject),
+    stage: governanceStage(kind),
+    parentRecordId: parentRecordIdFor(payloadObject),
+    owner: ownerFor(payloadObject, label),
+    dueAt: dueAtFor(payloadObject),
+  }
+}
+
 function parseRecordRow(row) {
   const payload = typeof row.payload_json === 'string' ? JSON.parse(row.payload_json) : row.payload_json
+  const workflow = typeof row.workflow_json === 'string' ? JSON.parse(row.workflow_json) : row.workflow_json
   const createdAt = row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at
   const updatedAt = row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at
   return {
@@ -165,6 +261,7 @@ function parseRecordRow(row) {
     updatedAt,
     label: row.label,
     summary: row.summary,
+    ...(workflow ? { workflow } : {}),
     payload,
   }
 }
@@ -185,9 +282,10 @@ export function createFileRecordStore({ dataFile, maxRecords = 250 }) {
     await writeFile(dataFile, JSON.stringify(records.slice(0, maxRecords), null, 2))
   }
 
-  async function saveRecord({ kind, label, status, summary, payload }) {
+  async function saveRecord({ kind, label, status, summary, payload, workflow }) {
     const records = await readRecords()
     const now = new Date().toISOString()
+    const workflowMetadata = workflow ?? inferWorkflowMetadata({ kind, label, payload })
     const record = {
       id: randomUUID(),
       kind,
@@ -197,6 +295,7 @@ export function createFileRecordStore({ dataFile, maxRecords = 250 }) {
       updatedAt: now,
       label,
       summary,
+      ...(workflowMetadata ? { workflow: workflowMetadata } : {}),
       payload,
     }
     await writeRecords([record, ...records])
@@ -265,6 +364,7 @@ export function createSqliteRecordStore({ databaseFile, maxRecords = 1000 }) {
       version integer not null,
       status text not null,
       summary text not null,
+      workflow_json text,
       payload_json text not null,
       created_at text not null,
       updated_at text not null
@@ -282,22 +382,27 @@ export function createSqliteRecordStore({ databaseFile, maxRecords = 1000 }) {
     create index if not exists idx_tracs_record_links_source on tracs_record_links(source_record_id, relationship_type);
     create index if not exists idx_tracs_record_links_target on tracs_record_links(target_record_id, relationship_type);
   `)
+  try {
+    database.exec('alter table tracs_records add column workflow_json text;')
+  } catch {
+    // Existing SQLite stores may already have the workflow metadata column.
+  }
 
   const listStatement = database.prepare(`
-    select id, kind, label, version, status, summary, payload_json, created_at, updated_at
+    select id, kind, label, version, status, summary, workflow_json, payload_json, created_at, updated_at
     from tracs_records
     order by created_at desc
     limit ?
   `)
   const listByKindStatement = database.prepare(`
-    select id, kind, label, version, status, summary, payload_json, created_at, updated_at
+    select id, kind, label, version, status, summary, workflow_json, payload_json, created_at, updated_at
     from tracs_records
     where kind = ?
     order by created_at desc
     limit ?
   `)
   const getStatement = database.prepare(`
-    select id, kind, label, version, status, summary, payload_json, created_at, updated_at
+    select id, kind, label, version, status, summary, workflow_json, payload_json, created_at, updated_at
     from tracs_records
     where id = ?
   `)
@@ -308,16 +413,17 @@ export function createSqliteRecordStore({ databaseFile, maxRecords = 1000 }) {
   `)
   const insertStatement = database.prepare(`
     insert into tracs_records (
-      id, kind, label, version, status, summary, payload_json, created_at, updated_at
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, kind, label, version, status, summary, workflow_json, payload_json, created_at, updated_at
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
   async function readRecords() {
     return listStatement.all(maxRecords).map(parseRecordRow)
   }
 
-  async function saveRecord({ kind, label, status, summary, payload }) {
+  async function saveRecord({ kind, label, status, summary, payload, workflow }) {
     const now = new Date().toISOString()
+    const workflowMetadata = workflow ?? inferWorkflowMetadata({ kind, label, payload })
     const record = {
       id: randomUUID(),
       kind,
@@ -327,6 +433,7 @@ export function createSqliteRecordStore({ databaseFile, maxRecords = 1000 }) {
       updatedAt: now,
       label,
       summary,
+      ...(workflowMetadata ? { workflow: workflowMetadata } : {}),
       payload,
     }
     insertStatement.run(
@@ -336,6 +443,7 @@ export function createSqliteRecordStore({ databaseFile, maxRecords = 1000 }) {
       record.version,
       record.status,
       record.summary,
+      workflowMetadata ? JSON.stringify(workflowMetadata) : null,
       JSON.stringify(record.payload),
       record.createdAt,
       record.updatedAt,
@@ -417,6 +525,7 @@ export function createPostgresRecordStore({
           version integer not null,
           status text not null,
           summary text not null,
+          workflow_json jsonb,
           payload_json jsonb not null,
           created_at timestamptz not null,
           updated_at timestamptz not null
@@ -429,6 +538,7 @@ export function createPostgresRecordStore({
           on tracs_records(kind, label, version desc);
         create index if not exists idx_tracs_records_status_created_at
           on tracs_records(status, created_at desc);
+        alter table tracs_records add column if not exists workflow_json jsonb;
         create table if not exists tracs_record_links (
           id text primary key,
           source_record_id text not null,
@@ -449,7 +559,7 @@ export function createPostgresRecordStore({
     await initialize()
     const result = await pool.query(
       `
-        select id, kind, label, version, status, summary, payload_json, created_at, updated_at
+        select id, kind, label, version, status, summary, workflow_json, payload_json, created_at, updated_at
         from tracs_records
         order by created_at desc
         limit $1
@@ -459,7 +569,7 @@ export function createPostgresRecordStore({
     return result.rows.map(parseRecordRow)
   }
 
-  async function saveRecord({ kind, label, status, summary, payload }) {
+  async function saveRecord({ kind, label, status, summary, payload, workflow }) {
     await initialize()
     const client = await pool.connect()
     try {
@@ -474,12 +584,13 @@ export function createPostgresRecordStore({
         [kind, label],
       )
       const now = new Date().toISOString()
+      const workflowMetadata = workflow ?? inferWorkflowMetadata({ kind, label, payload })
       const insertResult = await client.query(
         `
           insert into tracs_records (
-            id, kind, label, version, status, summary, payload_json, created_at, updated_at
-          ) values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)
-          returning id, kind, label, version, status, summary, payload_json, created_at, updated_at
+            id, kind, label, version, status, summary, workflow_json, payload_json, created_at, updated_at
+          ) values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10)
+          returning id, kind, label, version, status, summary, workflow_json, payload_json, created_at, updated_at
         `,
         [
           randomUUID(),
@@ -488,6 +599,7 @@ export function createPostgresRecordStore({
           versionResult.rows[0].next_version,
           status,
           summary,
+          workflowMetadata ? JSON.stringify(workflowMetadata) : null,
           JSON.stringify(payload),
           now,
           now,
@@ -507,7 +619,7 @@ export function createPostgresRecordStore({
     await initialize()
     const result = await pool.query(
       `
-        select id, kind, label, version, status, summary, payload_json, created_at, updated_at
+        select id, kind, label, version, status, summary, workflow_json, payload_json, created_at, updated_at
         from tracs_records
         where kind = $1
         order by created_at desc
@@ -523,7 +635,7 @@ export function createPostgresRecordStore({
     const result = await pool.query(
       `
         select distinct on (label)
-          id, kind, label, version, status, summary, payload_json, created_at, updated_at
+          id, kind, label, version, status, summary, workflow_json, payload_json, created_at, updated_at
         from tracs_records
         where kind = $1
         order by label, version desc, created_at desc
@@ -538,7 +650,7 @@ export function createPostgresRecordStore({
     await initialize()
     const result = await pool.query(
       `
-        select id, kind, label, version, status, summary, payload_json, created_at, updated_at
+        select id, kind, label, version, status, summary, workflow_json, payload_json, created_at, updated_at
         from tracs_records
         where id = $1
       `,

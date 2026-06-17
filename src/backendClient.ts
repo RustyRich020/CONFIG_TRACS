@@ -1,4 +1,5 @@
 import { getAdapterContract } from './backendContracts'
+import { inferGovernanceWorkflowMetadata } from './governanceWorkflow'
 import yaml from 'js-yaml'
 import type {
   AdapterDryRunResult,
@@ -17,6 +18,7 @@ import type {
   CredentialValidationResult,
   CsvSchemaInference,
   DeploymentState,
+  GovernanceWorkflowMetadata,
   MappingManifest,
   MappingValidationResult,
   LocalAsset,
@@ -700,15 +702,18 @@ export class LocalBackendClient {
     status,
     summary,
     payload,
+    workflow,
   }: {
     kind: BackendRecordKind
     label: string
     status: StatusLevel
     summary: string
     payload: TPayload
+    workflow?: GovernanceWorkflowMetadata
   }): Promise<BackendRecord<TPayload>> {
     const records = readJson<BackendRecord[]>(recordsKey, [])
     const now = new Date().toISOString()
+    const workflowMetadata = workflow ?? inferGovernanceWorkflowMetadata({ kind, label, payload })
     const record: BackendRecord<TPayload> = {
       id: crypto.randomUUID(),
       kind,
@@ -718,6 +723,7 @@ export class LocalBackendClient {
       updatedAt: now,
       label,
       summary,
+      ...(workflowMetadata ? { workflow: workflowMetadata } : {}),
       payload,
     }
     writeRecords([record, ...records])
@@ -1358,20 +1364,23 @@ class ApiBackendClient {
     status,
     summary,
     payload,
+    workflow,
   }: {
     kind: BackendRecordKind
     label: string
     status: StatusLevel
     summary: string
     payload: TPayload
+    workflow?: GovernanceWorkflowMetadata
   }): Promise<BackendRecord<TPayload>> {
+    const workflowMetadata = workflow ?? inferGovernanceWorkflowMetadata({ kind, label, payload })
     try {
       return await this.request<BackendRecord<TPayload>>('/api/records', {
         method: 'POST',
-        body: JSON.stringify({ kind, label, status, summary, payload }),
+        body: JSON.stringify({ kind, label, status, summary, payload, workflow: workflowMetadata }),
       })
     } catch {
-      return this.localFallback.saveRecord({ kind, label, status, summary, payload })
+      return this.localFallback.saveRecord({ kind, label, status, summary, payload, workflow: workflowMetadata })
     }
   }
 

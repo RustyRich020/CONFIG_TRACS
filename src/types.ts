@@ -319,6 +319,25 @@ export type BackendRecordKind =
   | 'postgres_cutover_final_handoff_closure_package_acknowledgement'
   | 'postgres_cutover_final_handoff_closure_package_acknowledgement_closure'
 
+export type GovernanceWorkflowStage =
+  | 'source'
+  | 'package'
+  | 'delivery'
+  | 'acknowledgement'
+  | 'closure'
+  | 'closeout'
+  | 'final_evidence'
+  | 'retry'
+
+export type GovernanceWorkflowMetadata = {
+  metadataVersion: 'workflow_metadata_v1'
+  workflowType: string
+  stage: GovernanceWorkflowStage
+  parentRecordId?: string
+  owner?: string
+  dueAt?: string
+}
+
 export type BackendRecord<TPayload = unknown> = {
   id: string
   kind: BackendRecordKind
@@ -328,6 +347,7 @@ export type BackendRecord<TPayload = unknown> = {
   updatedAt: string
   label: string
   summary: string
+  workflow?: GovernanceWorkflowMetadata
   payload: TPayload
 }
 

@@ -500,6 +500,8 @@ Final acknowledgement closure final closeout acknowledgement closure final evide
 
 Governance workflow queue v1 is a normalized read model over existing backend records. It classifies persisted package, delivery, acknowledgement, closure, closeout, retry, cutover, and final-evidence records into reusable workflow stages without rewriting or migrating stored payloads. The queue provides operational status, owner, age, stage counts, and action labels so future phases can add structured workflow metadata while preserving backward compatibility with the long-form historical record kinds.
 
+Structured workflow metadata v1 adds an optional top-level `workflow` object to new backend records. The object carries `metadataVersion=workflow_metadata_v1`, `workflowType`, `stage`, optional `parentRecordId`, optional `owner`, and optional `dueAt`. Browser-local, JSON, SQLite, and Postgres stores infer this metadata for governance record kinds when callers do not provide it explicitly. Existing records remain valid; the Governance Work Queue prefers structured metadata and falls back to legacy record-kind classification when `workflow` is absent. SQLite and Postgres stores add nullable `workflow_json` columns without changing payload JSON.
+
 ## GitHub Implementation Plan
 
 1. Create branch: `codex/backend-persistence-adapter-contracts`

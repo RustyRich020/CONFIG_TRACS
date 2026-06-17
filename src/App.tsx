@@ -313,8 +313,8 @@ const statusIcon: Record<StatusLevel, typeof CheckCircle2> = {
   blocking: ShieldCheck,
 }
 
-function titleize(value: string) {
-  return value
+function titleize(value?: string | null) {
+  return (value ?? 'unknown')
     .split('_')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
@@ -10702,6 +10702,9 @@ function BackendPersistenceView({
     [backendRecords],
   )
   const governanceWorkQueueItems = governanceWorkflowQueue.items.slice(0, 8)
+  const structuredWorkflowRecordCount = governanceWorkflowQueue.items.filter(
+    (item) => item.record.workflow?.metadataVersion === 'workflow_metadata_v1',
+  ).length
   const reconciliationRecords = backendRecords.filter(
     (record): record is BackendRecord<PostgresImportReconciliation> =>
       record.kind === 'postgres_import_reconciliation',
@@ -13253,6 +13256,7 @@ function BackendPersistenceView({
           <Metadata label="Blocking" value={String(governanceWorkflowQueue.summary.blocking)} />
           <Metadata label="Warnings" value={String(governanceWorkflowQueue.summary.warning)} />
           <Metadata label="Retained" value={String(governanceWorkflowQueue.summary.pass)} />
+          <Metadata label="Structured metadata" value={String(structuredWorkflowRecordCount)} />
           <Metadata
             label="Latest update"
             value={
@@ -13279,10 +13283,14 @@ function BackendPersistenceView({
                   <span>
                     {item.workflowLabel} / {item.stageLabel} / v{item.record.version} / {item.ageDays} day(s)
                   </span>
+                  {item.dueAt ? <span>Due {new Date(item.dueAt).toLocaleString()}</span> : null}
                   <small>{item.record.summary}</small>
                 </div>
                 <div className="queue-record-side">
                   <span>{item.owner}</span>
+                  <span>
+                    {item.record.workflow?.metadataVersion === 'workflow_metadata_v1' ? 'structured' : 'legacy fallback'}
+                  </span>
                   <StatusChip status={item.status} label={item.status} />
                 </div>
               </div>

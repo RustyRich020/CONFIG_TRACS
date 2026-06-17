@@ -1,14 +1,10 @@
-import type { BackendRecord, BackendRecordKind, StatusLevel } from './types'
-
-export type GovernanceWorkflowStage =
-  | 'source'
-  | 'package'
-  | 'delivery'
-  | 'acknowledgement'
-  | 'closure'
-  | 'closeout'
-  | 'final_evidence'
-  | 'retry'
+import type {
+  BackendRecord,
+  BackendRecordKind,
+  GovernanceWorkflowMetadata,
+  GovernanceWorkflowStage,
+  StatusLevel,
+} from './types'
 
 export type GovernanceWorkflowItem = {
   record: BackendRecord
@@ -18,6 +14,7 @@ export type GovernanceWorkflowItem = {
   stageLabel: string
   actionLabel: string
   owner: string
+  dueAt?: string
   ageDays: number
   status: StatusLevel
 }
@@ -81,8 +78,38 @@ export function deriveGovernanceWorkflowQueue(records: BackendRecord[]): {
   return { items, summary }
 }
 
+export function inferGovernanceWorkflowMetadata({
+  kind,
+  label,
+  payload,
+}: {
+  kind: BackendRecordKind
+  label: string
+  payload: unknown
+}): GovernanceWorkflowMetadata | undefined {
+  const record = {
+    kind,
+    label,
+    payload,
+  } as BackendRecord
+
+  if (!isGovernanceRecord(record)) return undefined
+
+  const stage = governanceStage(kind)
+  const payloadObject = asObject(payload)
+  return {
+    metadataVersion: 'workflow_metadata_v1',
+    workflowType: workflowTypeFor(record),
+    stage,
+    parentRecordId: parentRecordIdFor(payloadObject),
+    owner: ownerFor(payloadObject, label),
+    dueAt: dueAtFor(payloadObject),
+  }
+}
+
 function isGovernanceRecord(record: BackendRecord) {
   return (
+    hasStructuredWorkflowMetadata(record.workflow) ||
     record.kind === 'notification_delivery' ||
     record.kind === 'notification_delivery_retry' ||
     record.kind.includes('acknowledgement') ||
@@ -94,9 +121,10 @@ function isGovernanceRecord(record: BackendRecord) {
 }
 
 function toGovernanceWorkflowItem(record: BackendRecord): GovernanceWorkflowItem {
-  const stage = governanceStage(record.kind)
+  const explicitWorkflow = hasStructuredWorkflowMetadata(record.workflow) ? record.workflow : undefined
+  const stage = explicitWorkflow?.stage ?? governanceStage(record.kind)
   const payload = asObject(record.payload)
-  const workflowType = workflowTypeFor(record)
+  const workflowType = explicitWorkflow?.workflowType ?? workflowTypeFor(record)
   const status = governanceStatus(record, stage)
 
   return {
@@ -106,10 +134,19 @@ function toGovernanceWorkflowItem(record: BackendRecord): GovernanceWorkflowItem
     stage,
     stageLabel: labelize(stage),
     actionLabel: actionLabelFor(status, stage),
-    owner: ownerFor(payload, record.label),
+    owner: explicitWorkflow?.owner ?? ownerFor(payload, record.label),
+    dueAt: explicitWorkflow?.dueAt ?? dueAtFor(payload),
     ageDays: daysSince(record.updatedAt),
     status,
   }
+}
+
+function hasStructuredWorkflowMetadata(workflow: BackendRecord['workflow']) {
+  return (
+    workflow?.metadataVersion === 'workflow_metadata_v1' &&
+    typeof workflow.workflowType === 'string' &&
+    typeof workflow.stage === 'string'
+  )
 }
 
 function governanceStage(kind: BackendRecordKind): GovernanceWorkflowStage {
@@ -118,6 +155,7 @@ function governanceStage(kind: BackendRecordKind): GovernanceWorkflowStage {
   if (kind.endsWith('_delivery_acknowledgement') || kind.endsWith('_acknowledgement')) return 'acknowledgement'
   if (kind.includes('final_evidence')) return 'final_evidence'
   if (kind.includes('closeout_evidence') || kind.includes('closeout')) return 'closeout'
+  if (kind.includes('follow_up_route')) return 'closure'
   if (kind.endsWith('_closure') || kind.includes('_closure_')) return 'closure'
   if (kind.includes('package')) return 'package'
   return 'source'
@@ -156,9 +194,9 @@ function governanceStatus(record: BackendRecord, stage: GovernanceWorkflowStage)
 
 function ownerFor(payload: Record<string, unknown>, fallback: string) {
   const ownerFields = [
-    payload.reviewer,
     payload.owner,
     payload.actor,
+    payload.reviewer,
     firstText(payload.reviewers),
     firstText(payload.recipients),
     firstText(payload.routedReviewers),
@@ -166,6 +204,28 @@ function ownerFor(payload: Record<string, unknown>, fallback: string) {
     firstText(payload.messagingOwners),
   ]
   return ownerFields.find((value): value is string => typeof value === 'string' && value.trim().length > 0) ?? fallback
+}
+
+function parentRecordIdFor(payload: Record<string, unknown>) {
+  const nestedDelivery = asObject(payload.deliveryRecord)
+  const nestedPackage = asObject(payload.packageRecord)
+  const candidates = [
+    payload.parentRecordId,
+    payload.deliveryRecordId,
+    payload.originalDeliveryRecordId,
+    payload.responseRecordId,
+    payload.packageRecordId,
+    payload.closureRecordId,
+    payload.recordId,
+    nestedDelivery.id,
+    nestedPackage.id,
+  ]
+  return candidates.find((value): value is string => typeof value === 'string' && value.trim().length > 0)
+}
+
+function dueAtFor(payload: Record<string, unknown>) {
+  const candidates = [payload.dueAt, payload.retryDueAt, payload.reminderAt, payload.nextReviewAt, payload.routeDueAt]
+  return candidates.find((value): value is string => typeof value === 'string' && value.trim().length > 0)
 }
 
 function actionLabelFor(status: StatusLevel, stage: GovernanceWorkflowStage) {
