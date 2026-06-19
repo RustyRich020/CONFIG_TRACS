@@ -32,6 +32,7 @@ import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 import { adapterContracts } from './backendContracts'
 import { backendClient } from './backendClient'
+import { TemplatePackageGovernancePanel } from './components/TemplatePackageGovernancePanel'
 import { WorkflowLineageRetentionPanel } from './components/WorkflowLineageRetentionPanel'
 import { loadAppConfig } from './configLoader'
 import {
@@ -109,6 +110,7 @@ import type {
   CrossIndustryTemplatePackageApproval,
   CrossIndustryTemplatePackageApprovalStatus,
   CrossIndustryTemplatePackageDelivery,
+  CrossIndustryTemplatePackageLifecycleExport,
   LocalAsset,
   ConnectorPreviewResult,
   ConnectorSourceMetadata,
@@ -374,6 +376,32 @@ function createCrossIndustryTemplatePackage({
       activeControlledTemplates: activeControlledTemplates.length,
     },
     evidence: `Cross-industry package assembled for ${industries.length} industry profile(s), ${Object.keys(config.workflowDefinitions).length} workflow definition(s), ${mappings.length} mapping profile(s), ${connectorTemplates.length} connector template(s), ${reports.length} report catalog item(s), and ${activeControlledTemplates.length} active controlled template(s).`,
+  }
+}
+
+function createTemplatePackageLifecycleExport({
+  approvals,
+  deliveries,
+  packagePayload,
+}: {
+  approvals: BackendRecord<CrossIndustryTemplatePackageApproval>[]
+  deliveries: BackendRecord<CrossIndustryTemplatePackageDelivery>[]
+  packagePayload: CrossIndustryTemplatePackage
+}): CrossIndustryTemplatePackageLifecycleExport {
+  const generatedAt = new Date().toISOString()
+  return {
+    exportId: `cross_industry_template_package_lifecycle:${packagePayload.packageId}:${generatedAt}`,
+    generatedAt,
+    package: packagePayload,
+    approvals,
+    deliveries,
+    summary: {
+      approvals: approvals.length,
+      deliveries: deliveries.length,
+      latestApprovalStatus: approvals[0]?.payload.status,
+      latestDeliveryStatus: deliveries[0]?.payload.status,
+    },
+    evidence: `${packagePayload.packageId} lifecycle export includes ${approvals.length} approval record(s), ${deliveries.length} delivery record(s), and package coverage for ${packagePayload.summary.industries} industry profile(s).`,
   }
 }
 
@@ -11037,6 +11065,7 @@ function BackendPersistenceView({
     useState<TraceabilityExportRetentionClass>('standard_7_year')
   const [retainedPackageSearch, setRetainedPackageSearch] = useState('')
   const [retainedPackageStatusFilter, setRetainedPackageStatusFilter] = useState<StatusLevel | 'all'>('all')
+  const [selectedRetainedPackageId, setSelectedRetainedPackageId] = useState<string | null>(null)
   const filteredWorkflowInstanceRetentionRecords = workflowInstanceRetentionRecords.filter((record) => {
     const searchable = [
       record.label,
@@ -11059,6 +11088,9 @@ function BackendPersistenceView({
     },
     { total: 0, pass: 0, warning: 0, blocking: 0, records: 0, missingParents: 0 },
   )
+  const selectedRetainedPackage =
+    filteredWorkflowInstanceRetentionRecords.find((record) => record.id === selectedRetainedPackageId) ??
+    filteredWorkflowInstanceRetentionRecords[0]
   const workflowDefinitionEntries = Object.entries(workflowDefinitions)
   const initialWorkflowEditorKey = workflowDefinitionEntries[0]?.[0] ?? ''
   const [workflowEditorKey, setWorkflowEditorKey] = useState(initialWorkflowEditorKey)
@@ -13800,7 +13832,16 @@ function BackendPersistenceView({
           {filteredWorkflowInstanceRetentionRecords.length > 0 ? (
             <div className="backend-record-list">
               {filteredWorkflowInstanceRetentionRecords.slice(0, 8).map((record) => (
-                <div className="backend-record-row" key={record.id}>
+                <button
+                  className={
+                    selectedRetainedPackage?.id === record.id
+                      ? 'backend-record-row retained-package-row active'
+                      : 'backend-record-row retained-package-row'
+                  }
+                  key={record.id}
+                  onClick={() => setSelectedRetainedPackageId(record.id)}
+                  type="button"
+                >
                   <div>
                     <strong>{record.payload.workflowLabel}</strong>
                     <span>
@@ -13811,12 +13852,38 @@ function BackendPersistenceView({
                     <StatusChip status={record.status} label={titleize(record.status)} />
                     <span>{new Date(record.payload.retainedAt).toLocaleString()}</span>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           ) : (
             <div className="empty-state compact">No retained workflow export packages match the current filters.</div>
           )}
+          {selectedRetainedPackage ? (
+            <div className="workflow-retention-detail">
+              <div className="metadata-grid compact">
+                <Metadata label="Package ID" value={selectedRetainedPackage.payload.packageId} />
+                <Metadata label="Reviewer" value={selectedRetainedPackage.payload.reviewer} />
+                <Metadata label="Retention" value={titleize(selectedRetainedPackage.payload.retention.class)} />
+                <Metadata
+                  label="Retain until"
+                  value={
+                    selectedRetainedPackage.payload.retention.retainUntil === 'indefinite'
+                      ? 'Indefinite'
+                      : new Date(selectedRetainedPackage.payload.retention.retainUntil).toLocaleDateString()
+                  }
+                />
+                <Metadata label="Lineage stages" value={String(selectedRetainedPackage.payload.coverage.stages)} />
+                <Metadata label="Audit events" value={String(selectedRetainedPackage.payload.auditHistory.length)} />
+              </div>
+              <div className="backend-record-row">
+                <div>
+                  <strong>Retention evidence</strong>
+                  <span>{selectedRetainedPackage.payload.evidence}</span>
+                  <small>{selectedRetainedPackage.payload.auditHistory[0]?.summary ?? 'No audit summary recorded.'}</small>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
         <div className="workflow-definition-editor-panel">
           <div className="workflow-lineage-header">
@@ -24426,7 +24493,6 @@ function TemplatesView({
     latestTemplateRecords.find((record) => record.id === selectedTemplateId) ??
     latestTemplateRecords[0]
   const latestPackageApproval = approvalRecords[0]
-  const latestPackageDelivery = deliveryRecords[0]
   const [packageReviewer, setPackageReviewer] = useState('Template Governance Reviewer')
   const [packageApprovalStatus, setPackageApprovalStatus] =
     useState<CrossIndustryTemplatePackageApprovalStatus>('approved')
@@ -24450,6 +24516,17 @@ function TemplatesView({
 
   function downloadCrossIndustryPackage() {
     downloadJson('tracs-cross-industry-template-package.json', crossIndustryPackage)
+  }
+
+  function downloadPackageLifecycleExport() {
+    downloadJson(
+      'tracs-cross-industry-template-package-lifecycle.json',
+      createTemplatePackageLifecycleExport({
+        approvals: approvalRecords,
+        deliveries: deliveryRecords,
+        packagePayload: crossIndustryPackage,
+      }),
+    )
   }
 
   function savePackageApproval() {
@@ -24491,91 +24568,25 @@ function TemplatesView({
         </div>
       </section>
 
-      <section className="panel template-package-panel">
-        <PanelHeader
-          icon={Package}
-          title="Cross-Industry Template Package"
-          subtitle="Assemble deployable starter evidence from workflow definitions, mappings, connector templates, reports, and active controlled templates."
-        />
-        <div className="metadata-grid">
-          <Metadata label="Industries" value={String(crossIndustryPackage.summary.industries)} />
-          <Metadata label="Workflows" value={String(crossIndustryPackage.summary.workflows)} />
-          <Metadata label="Mappings" value={String(crossIndustryPackage.summary.mappings)} />
-          <Metadata label="Connector templates" value={String(crossIndustryPackage.summary.connectorTemplates)} />
-          <Metadata label="Report catalog" value={String(crossIndustryPackage.summary.reportCatalogItems)} />
-          <Metadata label="Active controlled" value={String(crossIndustryPackage.summary.activeControlledTemplates)} />
-        </div>
-        <div className="template-package-actions">
-          <p>{crossIndustryPackage.evidence}</p>
-          <button className="primary-action" onClick={downloadCrossIndustryPackage} type="button">
-            <Download size={15} />
-            Download Package
-          </button>
-        </div>
-        <div className="metadata-grid compact">
-          <Metadata label="Approvals" value={String(approvalRecords.length)} />
-          <Metadata
-            label="Latest approval"
-            value={latestPackageApproval ? titleize(latestPackageApproval.payload.status) : 'Not reviewed'}
-          />
-          <Metadata label="Deliveries" value={String(deliveryRecords.length)} />
-          <Metadata
-            label="Latest delivery"
-            value={latestPackageDelivery ? titleize(latestPackageDelivery.payload.channel) : 'Not delivered'}
-          />
-        </div>
-        <div className="form-grid compact-form">
-          <label>
-            <span>Approval reviewer</span>
-            <input value={packageReviewer} onChange={(event) => setPackageReviewer(event.target.value)} />
-          </label>
-          <label>
-            <span>Approval status</span>
-            <select
-              value={packageApprovalStatus}
-              onChange={(event) => setPackageApprovalStatus(event.target.value as CrossIndustryTemplatePackageApprovalStatus)}
-            >
-              <option value="draft">Draft</option>
-              <option value="approved">Approved</option>
-              <option value="approved_with_conditions">Approved with conditions</option>
-              <option value="rejected">Rejected</option>
-            </select>
-          </label>
-          <label className="wide-field">
-            <span>Approval rationale</span>
-            <input
-              value={packageApprovalRationale}
-              onChange={(event) => setPackageApprovalRationale(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>Delivery channel</span>
-            <select
-              value={packageDeliveryChannel}
-              onChange={(event) => setPackageDeliveryChannel(event.target.value as CrossIndustryTemplatePackageDelivery['channel'])}
-            >
-              <option value="implementation_handoff">Implementation handoff</option>
-              <option value="governance_review">Governance review</option>
-              <option value="download">Download</option>
-            </select>
-          </label>
-          <label>
-            <span>Delivery recipients</span>
-            <input
-              value={packageDeliveryRecipients}
-              onChange={(event) => setPackageDeliveryRecipients(event.target.value)}
-            />
-          </label>
-        </div>
-        <div className="template-package-actions">
-          <button className="secondary-action" onClick={savePackageApproval} type="button">
-            Save Approval
-          </button>
-          <button className="secondary-action" onClick={savePackageDelivery} type="button">
-            Save Delivery
-          </button>
-        </div>
-      </section>
+      <TemplatePackageGovernancePanel
+        approvalRecords={approvalRecords}
+        deliveryChannel={packageDeliveryChannel}
+        deliveryRecords={deliveryRecords}
+        deliveryRecipients={packageDeliveryRecipients}
+        onApprovalRationaleChange={setPackageApprovalRationale}
+        onApprovalStatusChange={setPackageApprovalStatus}
+        onDeliveryChannelChange={setPackageDeliveryChannel}
+        onDeliveryRecipientsChange={setPackageDeliveryRecipients}
+        onDownloadPackage={downloadCrossIndustryPackage}
+        onDownloadLifecycleExport={downloadPackageLifecycleExport}
+        onReviewerChange={setPackageReviewer}
+        onSaveApproval={savePackageApproval}
+        onSaveDelivery={savePackageDelivery}
+        packageApprovalRationale={packageApprovalRationale}
+        packageApprovalStatus={packageApprovalStatus}
+        packagePayload={crossIndustryPackage}
+        packageReviewer={packageReviewer}
+      />
 
       <section className="template-grid">
         {templateCatalog.map((template) => (

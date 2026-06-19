@@ -176,6 +176,9 @@ This prototype now includes the first practical build phases for TRACS:
 - Captures cross-industry template package approval records with reviewer rationale, approval status, package snapshot, audit history, and workflow metadata.
 - Captures cross-industry template package delivery handoff records linked to the latest approval record when available.
 - Adds retained workflow export package search, status filtering, lifecycle counts, covered-record totals, and missing-parent totals in the Backend workspace.
+- Extracts the cross-industry template package governance panel into a focused frontend component.
+- Adds retained workflow export package drilldown with package ID, reviewer, retention class, retain-until date, lineage stage count, and audit evidence.
+- Exports cross-industry template package lifecycle bundles containing the package snapshot, approval records, delivery records, lifecycle summary, and evidence text.
 - Exports Closure SLA follow-up closure packages with retained actions, superseded routes, and notification evidence.
 - Delivers Closure SLA follow-up closure packages to governance reviewers with retained delivery evidence.
 - Captures Closure SLA follow-up closure package delivery acknowledgements with reviewer response and retained actions.
@@ -333,5 +336,5 @@ npm run build
 Use the template package and workflow lineage paths while consolidating governance workflows into reusable product infrastructure:
 
 1. Continue splitting large frontend surfaces into focused Backend, Templates, and Traceability components to reduce bundle size.
-2. Add retained-package detail drawers or drilldowns once package records accumulate across workflows.
-3. Add package approval/delivery export bundles for external implementation teams.
+2. Add retained-package detail drawer actions for downloading selected retained package evidence.
+3. Move retained-package catalog into a dedicated Backend subcomponent once more filters are added.

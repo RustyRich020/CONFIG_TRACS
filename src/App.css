@@ -1190,6 +1190,24 @@
   border-top: 1px solid #edf2f1;
 }
 
+.retained-package-row {
+  width: 100%;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.retained-package-row.active {
+  background: #f2f8f7;
+}
+
+.workflow-retention-detail {
+  margin-top: 12px;
+  border-top: 1px solid #edf2f1;
+}
+
 .backend-record-row strong,
 .backend-record-row span {
   display: block;

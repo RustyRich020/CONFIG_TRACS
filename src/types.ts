@@ -1092,6 +1092,21 @@ export type CrossIndustryTemplatePackageDelivery = {
   evidence: string
 }
 
+export type CrossIndustryTemplatePackageLifecycleExport = {
+  exportId: string
+  generatedAt: string
+  package: CrossIndustryTemplatePackage
+  approvals: Array<BackendRecord<CrossIndustryTemplatePackageApproval>>
+  deliveries: Array<BackendRecord<CrossIndustryTemplatePackageDelivery>>
+  summary: {
+    approvals: number
+    deliveries: number
+    latestApprovalStatus?: CrossIndustryTemplatePackageApprovalStatus
+    latestDeliveryStatus?: CrossIndustryTemplatePackageDelivery['status']
+  }
+  evidence: string
+}
+
 export type CanonicalObject = {
   id: string
   objectType: string
