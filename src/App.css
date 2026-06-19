@@ -1246,6 +1246,86 @@
   margin-top: 12px;
 }
 
+.workflow-lineage-panel {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid #e2eae9;
+  border-radius: 8px;
+  background: #fbfdfc;
+}
+
+.workflow-lineage-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.workflow-lineage-header strong,
+.workflow-lineage-header span {
+  display: block;
+}
+
+.workflow-lineage-header strong {
+  color: #1e3030;
+  font-size: 13px;
+}
+
+.workflow-lineage-header span {
+  margin-top: 5px;
+  color: #607171;
+  font-size: 12px;
+}
+
+.workflow-lineage-path {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.workflow-lineage-node {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #edf2f1;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.workflow-lineage-node span,
+.workflow-lineage-node strong,
+.workflow-lineage-node small,
+.workflow-lineage-node em {
+  display: block;
+}
+
+.workflow-lineage-node span {
+  color: #607171;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.workflow-lineage-node strong {
+  overflow-wrap: anywhere;
+  margin-top: 5px;
+  color: #1e3030;
+  font-size: 12px;
+}
+
+.workflow-lineage-node small,
+.workflow-lineage-node em {
+  margin-top: 6px;
+  color: #718080;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.workflow-lineage-node em {
+  color: #a15c00;
+  font-style: normal;
+  font-weight: 700;
+}
+
 .queue-record-side {
   display: flex;
   align-items: flex-end;

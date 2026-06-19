@@ -46,7 +46,11 @@ import {
   testAllConnectors,
   testConnector,
 } from './foundation'
-import { deriveGovernanceWorkflowQueue } from './governanceWorkflow'
+import {
+  createWorkflowInstanceExportPackage,
+  deriveGovernanceWorkflowLineage,
+  deriveGovernanceWorkflowQueue,
+} from './governanceWorkflow'
 import { createSavedVersion, loadSavedVersions, persistSavedVersions } from './persistence'
 import type {
   AppConfig,
@@ -10704,8 +10708,13 @@ function BackendPersistenceView({
     () => deriveGovernanceWorkflowQueue(backendRecords, workflowDefinitions),
     [backendRecords, workflowDefinitions],
   )
+  const governanceWorkflowLineage = useMemo(
+    () => deriveGovernanceWorkflowLineage(backendRecords, workflowDefinitions),
+    [backendRecords, workflowDefinitions],
+  )
   const governanceWorkQueueItems = governanceWorkflowQueue.items.slice(0, 8)
   const selectedWorkflowItem = governanceWorkQueueItems[0]
+  const selectedWorkflowInstance = governanceWorkflowLineage.instances[0]
   const workflowDefinitionEntries = Object.entries(workflowDefinitions)
   const selectedWorkflowDefinition = selectedWorkflowItem?.definition ?? workflowDefinitionEntries[0]?.[1]
   const selectedWorkflowStage = selectedWorkflowItem?.stage ?? selectedWorkflowDefinition?.stages[0]
@@ -10736,6 +10745,11 @@ function BackendPersistenceView({
     }),
     { read: 0, importable: 0, imported: 0, skipped: 0, invalid: 0 },
   )
+  function exportSelectedWorkflowInstance() {
+    if (!selectedWorkflowInstance) return
+    const packagePayload = createWorkflowInstanceExportPackage(selectedWorkflowInstance)
+    downloadJson('tracs-workflow-instance-export-package.json', packagePayload)
+  }
   const latestNotificationRenewal = notificationRenewalRecords[0]
   const latestNotificationRenewalClosure = notificationRenewalClosureRecords[0]
   const latestNotificationClosureExportPackage = notificationClosureExportPackageRecords[0]
@@ -13345,6 +13359,55 @@ function BackendPersistenceView({
               <div className="empty-state compact">Workflow definition details appear after a configured queue item is available.</div>
             )}
           </article>
+        </div>
+        <div className="workflow-lineage-panel">
+          <div className="workflow-lineage-header">
+            <div>
+              <strong>Workflow Instance Lineage</strong>
+              <span>
+                {governanceWorkflowLineage.instances.length} workflow instance(s), {governanceWorkflowLineage.orphanedParentIds.length} missing parent reference(s).
+              </span>
+            </div>
+            <button
+              className="secondary-action compact"
+              disabled={!selectedWorkflowInstance}
+              onClick={exportSelectedWorkflowInstance}
+              type="button"
+            >
+              Export instance
+            </button>
+          </div>
+          {selectedWorkflowInstance ? (
+            <>
+              <div className="metadata-grid compact">
+                <Metadata label="Selected instance" value={selectedWorkflowInstance.workflowLabel} />
+                <Metadata label="Owner" value={selectedWorkflowInstance.owner} />
+                <Metadata label="Records" value={String(selectedWorkflowInstance.nodes.length)} />
+                <Metadata
+                  label="Missing parents"
+                  value={
+                    selectedWorkflowInstance.missingParentRecordIds.length > 0
+                      ? selectedWorkflowInstance.missingParentRecordIds.join(', ')
+                      : 'None'
+                  }
+                />
+              </div>
+              <div className="workflow-lineage-path">
+                {selectedWorkflowInstance.nodes.map((node) => (
+                  <div className="workflow-lineage-node" key={node.item.record.id}>
+                    <span>{node.item.stageLabel}</span>
+                    <strong>{node.item.record.label}</strong>
+                    <small>
+                      {node.parentRecordId ? `Parent ${node.parentRecordId}` : 'Root record'} / {node.childRecordIds.length} child link(s)
+                    </small>
+                    {node.missingParent ? <em>Missing parent record</em> : null}
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="empty-state compact">Workflow lineage appears after records with workflow metadata or governance kinds are stored.</div>
+          )}
         </div>
         {governanceWorkQueueItems.length > 0 ? (
           <div className="backend-record-list governance-work-queue-list">

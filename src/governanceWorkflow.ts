@@ -15,6 +15,7 @@ export type GovernanceWorkflowItem = {
   stageLabel: string
   actionLabel: string
   owner: string
+  parentRecordId?: string
   dueAt?: string
   dueStatus: 'not_scheduled' | 'on_track' | 'due_soon' | 'overdue'
   definition?: WorkflowDefinition
@@ -22,6 +23,28 @@ export type GovernanceWorkflowItem = {
   exportPackageLabel?: string
   ageDays: number
   status: StatusLevel
+}
+
+export type GovernanceWorkflowLineageNode = {
+  item: GovernanceWorkflowItem
+  parentRecordId?: string
+  childRecordIds: string[]
+  missingParent: boolean
+}
+
+export type GovernanceWorkflowInstance = {
+  instanceId: string
+  workflowType: string
+  workflowLabel: string
+  definition?: WorkflowDefinition
+  rootRecordId: string
+  owner: string
+  status: StatusLevel
+  latestUpdatedAt: string
+  stages: GovernanceWorkflowStage[]
+  allowedNextStages: GovernanceWorkflowStage[]
+  nodes: GovernanceWorkflowLineageNode[]
+  missingParentRecordIds: string[]
 }
 
 export type GovernanceWorkflowSummary = {
@@ -84,6 +107,121 @@ export function deriveGovernanceWorkflowQueue(
   )
 
   return { items, summary }
+}
+
+export function deriveGovernanceWorkflowLineage(
+  records: BackendRecord[],
+  workflowDefinitions: Record<string, WorkflowDefinition> = {},
+): {
+  instances: GovernanceWorkflowInstance[]
+  orphanedParentIds: string[]
+} {
+  const { items } = deriveGovernanceWorkflowQueue(records, workflowDefinitions)
+  const itemsById = new Map(items.map((item) => [item.record.id, item]))
+  const parentById = new Map<string, string>()
+  const childrenById = new Map<string, string[]>()
+  const roots = new Map<string, string>()
+
+  for (const item of items) {
+    roots.set(item.record.id, item.record.id)
+    const parentRecordId = item.parentRecordId
+    if (!parentRecordId) continue
+    parentById.set(item.record.id, parentRecordId)
+    childrenById.set(parentRecordId, [...(childrenById.get(parentRecordId) ?? []), item.record.id])
+    if (itemsById.has(parentRecordId)) {
+      unionRoots(roots, item.record.id, parentRecordId)
+    }
+  }
+
+  const grouped = new Map<string, GovernanceWorkflowItem[]>()
+  for (const item of items) {
+    const root = findRoot(roots, item.record.id)
+    grouped.set(root, [...(grouped.get(root) ?? []), item])
+  }
+
+  const instances = [...grouped.entries()]
+    .map(([rootRecordId, groupedItems]) => {
+      const sortedItems = [...groupedItems].sort(
+        (first, second) => new Date(first.record.createdAt).getTime() - new Date(second.record.createdAt).getTime(),
+      )
+      const representative = sortedItems.find((item) => !parentById.get(item.record.id)) ?? sortedItems[0]
+      const status = highestStatus(sortedItems.map((item) => item.status))
+      const latestUpdatedAt = sortedItems.reduce(
+        (latest, item) => (new Date(item.record.updatedAt) > new Date(latest) ? item.record.updatedAt : latest),
+        sortedItems[0].record.updatedAt,
+      )
+      const stageSet = new Set(sortedItems.map((item) => item.stage))
+      const missingParentRecordIds = sortedItems
+        .map((item) => item.parentRecordId)
+        .filter(
+          (parentRecordId): parentRecordId is string =>
+            typeof parentRecordId === 'string' && parentRecordId.length > 0 && !itemsById.has(parentRecordId),
+        )
+      const nodes = sortedItems.map((item) => ({
+        item,
+        parentRecordId: item.parentRecordId,
+        childRecordIds: childrenById.get(item.record.id) ?? [],
+        missingParent: Boolean(item.parentRecordId && !itemsById.has(item.parentRecordId)),
+      }))
+
+      return {
+        instanceId: `workflow_instance:${representative.workflowType}:${rootRecordId}`,
+        workflowType: representative.workflowType,
+        workflowLabel: representative.workflowLabel,
+        definition: representative.definition,
+        rootRecordId,
+        owner: representative.owner,
+        status,
+        latestUpdatedAt,
+        stages: [...stageSet],
+        allowedNextStages: sortedItems.at(-1)?.allowedNextStages ?? [],
+        nodes,
+        missingParentRecordIds: [...new Set(missingParentRecordIds)],
+      }
+    })
+    .sort((first, second) => {
+      const statusDelta = statusRank(second.status) - statusRank(first.status)
+      if (statusDelta !== 0) return statusDelta
+      return new Date(second.latestUpdatedAt).getTime() - new Date(first.latestUpdatedAt).getTime()
+    })
+
+  return {
+    instances,
+    orphanedParentIds: [...new Set(instances.flatMap((instance) => instance.missingParentRecordIds))],
+  }
+}
+
+export function createWorkflowInstanceExportPackage(instance: GovernanceWorkflowInstance) {
+  return {
+    packageId: `${instance.instanceId}:export:${new Date().toISOString()}`,
+    generatedAt: new Date().toISOString(),
+    workflowType: instance.workflowType,
+    workflowLabel: instance.workflowLabel,
+    definition: instance.definition,
+    status: instance.status,
+    owner: instance.owner,
+    latestUpdatedAt: instance.latestUpdatedAt,
+    rootRecordId: instance.rootRecordId,
+    stages: instance.stages,
+    allowedNextStages: instance.allowedNextStages,
+    missingParentRecordIds: instance.missingParentRecordIds,
+    lineage: instance.nodes.map((node) => ({
+      recordId: node.item.record.id,
+      parentRecordId: node.parentRecordId,
+      childRecordIds: node.childRecordIds,
+      missingParent: node.missingParent,
+      kind: node.item.record.kind,
+      label: node.item.record.label,
+      stage: node.item.stage,
+      status: node.item.status,
+      owner: node.item.owner,
+      dueAt: node.item.dueAt,
+      createdAt: node.item.record.createdAt,
+      updatedAt: node.item.record.updatedAt,
+    })),
+    records: instance.nodes.map((node) => node.item.record),
+    evidence: `${instance.workflowLabel} workflow instance export retained ${instance.nodes.length} record(s), ${instance.stages.length} stage(s), and ${instance.missingParentRecordIds.length} missing parent reference(s).`,
+  }
 }
 
 export function inferGovernanceWorkflowMetadata({
@@ -149,6 +287,7 @@ function toGovernanceWorkflowItem(
     stageLabel: labelize(stage),
     actionLabel: actionLabelFor(status, stage, definition),
     owner: explicitWorkflow?.owner ?? ownerFor(payload, record.label, definition),
+    parentRecordId: explicitWorkflow?.parentRecordId ?? parentRecordIdFor(payload),
     dueAt,
     dueStatus,
     definition,
@@ -157,6 +296,20 @@ function toGovernanceWorkflowItem(
     ageDays: daysSince(record.updatedAt),
     status,
   }
+}
+
+function findRoot(roots: Map<string, string>, id: string): string {
+  const parent = roots.get(id) ?? id
+  if (parent === id) return id
+  const root = findRoot(roots, parent)
+  roots.set(id, root)
+  return root
+}
+
+function unionRoots(roots: Map<string, string>, first: string, second: string) {
+  const firstRoot = findRoot(roots, first)
+  const secondRoot = findRoot(roots, second)
+  if (firstRoot !== secondRoot) roots.set(firstRoot, secondRoot)
 }
 
 function hasStructuredWorkflowMetadata(workflow: BackendRecord['workflow']) {
@@ -270,6 +423,10 @@ function statusRank(status: StatusLevel) {
   if (status === 'blocking') return 3
   if (status === 'warning') return 2
   return 1
+}
+
+function highestStatus(statuses: StatusLevel[]): StatusLevel {
+  return statuses.reduce((highest, status) => (statusRank(status) > statusRank(highest) ? status : highest), 'pass')
 }
 
 function dueStatusFor(value: string | undefined): GovernanceWorkflowItem['dueStatus'] {
