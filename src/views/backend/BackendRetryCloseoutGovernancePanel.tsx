@@ -1,12 +1,11 @@
 import { Activity, Bell, ClipboardCheck, Download } from 'lucide-react'
 import { BackendDeliveryRetryControlsPanel } from './BackendDeliveryRetryControlsPanel'
 import { BackendFinalEvidenceCloseoutPanel } from './BackendFinalEvidenceCloseoutPanel'
+import { BackendCloseoutExportAcknowledgementCard } from './BackendCloseoutExportAcknowledgementCard'
+import { BackendCloseoutNotificationClosurePackageAcknowledgementCard } from './BackendCloseoutNotificationClosurePackageAcknowledgementCard'
+import { BackendCloseoutAcknowledgementCloseoutPackageAcknowledgementCard } from './BackendCloseoutAcknowledgementCloseoutPackageAcknowledgementCard'
 import { Metadata, PanelHeader, StatusChip } from '../../components/common'
 import type {
-ClosurePackageAcknowledgementCloseoutExportPackageAcknowledgement,
-ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgement,
-ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgement,
-ClosureSlaDeliveryAcknowledgementStatus,
 ClosureSlaResponseFollowUpClosureStatus,
 NotificationRetryQueueAcknowledgement,
 NotificationRetryQueueAcknowledgementClosurePackageAcknowledgement,
@@ -1941,133 +1940,33 @@ export function BackendRetryCloseoutGovernancePanel({
                       ))}
                     </div>
                   ) : null}
-                  <div className="retry-aging-list">
-                    <div className="dashboard-heading">
-                      <h4>Closeout export package acknowledgement</h4>
-                      <StatusChip
-                        status={closureSlaDeliveryAcknowledgementStatusLevel(closeoutExportAckStatus)}
-                        label={closureSlaDeliveryAcknowledgementLabel(closeoutExportAckStatus)}
-                      />
-                    </div>
-                    <div className="trace-review-grid">
-                      <label>
-                        <span>Reviewer</span>
-                        <input
-                          value={closeoutExportAckReviewer}
-                          onChange={(event) => setCloseoutExportAckReviewer(event.target.value)}
-                        />
-                      </label>
-                      <label>
-                        <span>Reviewer role</span>
-                        <select
-                          value={closeoutExportAckReviewerRole}
-                          onChange={(event) =>
-                            setCloseoutExportAckReviewerRole(
-                              event.target.value as ClosurePackageAcknowledgementCloseoutExportPackageAcknowledgement['reviewerRole'],
-                            )
-                          }
-                        >
-                          <option value="governance_reviewer">Governance reviewer</option>
-                          <option value="infrastructure_owner">Infrastructure owner</option>
-                          <option value="notification_operations">Notification operations</option>
-                          <option value="platform_owner">Platform owner</option>
-                        </select>
-                      </label>
-                      <label>
-                        <span>Response status</span>
-                        <select
-                          value={closeoutExportAckStatus}
-                          onChange={(event) =>
-                            setCloseoutExportAckStatus(event.target.value as ClosureSlaDeliveryAcknowledgementStatus)
-                          }
-                        >
-                          <option value="acknowledged">Acknowledged</option>
-                          <option value="approved">Approved</option>
-                          <option value="changes_requested">Changes requested</option>
-                          <option value="rejected">Rejected</option>
-                        </select>
-                      </label>
-                      <label className="toggle-row">
-                        <input
-                          checked={closeoutExportReady}
-                          onChange={(event) => setCloseoutExportReady(event.target.checked)}
-                          type="checkbox"
-                        />
-                        <span>Closeout package ready</span>
-                      </label>
-                      <label className="trace-review-rationale">
-                        <span>Requested actions</span>
-                        <textarea
-                          value={closeoutExportAckActions}
-                          onChange={(event) => setCloseoutExportAckActions(event.target.value)}
-                        />
-                      </label>
-                      <label className="trace-review-rationale">
-                        <span>Response notes</span>
-                        <textarea
-                          value={closeoutExportAckNotes}
-                          onChange={(event) => setCloseoutExportAckNotes(event.target.value)}
-                        />
-                      </label>
-                    </div>
-                    <div className="toolbar-actions notification-approval-actions">
-                      <button
-                        className="primary-action"
-                        disabled={!latestCloseoutExportDelivery}
-                        onClick={() => {
-                          const request = closeoutExportAcknowledgementRequest(latestCloseoutExportDelivery)
-                          if (request) onSaveClosurePackageAcknowledgementCloseoutExportPackageAcknowledgement(request)
-                        }}
-                        type="button"
-                      >
-                        <ClipboardCheck size={15} />
-                        Save Closeout Export Acknowledgement
-                      </button>
-                    </div>
-                    <div className="metadata-grid">
-                      <Metadata
-                        label="Acknowledgements"
-                        value={String(closurePackageAcknowledgementCloseoutExportPackageAcknowledgementRecords.length)}
-                      />
-                      <Metadata
-                        label="Open deliveries"
-                        value={String(
-                          closeoutExportDeliveryRecords.filter(
-                            (record: RuntimeValue) => !closeoutExportAcknowledgedDeliveryIds.has(record.id),
-                          ).length,
-                        )}
-                      />
-                      <Metadata
-                        label="Closeout ready"
-                        value={String(closeoutExportAcknowledgementMetrics.closeoutReady)}
-                      />
-                      <Metadata
-                        label="Retained actions"
-                        value={String(closeoutExportAcknowledgementMetrics.retainedActions)}
-                      />
-                      <Metadata
-                        label="Requested actions"
-                        value={String(closeoutExportAcknowledgementActionList().length)}
-                      />
-                    </div>
-                    {latestCloseoutExportAcknowledgement ? (
-                      <div className="connector-run-row">
-                        <div>
-                          <strong>{latestCloseoutExportAcknowledgement.payload.reviewer}</strong>
-                          <span>
-                            v{latestCloseoutExportAcknowledgement.version} / {closureSlaDeliveryAcknowledgementLabel(latestCloseoutExportAcknowledgement.payload.status)} / {new Date(latestCloseoutExportAcknowledgement.createdAt).toLocaleString()}
-                          </span>
-                          <small>{latestCloseoutExportAcknowledgement.payload.evidence}</small>
-                        </div>
-                        <StatusChip
-                          status={latestCloseoutExportAcknowledgement.status}
-                          label={closureSlaDeliveryAcknowledgementLabel(latestCloseoutExportAcknowledgement.payload.status)}
-                        />
-                      </div>
-                    ) : (
-                      <div className="empty-state compact">No closeout export package acknowledgement has been retained yet.</div>
-                    )}
-                  </div>
+                  <BackendCloseoutExportAcknowledgementCard
+                    closeoutExports={{
+                      closeoutExportAckActions,
+                      closeoutExportAckNotes,
+                      closeoutExportAckReviewer,
+                      closeoutExportAckReviewerRole,
+                      closeoutExportAckStatus,
+                      closeoutExportAcknowledgedDeliveryIds,
+                      closeoutExportAcknowledgementActionList,
+                      closeoutExportAcknowledgementMetrics,
+                      closeoutExportAcknowledgementRequest,
+                      closeoutExportDeliveryRecords,
+                      closeoutExportReady,
+                      closurePackageAcknowledgementCloseoutExportPackageAcknowledgementRecords,
+                      closureSlaDeliveryAcknowledgementLabel,
+                      closureSlaDeliveryAcknowledgementStatusLevel,
+                      latestCloseoutExportAcknowledgement,
+                      latestCloseoutExportDelivery,
+                      onSaveClosurePackageAcknowledgementCloseoutExportPackageAcknowledgement,
+                      setCloseoutExportAckActions,
+                      setCloseoutExportAckNotes,
+                      setCloseoutExportAckReviewer,
+                      setCloseoutExportAckReviewerRole,
+                      setCloseoutExportAckStatus,
+                      setCloseoutExportReady,
+                    }}
+                  />
                   <div className="retry-aging-list">
                     <div className="dashboard-heading">
                       <h4>Closeout export acknowledgement closure</h4>
@@ -2443,156 +2342,33 @@ export function BackendRetryCloseoutGovernancePanel({
                         ))}
                       </div>
                     ) : null}
-                    <div className="retry-aging-list">
-                      <div className="dashboard-heading">
-                        <h4>Closeout acknowledgement closure package acknowledgement</h4>
-                        <StatusChip
-                          status={closureSlaDeliveryAcknowledgementStatusLevel(
-                            closeoutNotificationClosurePackageAckStatus,
-                          )}
-                          label={closureSlaDeliveryAcknowledgementLabel(closeoutNotificationClosurePackageAckStatus)}
-                        />
-                      </div>
-                      <div className="trace-review-grid">
-                        <label>
-                          <span>Reviewer</span>
-                          <input
-                            value={closeoutNotificationClosurePackageAckReviewer}
-                            onChange={(event) =>
-                              setCloseoutNotificationClosurePackageAckReviewer(event.target.value)
-                            }
-                          />
-                        </label>
-                        <label>
-                          <span>Reviewer role</span>
-                          <select
-                            value={closeoutNotificationClosurePackageAckReviewerRole}
-                            onChange={(event) =>
-                              setCloseoutNotificationClosurePackageAckReviewerRole(
-                                event.target.value as ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgement['reviewerRole'],
-                              )
-                            }
-                          >
-                            <option value="governance_reviewer">Governance reviewer</option>
-                            <option value="infrastructure_owner">Infrastructure owner</option>
-                            <option value="notification_operations">Notification operations</option>
-                            <option value="platform_owner">Platform owner</option>
-                          </select>
-                        </label>
-                        <label>
-                          <span>Response status</span>
-                          <select
-                            value={closeoutNotificationClosurePackageAckStatus}
-                            onChange={(event) =>
-                              setCloseoutNotificationClosurePackageAckStatus(
-                                event.target.value as ClosureSlaDeliveryAcknowledgementStatus,
-                              )
-                            }
-                          >
-                            <option value="acknowledged">Acknowledged</option>
-                            <option value="approved">Approved</option>
-                            <option value="changes_requested">Changes requested</option>
-                            <option value="rejected">Rejected</option>
-                          </select>
-                        </label>
-                        <label className="toggle-row">
-                          <input
-                            checked={closeoutNotificationClosurePackageReady}
-                            onChange={(event) =>
-                              setCloseoutNotificationClosurePackageReady(event.target.checked)
-                            }
-                            type="checkbox"
-                          />
-                          <span>Closure package ready</span>
-                        </label>
-                        <label className="trace-review-rationale">
-                          <span>Requested actions</span>
-                          <textarea
-                            value={closeoutNotificationClosurePackageAckActions}
-                            onChange={(event) =>
-                              setCloseoutNotificationClosurePackageAckActions(event.target.value)
-                            }
-                          />
-                        </label>
-                        <label className="trace-review-rationale">
-                          <span>Response notes</span>
-                          <textarea
-                            value={closeoutNotificationClosurePackageAckNotes}
-                            onChange={(event) =>
-                              setCloseoutNotificationClosurePackageAckNotes(event.target.value)
-                            }
-                          />
-                        </label>
-                      </div>
-                      <div className="toolbar-actions notification-approval-actions">
-                        <button
-                          className="primary-action"
-                          disabled={!latestCloseoutNotificationClosurePackageDelivery}
-                          onClick={() => {
-                            const request = closeoutNotificationClosurePackageAcknowledgementRequest(
-                              latestCloseoutNotificationClosurePackageDelivery,
-                            )
-                            if (request) {
-                              onSaveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgement(
-                                request,
-                              )
-                            }
-                          }}
-                          type="button"
-                        >
-                          <ClipboardCheck size={15} />
-                          Save Closure Package Acknowledgement
-                        </button>
-                      </div>
-                      <div className="metadata-grid">
-                        <Metadata
-                          label="Acknowledgements"
-                          value={String(
-                            closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementRecords.length,
-                          )}
-                        />
-                        <Metadata
-                          label="Open deliveries"
-                          value={String(
-                            closeoutNotificationClosurePackageDeliveryRecords.filter(
-                              (record: RuntimeValue) =>
-                                !closeoutNotificationClosurePackageAcknowledgedDeliveryIds.has(record.id),
-                            ).length,
-                          )}
-                        />
-                        <Metadata
-                          label="Closure ready"
-                          value={String(closeoutNotificationClosurePackageAcknowledgementMetrics.closureReady)}
-                        />
-                        <Metadata
-                          label="Retained actions"
-                          value={String(closeoutNotificationClosurePackageAcknowledgementMetrics.retainedActions)}
-                        />
-                        <Metadata
-                          label="Requested actions"
-                          value={String(closeoutNotificationClosurePackageAcknowledgementActionList().length)}
-                        />
-                      </div>
-                      {latestCloseoutNotificationClosurePackageAcknowledgement ? (
-                        <div className="connector-run-row">
-                          <div>
-                            <strong>{latestCloseoutNotificationClosurePackageAcknowledgement.payload.reviewer}</strong>
-                            <span>
-                              v{latestCloseoutNotificationClosurePackageAcknowledgement.version} / {closureSlaDeliveryAcknowledgementLabel(latestCloseoutNotificationClosurePackageAcknowledgement.payload.status)} / {new Date(latestCloseoutNotificationClosurePackageAcknowledgement.createdAt).toLocaleString()}
-                            </span>
-                            <small>{latestCloseoutNotificationClosurePackageAcknowledgement.payload.evidence}</small>
-                          </div>
-                          <StatusChip
-                            status={latestCloseoutNotificationClosurePackageAcknowledgement.status}
-                            label={closureSlaDeliveryAcknowledgementLabel(
-                              latestCloseoutNotificationClosurePackageAcknowledgement.payload.status,
-                            )}
-                          />
-                        </div>
-                      ) : (
-                        <div className="empty-state compact">No closeout acknowledgement closure package acknowledgement has been retained yet.</div>
-                      )}
-                    </div>
+                    <BackendCloseoutNotificationClosurePackageAcknowledgementCard
+                      closeoutExports={{
+                        closeoutNotificationClosurePackageAckActions,
+                        closeoutNotificationClosurePackageAckNotes,
+                        closeoutNotificationClosurePackageAckReviewer,
+                        closeoutNotificationClosurePackageAckReviewerRole,
+                        closeoutNotificationClosurePackageAckStatus,
+                        closeoutNotificationClosurePackageAcknowledgedDeliveryIds,
+                        closeoutNotificationClosurePackageAcknowledgementActionList,
+                        closeoutNotificationClosurePackageAcknowledgementMetrics,
+                        closeoutNotificationClosurePackageAcknowledgementRequest,
+                        closeoutNotificationClosurePackageDeliveryRecords,
+                        closeoutNotificationClosurePackageReady,
+                        closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementRecords,
+                        closureSlaDeliveryAcknowledgementLabel,
+                        closureSlaDeliveryAcknowledgementStatusLevel,
+                        latestCloseoutNotificationClosurePackageAcknowledgement,
+                        latestCloseoutNotificationClosurePackageDelivery,
+                        onSaveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgement,
+                        setCloseoutNotificationClosurePackageAckActions,
+                        setCloseoutNotificationClosurePackageAckNotes,
+                        setCloseoutNotificationClosurePackageAckReviewer,
+                        setCloseoutNotificationClosurePackageAckReviewerRole,
+                        setCloseoutNotificationClosurePackageAckStatus,
+                        setCloseoutNotificationClosurePackageReady,
+                      }}
+                    />
                     <div className="retry-aging-list">
                       <div className="dashboard-heading">
                         <h4>Closeout acknowledgement closure package acknowledgement closeout</h4>
@@ -2888,183 +2664,33 @@ export function BackendRetryCloseoutGovernancePanel({
                             ))}
                         </div>
                       ) : null}
-                      <div className="retry-aging-list">
-                        <div className="dashboard-heading">
-                          <h4>Closeout acknowledgement closeout package acknowledgement</h4>
-                          <StatusChip
-                            status={closureSlaDeliveryAcknowledgementStatusLevel(
-                              closeoutNotificationClosurePackageAckClosurePackageAckStatus,
-                            )}
-                            label={closureSlaDeliveryAcknowledgementLabel(
-                              closeoutNotificationClosurePackageAckClosurePackageAckStatus,
-                            )}
-                          />
-                        </div>
-                        <div className="trace-review-grid">
-                          <label>
-                            <span>Reviewer</span>
-                            <input
-                              value={closeoutNotificationClosurePackageAckClosurePackageAckReviewer}
-                              onChange={(event) =>
-                                setCloseoutNotificationClosurePackageAckClosurePackageAckReviewer(event.target.value)
-                              }
-                            />
-                          </label>
-                          <label>
-                            <span>Reviewer role</span>
-                            <select
-                              value={closeoutNotificationClosurePackageAckClosurePackageAckReviewerRole}
-                              onChange={(event) =>
-                                setCloseoutNotificationClosurePackageAckClosurePackageAckReviewerRole(
-                                  event.target.value as ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgement['reviewerRole'],
-                                )
-                              }
-                            >
-                              <option value="governance_reviewer">Governance reviewer</option>
-                              <option value="infrastructure_owner">Infrastructure owner</option>
-                              <option value="notification_operations">Notification operations</option>
-                              <option value="platform_owner">Platform owner</option>
-                            </select>
-                          </label>
-                          <label>
-                            <span>Response status</span>
-                            <select
-                              value={closeoutNotificationClosurePackageAckClosurePackageAckStatus}
-                              onChange={(event) =>
-                                setCloseoutNotificationClosurePackageAckClosurePackageAckStatus(
-                                  event.target.value as ClosureSlaDeliveryAcknowledgementStatus,
-                                )
-                              }
-                            >
-                              <option value="acknowledged">Acknowledged</option>
-                              <option value="approved">Approved</option>
-                              <option value="changes_requested">Changes requested</option>
-                              <option value="rejected">Rejected</option>
-                            </select>
-                          </label>
-                          <label className="toggle-row">
-                            <input
-                              checked={closeoutNotificationClosurePackageAckClosurePackageFinalEvidenceReady}
-                              onChange={(event) =>
-                                setCloseoutNotificationClosurePackageAckClosurePackageFinalEvidenceReady(
-                                  event.target.checked,
-                                )
-                              }
-                              type="checkbox"
-                            />
-                            <span>Final evidence ready</span>
-                          </label>
-                          <label className="trace-review-rationale">
-                            <span>Requested actions</span>
-                            <textarea
-                              value={closeoutNotificationClosurePackageAckClosurePackageAckActions}
-                              onChange={(event) =>
-                                setCloseoutNotificationClosurePackageAckClosurePackageAckActions(event.target.value)
-                              }
-                            />
-                          </label>
-                          <label className="trace-review-rationale">
-                            <span>Response notes</span>
-                            <textarea
-                              value={closeoutNotificationClosurePackageAckClosurePackageAckNotes}
-                              onChange={(event) =>
-                                setCloseoutNotificationClosurePackageAckClosurePackageAckNotes(event.target.value)
-                              }
-                            />
-                          </label>
-                        </div>
-                        <div className="toolbar-actions notification-approval-actions">
-                          <button
-                            className="primary-action"
-                            disabled={!latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageDelivery}
-                            onClick={() => {
-                              const request =
-                                closeoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementRequest(
-                                  latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageDelivery,
-                                )
-                              if (request) {
-                                onSaveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgement(
-                                  request,
-                                )
-                              }
-                            }}
-                            type="button"
-                          >
-                            <ClipboardCheck size={15} />
-                            Save Closeout Package Acknowledgement
-                          </button>
-                        </div>
-                        <div className="metadata-grid">
-                          <Metadata
-                            label="Acknowledgements"
-                            value={String(
-                              closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementRecords.length,
-                            )}
-                          />
-                          <Metadata
-                            label="Open deliveries"
-                            value={String(
-                              closeoutNotificationClosurePackageAcknowledgementClosurePackageDeliveryRecords.filter(
-                                (record: RuntimeValue) =>
-                                  !closeoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgedDeliveryIds.has(
-                                    record.id,
-                                  ),
-                              ).length,
-                            )}
-                          />
-                          <Metadata
-                            label="Final evidence ready"
-                            value={String(
-                              closeoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementMetrics.finalEvidenceReady,
-                            )}
-                          />
-                          <Metadata
-                            label="Retained actions"
-                            value={String(
-                              closeoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementMetrics.retainedActions,
-                            )}
-                          />
-                          <Metadata
-                            label="Requested actions"
-                            value={String(
-                              closeoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementActionList()
-                                .length,
-                            )}
-                          />
-                        </div>
-                        {latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgement ? (
-                          <div className="connector-run-row">
-                            <div>
-                              <strong>
-                                {
-                                  latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgement
-                                    .payload.reviewer
-                                }
-                              </strong>
-                              <span>
-                                v{latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgement.version} / {closureSlaDeliveryAcknowledgementLabel(latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgement.payload.status)} / {new Date(latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgement.createdAt).toLocaleString()}
-                              </span>
-                              <small>
-                                {
-                                  latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgement
-                                    .payload.evidence
-                                }
-                              </small>
-                            </div>
-                            <StatusChip
-                              status={
-                                latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgement.status
-                              }
-                              label={closureSlaDeliveryAcknowledgementLabel(
-                                latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgement
-                                  .payload.status,
-                              )}
-                            />
-                          </div>
-                        ) : (
-                          <div className="empty-state compact">No closeout acknowledgement closeout package acknowledgement has been retained yet.</div>
-                        )}
-                      </div>
+                      <BackendCloseoutAcknowledgementCloseoutPackageAcknowledgementCard
+                        closeoutExports={{
+                          closeoutNotificationClosurePackageAckClosurePackageAckActions,
+                          closeoutNotificationClosurePackageAckClosurePackageAckNotes,
+                          closeoutNotificationClosurePackageAckClosurePackageAckReviewer,
+                          closeoutNotificationClosurePackageAckClosurePackageAckReviewerRole,
+                          closeoutNotificationClosurePackageAckClosurePackageAckStatus,
+                          closeoutNotificationClosurePackageAckClosurePackageFinalEvidenceReady,
+                          closeoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgedDeliveryIds,
+                          closeoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementActionList,
+                          closeoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementMetrics,
+                          closeoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementRequest,
+                          closeoutNotificationClosurePackageAcknowledgementClosurePackageDeliveryRecords,
+                          closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementRecords,
+                          closureSlaDeliveryAcknowledgementLabel,
+                          closureSlaDeliveryAcknowledgementStatusLevel,
+                          latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgement,
+                          latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageDelivery,
+                          onSaveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgement,
+                          setCloseoutNotificationClosurePackageAckClosurePackageAckActions,
+                          setCloseoutNotificationClosurePackageAckClosurePackageAckNotes,
+                          setCloseoutNotificationClosurePackageAckClosurePackageAckReviewer,
+                          setCloseoutNotificationClosurePackageAckClosurePackageAckReviewerRole,
+                          setCloseoutNotificationClosurePackageAckClosurePackageAckStatus,
+                          setCloseoutNotificationClosurePackageAckClosurePackageFinalEvidenceReady,
+                        }}
+                      />
           <BackendFinalEvidenceCloseoutPanel
             finalEvidence={{
               closeoutNotificationClosurePackageAckClosurePackageFinalEvidenceActions,

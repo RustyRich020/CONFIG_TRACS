@@ -198,6 +198,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Extracts the retry queue closeout and final-evidence governance chain into a focused Backend component, restoring normal ESLint parsing for `BackendPersistenceView.tsx`.
 - Replaces the generated retry/closeout context bridge with grouped props for retry controls, closeout exports, and final-evidence records.
 - Splits delivery retry controls and final-evidence closeout records into focused Backend panels while preserving the existing grouped prop contracts.
+- Extracts balanced closeout package acknowledgement cards into focused Backend panels without changing persisted governance record contracts.
 - Adds same-workflow retained package comparison rows with version, reviewer, retention, coverage, and missing-parent detail.
 - Exports Closure SLA follow-up closure packages with retained actions, superseded routes, and notification evidence.
 - Delivers Closure SLA follow-up closure packages to governance reviewers with retained delivery evidence.
@@ -355,6 +356,6 @@ npm run build
 
 Use the template package and workflow lineage paths while consolidating governance workflows into reusable product infrastructure:
 
-1. Extract individual closeout package acknowledgement cards from `BackendRetryCloseoutGovernancePanel.tsx` into smaller balanced panels.
+1. Continue extracting the remaining closeout acknowledgement closure/package cards from `BackendRetryCloseoutGovernancePanel.tsx` one balanced subtree at a time.
 2. Continue migrating existing extracted panels to shared `PanelHeader`, `Metadata`, `StatusChip`, `HistoryRow`, and title-formatting primitives.
 3. Reduce the Backend workspace prop contract by deriving record-kind subsets inside focused components instead of passing long filtered lists from `App.tsx`.
