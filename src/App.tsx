@@ -39,6 +39,14 @@ import { ClosureSlaFollowUpClosurePanel } from './components/ClosureSlaFollowUpC
 import { ClosureSlaFollowUpRoutingPanel } from './components/ClosureSlaFollowUpRoutingPanel'
 import { ClosureSlaGovernanceResponsePanel } from './components/ClosureSlaGovernanceResponsePanel'
 import { ClosureSlaHistoryListsPanel } from './components/ClosureSlaHistoryListsPanel'
+import {
+  PostgresCutoverAcknowledgementHistoryPanel,
+  PostgresCutoverClosurePackageHistoryPanel,
+  PostgresCutoverOwnerReminderHistoryPanel,
+  PostgresCutoverPackageHistoryPanel,
+  PostgresCutoverReminderClosureHistoryPanel,
+} from './components/PostgresCutoverHistoryPanels'
+import { PostgresImportReconciliationPanel } from './components/PostgresImportReconciliationPanel'
 import { RetainedPackageCatalogPanel } from './components/RetainedPackageCatalogPanel'
 import { TemplatePackageGovernancePanel } from './components/TemplatePackageGovernancePanel'
 import { TraceabilityClosureRoutingPanel } from './components/TraceabilityClosureRoutingPanel'
@@ -14755,111 +14763,12 @@ function BackendPersistenceView({
         />
       </section>
 
-      <section className="panel import-reconciliation-panel">
-        <PanelHeader
-          icon={Database}
-          title="Postgres Import Reconciliation"
-          subtitle="Review guarded JSON or SQLite import runs before retiring legacy storage."
-        />
-        {latestReconciliation ? (
-          <>
-            <div className="import-reconciliation-grid">
-              <article className="import-reconciliation-card primary">
-                <div>
-                  <strong>{titleize(latestReconciliation.payload.mode)}</strong>
-                  <span>{latestReconciliation.payload.sourceFile}</span>
-                </div>
-                <StatusChip status={latestReconciliation.status} label={latestReconciliation.status} />
-                <p>{latestReconciliation.payload.evidence}</p>
-              </article>
-              <article className="import-reconciliation-card">
-                <strong>{latestReconciliation.payload.read}</strong>
-                <span>Records read</span>
-              </article>
-              <article className="import-reconciliation-card">
-                <strong>{latestReconciliation.payload.importable}</strong>
-                <span>Importable</span>
-              </article>
-              <article className="import-reconciliation-card">
-                <strong>{latestReconciliation.payload.imported}</strong>
-                <span>Imported</span>
-              </article>
-              <article className="import-reconciliation-card">
-                <strong>{latestReconciliation.payload.skipped}</strong>
-                <span>Skipped</span>
-              </article>
-              <article className="import-reconciliation-card">
-                <strong>{latestReconciliation.payload.invalid}</strong>
-                <span>Invalid</span>
-              </article>
-            </div>
-            <div className="import-reconciliation-detail">
-              <div>
-                <h4>Latest record mix</h4>
-                <div className="storage-column-list">
-                  {latestTopKinds.map(([kind, count]) => (
-                    <span key={kind}>
-                      {titleize(kind)} <em>{count}</em>
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <h4>Aggregate run totals</h4>
-                <div className="metadata-grid">
-                  <Metadata label="Runs" value={String(reconciliationRecords.length)} />
-                  <Metadata label="Read" value={String(reconciliationTotals.read)} />
-                  <Metadata label="Importable" value={String(reconciliationTotals.importable)} />
-                  <Metadata label="Imported" value={String(reconciliationTotals.imported)} />
-                  <Metadata label="Skipped" value={String(reconciliationTotals.skipped)} />
-                  <Metadata label="Invalid" value={String(reconciliationTotals.invalid)} />
-                </div>
-              </div>
-            </div>
-            {latestReconciliation.payload.invalidRecords.length > 0 ? (
-              <div className="import-reconciliation-errors">
-                <h4>Invalid record samples</h4>
-                {latestReconciliation.payload.invalidRecords.map((entry) => (
-                  <div className="backend-record-row" key={`${entry.id}:${entry.label}`}>
-                    <div>
-                      <strong>{entry.label || entry.id || 'Unnamed record'}</strong>
-                      <span>{entry.missing.join(', ')}</span>
-                    </div>
-                    <StatusChip status="blocking" label="Invalid" />
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </>
-        ) : (
-          <div className="empty-state compact">Run `npm run records:import:postgres` to persist reconciliation evidence.</div>
-        )}
-      </section>
-
-      <section className="panel import-reconciliation-panel">
-        <PanelHeader
-          icon={History}
-          title="Import Reconciliation History"
-          subtitle="Recent dry-run and applied migration summaries retained in Postgres."
-        />
-        {reconciliationRecords.length > 0 ? (
-          <div className="backend-record-list">
-            {reconciliationRecords.slice(0, 8).map((record) => (
-              <div className="backend-record-row" key={record.id}>
-                <div>
-                  <strong>{titleize(record.payload.source)} import / {titleize(record.payload.mode)}</strong>
-                  <span>
-                    v{record.version} / {new Date(record.createdAt).toLocaleString()} / read {record.payload.read}, importable {record.payload.importable}, skipped {record.payload.skipped}
-                  </span>
-                </div>
-                <StatusChip status={record.status} label={record.status} />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="empty-state compact">No import reconciliation runs have been retained yet.</div>
-        )}
-      </section>
+      <PostgresImportReconciliationPanel
+        latestReconciliation={latestReconciliation}
+        latestTopKinds={latestTopKinds}
+        reconciliationRecords={reconciliationRecords}
+        reconciliationTotals={reconciliationTotals}
+      />
 
       <section className="panel notification-approval-panel">
         <PanelHeader
@@ -15052,22 +14961,7 @@ function BackendPersistenceView({
             )}
           </div>
         </div>
-        {postgresCutoverPackageRecords.length > 1 ? (
-          <div className="mapping-run-history">
-            <h4>Package history</h4>
-            {postgresCutoverPackageRecords.slice(1, 5).map((record) => (
-              <div className="mapping-run-row" key={record.id}>
-                <div>
-                  <strong>{record.payload.packageId}</strong>
-                  <span>
-                    v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.reviewerAudience.join(', ')}
-                  </span>
-                </div>
-                <StatusChip status={record.status} label={record.status} />
-              </div>
-            ))}
-          </div>
-        ) : null}
+        <PostgresCutoverPackageHistoryPanel records={postgresCutoverPackageRecords} />
       </section>
 
       <section className="panel notification-approval-panel">
@@ -15242,23 +15136,10 @@ function BackendPersistenceView({
             ) : null}
           </div>
         </div>
-        {postgresCutoverAcknowledgementRecords.length > 1 ? (
-          <div className="mapping-run-history">
-            <h4>Acknowledgement history</h4>
-            {postgresCutoverAcknowledgementRecords.slice(1, 5).map((record) => (
-              <div className="mapping-run-row" key={record.id}>
-                <div>
-                  <strong>{record.payload.reviewer}</strong>
-                  <span>
-                    v{record.version} / {titleize(record.payload.reviewerRole)} / due {record.payload.dueAt || 'not scheduled'}
-                  </span>
-                  <small>{record.payload.acknowledgementNotes}</small>
-                </div>
-                <StatusChip status={record.status} label={postgresCutoverAcknowledgementLabel(record.payload.status)} />
-              </div>
-            ))}
-          </div>
-        ) : null}
+        <PostgresCutoverAcknowledgementHistoryPanel
+          labelStatus={postgresCutoverAcknowledgementLabel}
+          records={postgresCutoverAcknowledgementRecords}
+        />
       </section>
 
       <section className="panel notification-approval-panel">
@@ -15406,23 +15287,10 @@ function BackendPersistenceView({
             ) : null}
           </div>
         </div>
-        {postgresCutoverOwnerReminderRecords.length > 1 ? (
-          <div className="mapping-run-history">
-            <h4>Owner reminder history</h4>
-            {postgresCutoverOwnerReminderRecords.slice(1, 5).map((record) => (
-              <div className="mapping-run-row" key={record.id}>
-                <div>
-                  <strong>{record.payload.owners.join(', ')}</strong>
-                  <span>
-                    v{record.version} / {postgresCutoverOwnerReminderLabel(record.payload.status)} / due {record.payload.dueAt || 'not scheduled'}
-                  </span>
-                  <small>{record.payload.renewalNotes}</small>
-                </div>
-                <StatusChip status={record.status} label={postgresCutoverOwnerReminderLabel(record.payload.status)} />
-              </div>
-            ))}
-          </div>
-        ) : null}
+        <PostgresCutoverOwnerReminderHistoryPanel
+          labelStatus={postgresCutoverOwnerReminderLabel}
+          records={postgresCutoverOwnerReminderRecords}
+        />
       </section>
 
       <section className="panel notification-approval-panel">
@@ -15535,23 +15403,10 @@ function BackendPersistenceView({
             )}
           </div>
         </div>
-        {postgresCutoverReminderClosureRecords.length > 1 ? (
-          <div className="mapping-run-history">
-            <h4>Reminder closure history</h4>
-            {postgresCutoverReminderClosureRecords.slice(1, 5).map((record) => (
-              <div className="mapping-run-row" key={record.id}>
-                <div>
-                  <strong>{record.payload.reviewer}</strong>
-                  <span>
-                    v{record.version} / {postgresCutoverReminderClosureLabel(record.payload.status)} / package {record.payload.packageVersion ? `v${record.payload.packageVersion}` : 'not linked'}
-                  </span>
-                  <small>{record.payload.closureNotes}</small>
-                </div>
-                <StatusChip status={record.status} label={postgresCutoverReminderClosureLabel(record.payload.status)} />
-              </div>
-            ))}
-          </div>
-        ) : null}
+        <PostgresCutoverReminderClosureHistoryPanel
+          labelStatus={postgresCutoverReminderClosureLabel}
+          records={postgresCutoverReminderClosureRecords}
+        />
       </section>
 
       <section className="panel notification-approval-panel">
@@ -16179,23 +16034,7 @@ function BackendPersistenceView({
             )}
           </div>
         </div>
-        {postgresCutoverClosurePackageRecords.length > 1 ? (
-          <div className="mapping-run-history">
-            <h4>Final handoff package history</h4>
-            {postgresCutoverClosurePackageRecords.slice(1, 5).map((record) => (
-              <div className="mapping-run-row" key={record.id}>
-                <div>
-                  <strong>{record.payload.packageId}</strong>
-                  <span>
-                    v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.finalHandoffReviewers.join(', ')}
-                  </span>
-                  <small>{record.payload.evidence}</small>
-                </div>
-                <StatusChip status={record.status} label={record.status} />
-              </div>
-            ))}
-          </div>
-        ) : null}
+        <PostgresCutoverClosurePackageHistoryPanel records={postgresCutoverClosurePackageRecords} />
       </section>
 
       <section className="panel notification-approval-panel">

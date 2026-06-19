@@ -192,6 +192,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Adds shared frontend primitives for panel headers, metadata cells, status chips, and title formatting.
 - Extracts Closure SLA governance response history, active SLA queue, and SLA package history into a reusable Backend history-list component.
 - Adds a shared history-row primitive and migrates additional Closure SLA and Traceability panels onto common UI primitives.
+- Extracts Postgres import reconciliation and production cutover history lists into focused Backend components using shared UI primitives.
 - Adds same-workflow retained package comparison rows with version, reviewer, retention, coverage, and missing-parent detail.
 - Exports Closure SLA follow-up closure packages with retained actions, superseded routes, and notification evidence.
 - Delivers Closure SLA follow-up closure packages to governance reviewers with retained delivery evidence.
@@ -351,4 +352,4 @@ Use the template package and workflow lineage paths while consolidating governan
 
 1. Continue splitting large frontend surfaces into focused Backend, Templates, and Traceability components to reduce bundle size.
 2. Continue migrating existing extracted panels to shared `PanelHeader`, `Metadata`, `StatusChip`, `HistoryRow`, and title-formatting primitives.
-3. Extract the next large Backend sections after Closure SLA, starting with Postgres import reconciliation and cutover history panels.
+3. Extract the remaining production cutover forms and retry queue dashboard sections into focused Backend components.
