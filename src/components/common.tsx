@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
+import type { ReactNode } from 'react'
 import type { StatusLevel } from '../types'
 
 export function Metadata({ label, value }: { label: string; value: string }) {
@@ -32,4 +33,29 @@ export function PanelHeader({
 
 export function StatusChip({ status, label }: { status: StatusLevel; label: string }) {
   return <span className={`status-chip ${status}`}>{label}</span>
+}
+
+export function HistoryRow({
+  children,
+  label,
+  status,
+  subtitle,
+  title,
+}: {
+  children?: ReactNode
+  label: string
+  status: StatusLevel
+  subtitle?: string
+  title: string
+}) {
+  return (
+    <div className="mapping-run-row">
+      <div>
+        <strong>{title}</strong>
+        {subtitle ? <span>{subtitle}</span> : null}
+        {children ? <small>{children}</small> : null}
+      </div>
+      <StatusChip status={status} label={label} />
+    </div>
+  )
 }

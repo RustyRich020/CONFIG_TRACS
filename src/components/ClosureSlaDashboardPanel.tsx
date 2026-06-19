@@ -6,39 +6,7 @@ import type {
   NotificationDeliveryResult,
   StatusLevel,
 } from '../types'
-
-function Metadata({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="metadata-item">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  )
-}
-
-function StatusChip({ status, label }: { status: StatusLevel; label: string }) {
-  return <span className={`status-chip ${status}`}>{label}</span>
-}
-
-function PanelHeader({
-  icon: Icon,
-  subtitle,
-  title,
-}: {
-  icon: typeof Gauge
-  subtitle: string
-  title: string
-}) {
-  return (
-    <div className="panel-header">
-      <Icon size={18} />
-      <div>
-        <h2>{title}</h2>
-        <p>{subtitle}</p>
-      </div>
-    </div>
-  )
-}
+import { Metadata, PanelHeader, StatusChip } from './common'
 
 type ClosureSlaDeliveryRecord = BackendRecord<{
   request: NotificationDeliveryPayload

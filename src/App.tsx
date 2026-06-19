@@ -38,6 +38,7 @@ import { ClosureSlaFollowUpClosurePackagePanel } from './components/ClosureSlaFo
 import { ClosureSlaFollowUpClosurePanel } from './components/ClosureSlaFollowUpClosurePanel'
 import { ClosureSlaFollowUpRoutingPanel } from './components/ClosureSlaFollowUpRoutingPanel'
 import { ClosureSlaGovernanceResponsePanel } from './components/ClosureSlaGovernanceResponsePanel'
+import { ClosureSlaHistoryListsPanel } from './components/ClosureSlaHistoryListsPanel'
 import { RetainedPackageCatalogPanel } from './components/RetainedPackageCatalogPanel'
 import { TemplatePackageGovernancePanel } from './components/TemplatePackageGovernancePanel'
 import { TraceabilityClosureRoutingPanel } from './components/TraceabilityClosureRoutingPanel'
@@ -14747,65 +14748,11 @@ function BackendPersistenceView({
             supersededEvidenceCount={closureSlaClosurePackageAckSupersededEvidenceList().length}
           />
         </div>
-        {closureSlaDeliveryAcknowledgementRecords.length > 1 ? (
-          <div className="mapping-run-history">
-            <h4>Governance response history</h4>
-            {closureSlaDeliveryAcknowledgementRecords.slice(1, 5).map((record) => (
-              <div className="mapping-run-row" key={record.id}>
-                <div>
-                  <strong>{record.payload.reviewer}</strong>
-                  <span>
-                    v{record.version} / {closureSlaDeliveryAcknowledgementLabel(record.payload.status)} / {titleize(record.payload.routeStage)}
-                  </span>
-                  <small>{record.payload.responseNotes}</small>
-                </div>
-                <StatusChip status={record.status} label={closureSlaDeliveryAcknowledgementLabel(record.payload.status)} />
-              </div>
-            ))}
-          </div>
-        ) : null}
-        {closureSlaRows.length > 0 ? (
-          <div className="mapping-run-history">
-            <h4>Closure SLA queue</h4>
-            {closureSlaRows.slice(0, 8).map((row) => (
-              <div className="mapping-run-row" key={row.id}>
-                <div>
-                  <strong>{row.subject}</strong>
-                  <span>
-                    {row.source} / {row.stage} / {row.owner}
-                  </span>
-                  <small>
-                    Due {row.dueAt || 'not scheduled'} / {row.daysRemaining === null
-                      ? 'no due date'
-                      : row.daysRemaining < 0
-                        ? `${Math.abs(row.daysRemaining)} day(s) overdue`
-                        : `${row.daysRemaining} day(s) remaining`} / {row.evidence}
-                  </small>
-                </div>
-                <StatusChip status={row.status} label={row.closed ? 'closed' : row.status} />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="empty-state compact">No closure SLA routes are available yet.</div>
-        )}
-        {closureSlaExportPackageRecords.length > 1 ? (
-          <div className="mapping-run-history">
-            <h4>SLA package history</h4>
-            {closureSlaExportPackageRecords.slice(1, 5).map((record) => (
-              <div className="mapping-run-row" key={record.id}>
-                <div>
-                  <strong>{record.payload.packageId}</strong>
-                  <span>
-                    v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.governanceReviewers.join(', ')}
-                  </span>
-                  <small>{record.payload.evidence}</small>
-                </div>
-                <StatusChip status={record.status} label={record.status} />
-              </div>
-            ))}
-          </div>
-        ) : null}
+        <ClosureSlaHistoryListsPanel
+          acknowledgementRecords={closureSlaDeliveryAcknowledgementRecords}
+          exportPackageRecords={closureSlaExportPackageRecords}
+          rows={closureSlaRows}
+        />
       </section>
 
       <section className="panel import-reconciliation-panel">

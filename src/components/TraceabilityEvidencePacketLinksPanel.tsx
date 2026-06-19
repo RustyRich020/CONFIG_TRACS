@@ -1,29 +1,6 @@
 import { Bell, ClipboardCheck, Download } from 'lucide-react'
-import type { BackendRecord, ReadinessEvidencePacket, StatusLevel } from '../types'
-
-function StatusChip({ status, label }: { status: StatusLevel; label: string }) {
-  return <span className={`status-chip ${status}`}>{label}</span>
-}
-
-function PanelHeader({
-  icon: Icon,
-  subtitle,
-  title,
-}: {
-  icon: typeof ClipboardCheck
-  subtitle: string
-  title: string
-}) {
-  return (
-    <div className="panel-header">
-      <Icon size={18} />
-      <div>
-        <h2>{title}</h2>
-        <p>{subtitle}</p>
-      </div>
-    </div>
-  )
-}
+import type { BackendRecord, ReadinessEvidencePacket } from '../types'
+import { PanelHeader, StatusChip } from './common'
 
 export function TraceabilityEvidencePacketLinksPanel({
   evidencePackets,
