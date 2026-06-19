@@ -34,6 +34,7 @@ export function RetainedPackageCatalogPanel({
   filteredRecords,
   lifecycleSummary,
   onDownloadSelected,
+  onExportComparison,
   onSearchChange,
   onSelectRecord,
   onStatusFilterChange,
@@ -43,6 +44,7 @@ export function RetainedPackageCatalogPanel({
   records,
   search,
   selectedRecord,
+  selectedWorkflowRecords,
   statusFilter,
   workflowFilter,
   workflowTypes,
@@ -50,6 +52,7 @@ export function RetainedPackageCatalogPanel({
   filteredRecords: BackendRecord<WorkflowInstanceExportRetention>[]
   lifecycleSummary: RetentionLifecycleSummary
   onDownloadSelected: () => void
+  onExportComparison: () => void
   onSearchChange: (value: string) => void
   onSelectRecord: (recordId: string) => void
   onStatusFilterChange: (status: StatusLevel | 'all') => void
@@ -59,6 +62,7 @@ export function RetainedPackageCatalogPanel({
   records: BackendRecord<WorkflowInstanceExportRetention>[]
   search: string
   selectedRecord?: BackendRecord<WorkflowInstanceExportRetention>
+  selectedWorkflowRecords: BackendRecord<WorkflowInstanceExportRetention>[]
   statusFilter: StatusLevel | 'all'
   workflowFilter: string
   workflowTypes: string[]
@@ -164,6 +168,11 @@ export function RetainedPackageCatalogPanel({
             />
             <Metadata label="Lineage stages" value={String(selectedRecord.payload.coverage.stages)} />
             <Metadata label="Audit events" value={String(selectedRecord.payload.auditHistory.length)} />
+            <Metadata label="Workflow retained" value={String(selectedWorkflowRecords.length)} />
+            <Metadata
+              label="Comparable records"
+              value={String(selectedWorkflowRecords.reduce((total, record) => total + record.payload.coverage.records, 0))}
+            />
           </div>
           <div className="backend-record-row">
             <div>
@@ -179,6 +188,15 @@ export function RetainedPackageCatalogPanel({
             >
               <Download size={14} />
               Download Evidence
+            </button>
+            <button
+              className="secondary-action compact"
+              disabled={selectedWorkflowRecords.length < 2}
+              onClick={onExportComparison}
+              type="button"
+            >
+              <Download size={14} />
+              Export Comparison
             </button>
           </div>
         </div>

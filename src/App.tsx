@@ -34,6 +34,7 @@ import { adapterContracts } from './backendContracts'
 import { backendClient } from './backendClient'
 import { RetainedPackageCatalogPanel } from './components/RetainedPackageCatalogPanel'
 import { TemplatePackageGovernancePanel } from './components/TemplatePackageGovernancePanel'
+import { TraceabilityExportControlsPanel } from './components/TraceabilityExportControlsPanel'
 import { WorkflowLineageRetentionPanel } from './components/WorkflowLineageRetentionPanel'
 import { loadAppConfig } from './configLoader'
 import {
@@ -11102,6 +11103,11 @@ function BackendPersistenceView({
   const selectedRetainedPackage =
     filteredWorkflowInstanceRetentionRecords.find((record) => record.id === selectedRetainedPackageId) ??
     filteredWorkflowInstanceRetentionRecords[0]
+  const selectedRetainedWorkflowRecords = selectedRetainedPackage
+    ? workflowInstanceRetentionRecords
+        .filter((record) => record.payload.workflowType === selectedRetainedPackage.payload.workflowType)
+        .sort((first, second) => Date.parse(second.payload.retainedAt) - Date.parse(first.payload.retainedAt))
+    : []
   const workflowDefinitionEntries = Object.entries(workflowDefinitions)
   const initialWorkflowEditorKey = workflowDefinitionEntries[0]?.[0] ?? ''
   const [workflowEditorKey, setWorkflowEditorKey] = useState(initialWorkflowEditorKey)
@@ -11158,6 +11164,33 @@ function BackendPersistenceView({
   function downloadSelectedRetainedPackageEvidence() {
     if (!selectedRetainedPackage) return
     downloadJson('tracs-retained-workflow-package-evidence.json', selectedRetainedPackage)
+  }
+  function exportSelectedRetainedPackageComparison() {
+    if (!selectedRetainedPackage) return
+    const exportPayload = {
+      exportId: `retained_package_comparison:${selectedRetainedPackage.payload.workflowType}:${new Date().toISOString()}`,
+      generatedAt: new Date().toISOString(),
+      selectedRecordId: selectedRetainedPackage.id,
+      workflowType: selectedRetainedPackage.payload.workflowType,
+      workflowLabel: selectedRetainedPackage.payload.workflowLabel,
+      records: selectedRetainedWorkflowRecords,
+      summary: {
+        retainedPackages: selectedRetainedWorkflowRecords.length,
+        coveredRecords: selectedRetainedWorkflowRecords.reduce(
+          (total, record) => total + record.payload.coverage.records,
+          0,
+        ),
+        missingParentReferences: selectedRetainedWorkflowRecords.reduce(
+          (total, record) => total + record.payload.coverage.missingParentReferences,
+          0,
+        ),
+        retentionClasses: Array.from(
+          new Set(selectedRetainedWorkflowRecords.map((record) => record.payload.retention.class)),
+        ),
+      },
+      evidence: `${selectedRetainedWorkflowRecords.length} retained package(s) compared for ${selectedRetainedPackage.payload.workflowLabel}.`,
+    }
+    downloadJson('tracs-retained-workflow-package-comparison.json', exportPayload)
   }
   function selectWorkflowDefinitionDraft(workflowType: string) {
     setWorkflowEditorKey(workflowType)
@@ -13814,6 +13847,7 @@ function BackendPersistenceView({
         <RetainedPackageCatalogPanel
           filteredRecords={filteredWorkflowInstanceRetentionRecords}
           lifecycleSummary={retentionLifecycleSummary}
+          onExportComparison={exportSelectedRetainedPackageComparison}
           onDownloadSelected={downloadSelectedRetainedPackageEvidence}
           onRetentionFilterChange={setRetainedPackageRetentionFilter}
           onSearchChange={setRetainedPackageSearch}
@@ -13824,6 +13858,7 @@ function BackendPersistenceView({
           retentionClassFilter={retainedPackageRetentionFilter}
           search={retainedPackageSearch}
           selectedRecord={selectedRetainedPackage}
+          selectedWorkflowRecords={selectedRetainedWorkflowRecords}
           statusFilter={retainedPackageStatusFilter}
           workflowFilter={retainedPackageWorkflowFilter}
           workflowTypes={retainedPackageWorkflowTypes}
@@ -22652,115 +22687,35 @@ function TraceabilityView({
               </option>
             ))}
           </select>
-          <button className="secondary-action" onClick={() => exportGraphPackage()} type="button">
-            <Download size={15} />
-            Export Graph Package
-          </button>
-          <button className="primary-action" onClick={() => deliverGraphPackage()} type="button">
-            <Bell size={15} />
-            Deliver to Reviewers
-          </button>
         </div>
       </section>
 
-      <section className="panel trace-filter-panel">
-        <PanelHeader
-          icon={Search}
-          title="Traceability Filters"
-          subtitle="Filter paths and graph nodes by object family, link status, and saved evidence packet coverage."
-        />
-        <div className="trace-filter-grid">
-          <label>
-            <span>Object family</span>
-            <select value={familyFilter} onChange={(event) => setFamilyFilter(event.target.value)}>
-              <option value="all">All families</option>
-              {familyOptions.map((family) => (
-                <option key={family} value={family}>
-                  {titleize(family)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Link status</span>
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as StatusLevel | 'all')}
-            >
-              <option value="all">All statuses</option>
-              <option value="pass">Pass</option>
-              <option value="warning">Warning</option>
-              <option value="blocking">Blocking</option>
-            </select>
-          </label>
-          <label>
-            <span>Evidence packet</span>
-            <select value={packetFilter} onChange={(event) => setPacketFilter(event.target.value)}>
-              <option value="all">All packets</option>
-              {traceEvidencePackets.map((record) => (
-                <option key={record.id} value={record.id}>
-                  v{record.version} / {new Date(record.createdAt).toLocaleDateString()}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </section>
-
-      <section className="panel trace-review-panel">
-        <PanelHeader
-          icon={ClipboardCheck}
-          title="Export Review & Retention"
-          subtitle="Sign traceability graph exports and retain reviewer evidence as versioned backend records."
-        />
-        <div className="trace-review-grid">
-          <label>
-            <span>Reviewer</span>
-            <input value={reviewer} onChange={(event) => setReviewer(event.target.value)} />
-          </label>
-          <label>
-            <span>Review status</span>
-            <select
-              value={reviewStatus}
-              onChange={(event) => setReviewStatus(event.target.value as TraceabilityExportReviewStatus)}
-            >
-              <option value="approved">Approved</option>
-              <option value="approved_with_conditions">Approved with conditions</option>
-              <option value="draft">Draft</option>
-              <option value="rejected">Rejected</option>
-            </select>
-          </label>
-          <label>
-            <span>Retention</span>
-            <select
-              value={retentionClass}
-              onChange={(event) => setRetentionClass(event.target.value as TraceabilityExportRetentionClass)}
-            >
-              <option value="standard_7_year">Standard 7 year</option>
-              <option value="project_lifetime">Project lifetime</option>
-              <option value="legal_hold">Legal hold</option>
-            </select>
-          </label>
-          <label className="trace-review-rationale">
-            <span>Rationale</span>
-            <textarea value={reviewRationale} onChange={(event) => setReviewRationale(event.target.value)} />
-          </label>
-          <label className="trace-review-rationale">
-            <span>Reviewer recipients</span>
-            <input value={traceabilityRecipients} onChange={(event) => setTraceabilityRecipients(event.target.value)} />
-          </label>
-        </div>
-        <div className="trace-path-summary">
-          <Metadata label="Review records" value={String(reviewRecords.length)} />
-          <Metadata label="Current status" value={titleize(reviewStatus)} />
-          <Metadata
-            label="Retention rule"
-            value={traceabilityRetentionLabel(retentionClass)}
-          />
-          <Metadata label="Deliveries" value={String(traceabilityDeliveryRecords.length)} />
-          <Metadata label="Open responses" value={String(openDeliveryCount)} />
-        </div>
-      </section>
+      <TraceabilityExportControlsPanel
+        deliveryCount={traceabilityDeliveryRecords.length}
+        evidencePackets={traceEvidencePackets}
+        familyFilter={familyFilter}
+        familyOptions={familyOptions}
+        onDeliverGraph={() => deliverGraphPackage()}
+        onExportGraph={() => exportGraphPackage()}
+        onFamilyFilterChange={setFamilyFilter}
+        onPacketFilterChange={setPacketFilter}
+        onRecipientsChange={setTraceabilityRecipients}
+        onRetentionClassChange={setRetentionClass}
+        onReviewRationaleChange={setReviewRationale}
+        onReviewStatusChange={setReviewStatus}
+        onReviewerChange={setReviewer}
+        onStatusFilterChange={setStatusFilter}
+        openDeliveryCount={openDeliveryCount}
+        packetFilter={packetFilter}
+        recipients={traceabilityRecipients}
+        retentionClass={retentionClass}
+        retentionLabel={traceabilityRetentionLabel(retentionClass)}
+        reviewRationale={reviewRationale}
+        reviewer={reviewer}
+        reviewRecords={reviewRecords}
+        reviewStatus={reviewStatus}
+        statusFilter={statusFilter}
+      />
 
       <section className="traceability-grid">
         <section className="panel trace-source-panel">
