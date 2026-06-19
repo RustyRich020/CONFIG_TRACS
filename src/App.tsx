@@ -32,6 +32,7 @@ import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 import { adapterContracts } from './backendContracts'
 import { backendClient } from './backendClient'
+import { RetainedPackageCatalogPanel } from './components/RetainedPackageCatalogPanel'
 import { TemplatePackageGovernancePanel } from './components/TemplatePackageGovernancePanel'
 import { WorkflowLineageRetentionPanel } from './components/WorkflowLineageRetentionPanel'
 import { loadAppConfig } from './configLoader'
@@ -11065,7 +11066,13 @@ function BackendPersistenceView({
     useState<TraceabilityExportRetentionClass>('standard_7_year')
   const [retainedPackageSearch, setRetainedPackageSearch] = useState('')
   const [retainedPackageStatusFilter, setRetainedPackageStatusFilter] = useState<StatusLevel | 'all'>('all')
+  const [retainedPackageWorkflowFilter, setRetainedPackageWorkflowFilter] = useState('all')
+  const [retainedPackageRetentionFilter, setRetainedPackageRetentionFilter] =
+    useState<TraceabilityExportRetentionClass | 'all'>('all')
   const [selectedRetainedPackageId, setSelectedRetainedPackageId] = useState<string | null>(null)
+  const retainedPackageWorkflowTypes = Array.from(
+    new Set(workflowInstanceRetentionRecords.map((record) => record.payload.workflowType)),
+  ).sort()
   const filteredWorkflowInstanceRetentionRecords = workflowInstanceRetentionRecords.filter((record) => {
     const searchable = [
       record.label,
@@ -11076,7 +11083,11 @@ function BackendPersistenceView({
     ].join(' ').toLowerCase()
     const matchesSearch = searchable.includes(retainedPackageSearch.trim().toLowerCase())
     const matchesStatus = retainedPackageStatusFilter === 'all' || record.status === retainedPackageStatusFilter
-    return matchesSearch && matchesStatus
+    const matchesWorkflow =
+      retainedPackageWorkflowFilter === 'all' || record.payload.workflowType === retainedPackageWorkflowFilter
+    const matchesRetention =
+      retainedPackageRetentionFilter === 'all' || record.payload.retention.class === retainedPackageRetentionFilter
+    return matchesSearch && matchesStatus && matchesWorkflow && matchesRetention
   })
   const retentionLifecycleSummary = workflowInstanceRetentionRecords.reduce(
     (summary, record) => {
@@ -11143,6 +11154,10 @@ function BackendPersistenceView({
       retentionClass: workflowRetentionClass,
       reviewer: workflowRetentionReviewer,
     })
+  }
+  function downloadSelectedRetainedPackageEvidence() {
+    if (!selectedRetainedPackage) return
+    downloadJson('tracs-retained-workflow-package-evidence.json', selectedRetainedPackage)
   }
   function selectWorkflowDefinitionDraft(workflowType: string) {
     setWorkflowEditorKey(workflowType)
@@ -13796,95 +13811,23 @@ function BackendPersistenceView({
           setRetentionClass={setWorkflowRetentionClass}
           setReviewer={setWorkflowRetentionReviewer}
         />
-        <div className="workflow-lineage-panel">
-          <div className="workflow-lineage-header">
-            <div>
-              <strong>Retained Package Catalog</strong>
-              <span>Search retained workflow exports and review lifecycle coverage before approval or handoff.</span>
-            </div>
-            <div className="toolbar-actions">
-              <input
-                aria-label="Search retained packages"
-                placeholder="Search reviewer, workflow, package"
-                value={retainedPackageSearch}
-                onChange={(event) => setRetainedPackageSearch(event.target.value)}
-              />
-              <select
-                aria-label="Filter retained package status"
-                value={retainedPackageStatusFilter}
-                onChange={(event) => setRetainedPackageStatusFilter(event.target.value as StatusLevel | 'all')}
-              >
-                <option value="all">All statuses</option>
-                <option value="pass">Pass</option>
-                <option value="warning">Warning</option>
-                <option value="blocking">Blocking</option>
-              </select>
-            </div>
-          </div>
-          <div className="metadata-grid compact">
-            <Metadata label="Retained packages" value={String(retentionLifecycleSummary.total)} />
-            <Metadata label="Pass" value={String(retentionLifecycleSummary.pass)} />
-            <Metadata label="Warning" value={String(retentionLifecycleSummary.warning)} />
-            <Metadata label="Blocking" value={String(retentionLifecycleSummary.blocking)} />
-            <Metadata label="Covered records" value={String(retentionLifecycleSummary.records)} />
-            <Metadata label="Missing parents" value={String(retentionLifecycleSummary.missingParents)} />
-          </div>
-          {filteredWorkflowInstanceRetentionRecords.length > 0 ? (
-            <div className="backend-record-list">
-              {filteredWorkflowInstanceRetentionRecords.slice(0, 8).map((record) => (
-                <button
-                  className={
-                    selectedRetainedPackage?.id === record.id
-                      ? 'backend-record-row retained-package-row active'
-                      : 'backend-record-row retained-package-row'
-                  }
-                  key={record.id}
-                  onClick={() => setSelectedRetainedPackageId(record.id)}
-                  type="button"
-                >
-                  <div>
-                    <strong>{record.payload.workflowLabel}</strong>
-                    <span>
-                      {record.payload.reviewer} / {record.payload.coverage.records} retained record(s) / {record.payload.retention.evidence}
-                    </span>
-                  </div>
-                  <div className="queue-record-side">
-                    <StatusChip status={record.status} label={titleize(record.status)} />
-                    <span>{new Date(record.payload.retainedAt).toLocaleString()}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state compact">No retained workflow export packages match the current filters.</div>
-          )}
-          {selectedRetainedPackage ? (
-            <div className="workflow-retention-detail">
-              <div className="metadata-grid compact">
-                <Metadata label="Package ID" value={selectedRetainedPackage.payload.packageId} />
-                <Metadata label="Reviewer" value={selectedRetainedPackage.payload.reviewer} />
-                <Metadata label="Retention" value={titleize(selectedRetainedPackage.payload.retention.class)} />
-                <Metadata
-                  label="Retain until"
-                  value={
-                    selectedRetainedPackage.payload.retention.retainUntil === 'indefinite'
-                      ? 'Indefinite'
-                      : new Date(selectedRetainedPackage.payload.retention.retainUntil).toLocaleDateString()
-                  }
-                />
-                <Metadata label="Lineage stages" value={String(selectedRetainedPackage.payload.coverage.stages)} />
-                <Metadata label="Audit events" value={String(selectedRetainedPackage.payload.auditHistory.length)} />
-              </div>
-              <div className="backend-record-row">
-                <div>
-                  <strong>Retention evidence</strong>
-                  <span>{selectedRetainedPackage.payload.evidence}</span>
-                  <small>{selectedRetainedPackage.payload.auditHistory[0]?.summary ?? 'No audit summary recorded.'}</small>
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </div>
+        <RetainedPackageCatalogPanel
+          filteredRecords={filteredWorkflowInstanceRetentionRecords}
+          lifecycleSummary={retentionLifecycleSummary}
+          onDownloadSelected={downloadSelectedRetainedPackageEvidence}
+          onRetentionFilterChange={setRetainedPackageRetentionFilter}
+          onSearchChange={setRetainedPackageSearch}
+          onSelectRecord={setSelectedRetainedPackageId}
+          onStatusFilterChange={setRetainedPackageStatusFilter}
+          onWorkflowFilterChange={setRetainedPackageWorkflowFilter}
+          records={workflowInstanceRetentionRecords}
+          retentionClassFilter={retainedPackageRetentionFilter}
+          search={retainedPackageSearch}
+          selectedRecord={selectedRetainedPackage}
+          statusFilter={retainedPackageStatusFilter}
+          workflowFilter={retainedPackageWorkflowFilter}
+          workflowTypes={retainedPackageWorkflowTypes}
+        />
         <div className="workflow-definition-editor-panel">
           <div className="workflow-lineage-header">
             <div>
