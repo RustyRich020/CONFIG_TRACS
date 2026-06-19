@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
+import { Database, FileCog, GitBranch, ScrollText } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { StatusLevel } from '../types'
 
@@ -33,6 +34,13 @@ export function PanelHeader({
 
 export function StatusChip({ status, label }: { status: StatusLevel; label: string }) {
   return <span className={`status-chip ${status}`}>{label}</span>
+}
+
+export function ConnectorGlyph({ type }: { type: string }) {
+  if (type === 'snowflake') return <Database className="connector-glyph" size={18} />
+  if (type === 'sharepoint_excel') return <FileCog className="connector-glyph" size={18} />
+  if (type === 'csv') return <ScrollText className="connector-glyph" size={18} />
+  return <GitBranch className="connector-glyph" size={18} />
 }
 
 export function HistoryRow({
