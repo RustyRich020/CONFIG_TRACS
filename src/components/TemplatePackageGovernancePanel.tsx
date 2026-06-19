@@ -16,7 +16,7 @@ function titleize(value?: string | null) {
 
 function Metadata({ label, value }: { label: string; value: string }) {
   return (
-    <div className="metadata-card">
+    <div className="metadata-item">
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
@@ -90,84 +90,86 @@ export function TemplatePackageGovernancePanel({
         title="Cross-Industry Template Package"
         subtitle="Assemble deployable starter evidence from workflow definitions, mappings, connector templates, reports, and active controlled templates."
       />
-      <div className="metadata-grid">
-        <Metadata label="Industries" value={String(packagePayload.summary.industries)} />
-        <Metadata label="Workflows" value={String(packagePayload.summary.workflows)} />
-        <Metadata label="Mappings" value={String(packagePayload.summary.mappings)} />
-        <Metadata label="Connector templates" value={String(packagePayload.summary.connectorTemplates)} />
-        <Metadata label="Report catalog" value={String(packagePayload.summary.reportCatalogItems)} />
-        <Metadata label="Active controlled" value={String(packagePayload.summary.activeControlledTemplates)} />
-      </div>
-      <div className="template-package-actions">
-        <p>{packagePayload.evidence}</p>
-        <button className="primary-action" onClick={onDownloadPackage} type="button">
-          <Download size={15} />
-          Download Package
-        </button>
-      </div>
-      <div className="metadata-grid compact">
-        <Metadata label="Approvals" value={String(approvalRecords.length)} />
-        <Metadata
-          label="Latest approval"
-          value={latestPackageApproval ? titleize(latestPackageApproval.payload.status) : 'Not reviewed'}
-        />
-        <Metadata label="Deliveries" value={String(deliveryRecords.length)} />
-        <Metadata
-          label="Latest delivery"
-          value={latestPackageDelivery ? titleize(latestPackageDelivery.payload.channel) : 'Not delivered'}
-        />
-      </div>
-      <div className="form-grid compact-form">
-        <label>
-          <span>Approval reviewer</span>
-          <input value={packageReviewer} onChange={(event) => onReviewerChange(event.target.value)} />
-        </label>
-        <label>
-          <span>Approval status</span>
-          <select
-            value={packageApprovalStatus}
-            onChange={(event) => onApprovalStatusChange(event.target.value as CrossIndustryTemplatePackageApprovalStatus)}
-          >
-            <option value="draft">Draft</option>
-            <option value="approved">Approved</option>
-            <option value="approved_with_conditions">Approved with conditions</option>
-            <option value="rejected">Rejected</option>
-          </select>
-        </label>
-        <label className="wide-field">
-          <span>Approval rationale</span>
-          <input
-            value={packageApprovalRationale}
-            onChange={(event) => onApprovalRationaleChange(event.target.value)}
+      <div className="template-package-body">
+        <div className="metadata-grid">
+          <Metadata label="Industries" value={String(packagePayload.summary.industries)} />
+          <Metadata label="Workflows" value={String(packagePayload.summary.workflows)} />
+          <Metadata label="Mappings" value={String(packagePayload.summary.mappings)} />
+          <Metadata label="Connector templates" value={String(packagePayload.summary.connectorTemplates)} />
+          <Metadata label="Report catalog" value={String(packagePayload.summary.reportCatalogItems)} />
+          <Metadata label="Active controlled" value={String(packagePayload.summary.activeControlledTemplates)} />
+        </div>
+        <div className="template-package-actions">
+          <p>{packagePayload.evidence}</p>
+          <button className="primary-action" onClick={onDownloadPackage} type="button">
+            <Download size={15} />
+            Download Package
+          </button>
+        </div>
+        <div className="metadata-grid compact">
+          <Metadata label="Approvals" value={String(approvalRecords.length)} />
+          <Metadata
+            label="Latest approval"
+            value={latestPackageApproval ? titleize(latestPackageApproval.payload.status) : 'Not reviewed'}
           />
-        </label>
-        <label>
-          <span>Delivery channel</span>
-          <select
-            value={deliveryChannel}
-            onChange={(event) => onDeliveryChannelChange(event.target.value as CrossIndustryTemplatePackageDelivery['channel'])}
-          >
-            <option value="implementation_handoff">Implementation handoff</option>
-            <option value="governance_review">Governance review</option>
-            <option value="download">Download</option>
-          </select>
-        </label>
-        <label>
-          <span>Delivery recipients</span>
-          <input value={deliveryRecipients} onChange={(event) => onDeliveryRecipientsChange(event.target.value)} />
-        </label>
-      </div>
-      <div className="template-package-actions">
-        <button className="secondary-action" onClick={onSaveApproval} type="button">
-          Save Approval
-        </button>
-        <button className="secondary-action" onClick={onSaveDelivery} type="button">
-          Save Delivery
-        </button>
-        <button className="secondary-action" onClick={onDownloadLifecycleExport} type="button">
-          <Download size={15} />
-          Export Lifecycle
-        </button>
+          <Metadata label="Deliveries" value={String(deliveryRecords.length)} />
+          <Metadata
+            label="Latest delivery"
+            value={latestPackageDelivery ? titleize(latestPackageDelivery.payload.channel) : 'Not delivered'}
+          />
+        </div>
+        <div className="form-grid compact-form template-package-form">
+          <label>
+            <span>Approval reviewer</span>
+            <input value={packageReviewer} onChange={(event) => onReviewerChange(event.target.value)} />
+          </label>
+          <label>
+            <span>Approval status</span>
+            <select
+              value={packageApprovalStatus}
+              onChange={(event) => onApprovalStatusChange(event.target.value as CrossIndustryTemplatePackageApprovalStatus)}
+            >
+              <option value="draft">Draft</option>
+              <option value="approved">Approved</option>
+              <option value="approved_with_conditions">Approved with conditions</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </label>
+          <label className="wide-field">
+            <span>Approval rationale</span>
+            <input
+              value={packageApprovalRationale}
+              onChange={(event) => onApprovalRationaleChange(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>Delivery channel</span>
+            <select
+              value={deliveryChannel}
+              onChange={(event) => onDeliveryChannelChange(event.target.value as CrossIndustryTemplatePackageDelivery['channel'])}
+            >
+              <option value="implementation_handoff">Implementation handoff</option>
+              <option value="governance_review">Governance review</option>
+              <option value="download">Download</option>
+            </select>
+          </label>
+          <label>
+            <span>Delivery recipients</span>
+            <input value={deliveryRecipients} onChange={(event) => onDeliveryRecipientsChange(event.target.value)} />
+          </label>
+        </div>
+        <div className="template-package-actions command-row">
+          <button className="secondary-action" onClick={onSaveApproval} type="button">
+            Save Approval
+          </button>
+          <button className="secondary-action" onClick={onSaveDelivery} type="button">
+            Save Delivery
+          </button>
+          <button className="secondary-action" onClick={onDownloadLifecycleExport} type="button">
+            <Download size={15} />
+            Export Lifecycle
+          </button>
+        </div>
       </div>
     </section>
   )

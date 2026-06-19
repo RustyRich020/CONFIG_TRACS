@@ -7,7 +7,7 @@ import type {
 
 function Metadata({ label, value }: { label: string; value: string }) {
   return (
-    <div className="metadata-card">
+    <div className="metadata-item">
       <span>{label}</span>
       <strong>{value}</strong>
     </div>

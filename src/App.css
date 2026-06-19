@@ -570,12 +570,22 @@
   margin-bottom: 18px;
 }
 
+.template-package-body {
+  padding: 16px;
+}
+
 .template-package-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   margin-top: 14px;
+}
+
+.template-package-actions.command-row {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .template-package-actions p {
@@ -2415,6 +2425,10 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   margin-top: 10px;
+}
+
+.form-grid.compact-form.template-package-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .compact-form label {
