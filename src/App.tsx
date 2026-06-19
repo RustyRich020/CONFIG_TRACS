@@ -52,6 +52,10 @@ import {
   deriveGovernanceWorkflowQueue,
 } from './governanceWorkflow'
 import { createSavedVersion, loadSavedVersions, persistSavedVersions } from './persistence'
+import {
+  createWorkflowDefinitionPromotionPackage,
+  validateWorkflowDefinitionDraft,
+} from './workflowDefinitionDraft'
 import type {
   AppConfig,
   AdapterDryRunResult,
@@ -322,6 +326,37 @@ function titleize(value?: string | null) {
     .split('_')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
+}
+
+function listFromText(value: string) {
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+}
+
+function cloneWorkflowDefinition(definition: AppConfig['workflowDefinitions'][string]) {
+  return JSON.parse(JSON.stringify(definition)) as AppConfig['workflowDefinitions'][string]
+}
+
+function formatAllowedNextStages(definition: AppConfig['workflowDefinitions'][string]) {
+  return Object.entries(definition.allowed_next_stages)
+    .map(([stage, nextStages]) => `${stage}: ${(nextStages ?? []).join(', ')}`)
+    .join('\n')
+}
+
+function parseAllowedNextStages(value: string): AppConfig['workflowDefinitions'][string]['allowed_next_stages'] {
+  return value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .reduce<AppConfig['workflowDefinitions'][string]['allowed_next_stages']>((current, line) => {
+      const [stage, nextStages = ''] = line.split(':')
+      if (!stage?.trim()) return current
+      current[stage.trim() as keyof AppConfig['workflowDefinitions'][string]['allowed_next_stages']] =
+        listFromText(nextStages) as AppConfig['workflowDefinitions'][string]['stages']
+      return current
+    }, {})
 }
 
 function severityStatus(severity: string): StatusLevel {
@@ -8127,6 +8162,7 @@ function App() {
           <ObjectExplorerView objects={canonicalObjects} />
         ) : activeView === 'Traceability' ? (
           <TraceabilityView
+            backendRecords={backendRecords}
             canonicalObjects={canonicalObjects}
             closureRouteRecords={backendRecords.filter(
               (record): record is BackendRecord<TraceabilityResponseClosureRoute> =>
@@ -8142,6 +8178,8 @@ function App() {
             )}
             events={qualityEvents}
             links={traceabilityLinks}
+            mappings={config.mappings}
+            mappingResults={mappingResults}
             onDeliverNotifications={deliverNotifications}
             onSaveDeliveryResponse={saveTraceabilityDeliveryResponse}
             onSaveResponseClosureRoute={saveTraceabilityResponseClosureRoute}
@@ -8156,6 +8194,7 @@ function App() {
                 record.kind === 'traceability_export_review',
             )}
             selectedEventId={selectedQualityEventId}
+            workflowDefinitions={config.workflowDefinitions}
           />
         ) : activeView === 'Reports' ? (
           <ReportCatalogView
@@ -10716,6 +10755,16 @@ function BackendPersistenceView({
   const selectedWorkflowItem = governanceWorkQueueItems[0]
   const selectedWorkflowInstance = governanceWorkflowLineage.instances[0]
   const workflowDefinitionEntries = Object.entries(workflowDefinitions)
+  const initialWorkflowEditorKey = workflowDefinitionEntries[0]?.[0] ?? ''
+  const [workflowEditorKey, setWorkflowEditorKey] = useState(initialWorkflowEditorKey)
+  const selectedWorkflowEditorKey = workflowDefinitions[workflowEditorKey] ? workflowEditorKey : initialWorkflowEditorKey
+  const [workflowDraft, setWorkflowDraft] = useState<AppConfig['workflowDefinitions'][string] | null>(() =>
+    selectedWorkflowEditorKey ? cloneWorkflowDefinition(workflowDefinitions[selectedWorkflowEditorKey]) : null,
+  )
+  const [workflowValidationResult, setWorkflowValidationResult] =
+    useState<ReturnType<typeof validateWorkflowDefinitionDraft> | null>(null)
+  const [workflowPromotionPackage, setWorkflowPromotionPackage] =
+    useState<ReturnType<typeof createWorkflowDefinitionPromotionPackage> | null>(null)
   const selectedWorkflowDefinition = selectedWorkflowItem?.definition ?? workflowDefinitionEntries[0]?.[1]
   const selectedWorkflowStage = selectedWorkflowItem?.stage ?? selectedWorkflowDefinition?.stages[0]
   const selectedAllowedNextStages =
@@ -10749,6 +10798,36 @@ function BackendPersistenceView({
     if (!selectedWorkflowInstance) return
     const packagePayload = createWorkflowInstanceExportPackage(selectedWorkflowInstance)
     downloadJson('tracs-workflow-instance-export-package.json', packagePayload)
+  }
+  function selectWorkflowDefinitionDraft(workflowType: string) {
+    setWorkflowEditorKey(workflowType)
+    setWorkflowDraft(cloneWorkflowDefinition(workflowDefinitions[workflowType]))
+    setWorkflowValidationResult(null)
+    setWorkflowPromotionPackage(null)
+  }
+  function updateWorkflowDraft(updates: Partial<AppConfig['workflowDefinitions'][string]>) {
+    setWorkflowDraft((current) => current ? { ...current, ...updates } : current)
+    setWorkflowValidationResult(null)
+    setWorkflowPromotionPackage(null)
+  }
+  function validateWorkflowDraft() {
+    if (!workflowDraft || !selectedWorkflowEditorKey) return
+    setWorkflowValidationResult(validateWorkflowDefinitionDraft(selectedWorkflowEditorKey, workflowDraft))
+  }
+  function promoteWorkflowDraftPreview() {
+    if (!workflowDraft || !selectedWorkflowEditorKey) return
+    const validation = validateWorkflowDefinitionDraft(selectedWorkflowEditorKey, workflowDraft)
+    const promotionPackage = createWorkflowDefinitionPromotionPackage({
+      definition: workflowDraft,
+      validation,
+      workflowType: selectedWorkflowEditorKey,
+    })
+    setWorkflowValidationResult(validation)
+    setWorkflowPromotionPackage(promotionPackage)
+  }
+  function downloadWorkflowPromotionPackage() {
+    if (!workflowPromotionPackage) return
+    downloadJson('tracs-workflow-definition-promotion-package.json', workflowPromotionPackage)
   }
   const latestNotificationRenewal = notificationRenewalRecords[0]
   const latestNotificationRenewalClosure = notificationRenewalClosureRecords[0]
@@ -13407,6 +13486,170 @@ function BackendPersistenceView({
             </>
           ) : (
             <div className="empty-state compact">Workflow lineage appears after records with workflow metadata or governance kinds are stored.</div>
+          )}
+        </div>
+        <div className="workflow-definition-editor-panel">
+          <div className="workflow-lineage-header">
+            <div>
+              <strong>Workflow Definition Draft Editor</strong>
+              <span>Draft, validate, preview promotion, and download tenant-specific workflow definition evidence.</span>
+            </div>
+            <div className="toolbar-actions">
+              <button className="secondary-action compact" onClick={validateWorkflowDraft} type="button">
+                Validate
+              </button>
+              <button className="secondary-action compact" onClick={promoteWorkflowDraftPreview} type="button">
+                Promote preview
+              </button>
+              <button
+                className="primary-action compact"
+                disabled={!workflowPromotionPackage}
+                onClick={downloadWorkflowPromotionPackage}
+                type="button"
+              >
+                Download promoted definition JSON
+              </button>
+            </div>
+          </div>
+          {workflowDraft ? (
+            <>
+              <div className="form-grid compact-form">
+                <label>
+                  <span>Workflow</span>
+                  <select value={selectedWorkflowEditorKey} onChange={(event) => selectWorkflowDefinitionDraft(event.target.value)}>
+                    {workflowDefinitionEntries.map(([workflowType, definition]) => (
+                      <option key={workflowType} value={workflowType}>
+                        {definition.display_name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Display name</span>
+                  <input
+                    value={workflowDraft.display_name}
+                    onChange={(event) => updateWorkflowDraft({ display_name: event.target.value })}
+                  />
+                </label>
+                <label>
+                  <span>SLA days</span>
+                  <input
+                    min="0"
+                    type="number"
+                    value={workflowDraft.sla_days}
+                    onChange={(event) => updateWorkflowDraft({ sla_days: Number(event.target.value) })}
+                  />
+                </label>
+                <label>
+                  <span>Default owner role</span>
+                  <input
+                    value={workflowDraft.default_owner_role}
+                    onChange={(event) => updateWorkflowDraft({ default_owner_role: event.target.value })}
+                  />
+                </label>
+              </div>
+              <div className="form-grid compact-form">
+                <label>
+                  <span>Applicable domains</span>
+                  <input
+                    value={workflowDraft.applicable_domains.join(', ')}
+                    onChange={(event) => updateWorkflowDraft({ applicable_domains: listFromText(event.target.value) })}
+                  />
+                </label>
+                <label>
+                  <span>Stages</span>
+                  <input
+                    value={workflowDraft.stages.join(', ')}
+                    onChange={(event) =>
+                      updateWorkflowDraft({ stages: listFromText(event.target.value) as AppConfig['workflowDefinitions'][string]['stages'] })
+                    }
+                  />
+                </label>
+                <label>
+                  <span>Parent link fields</span>
+                  <input
+                    value={workflowDraft.parent_link_fields.join(', ')}
+                    onChange={(event) => updateWorkflowDraft({ parent_link_fields: listFromText(event.target.value) })}
+                  />
+                </label>
+                <label>
+                  <span>Owner resolution</span>
+                  <input
+                    value={workflowDraft.owner_resolution.join(', ')}
+                    onChange={(event) => updateWorkflowDraft({ owner_resolution: listFromText(event.target.value) })}
+                  />
+                </label>
+              </div>
+              <div className="form-grid compact-form">
+                <label className="wide-field">
+                  <span>Description</span>
+                  <textarea
+                    value={workflowDraft.description}
+                    onChange={(event) => updateWorkflowDraft({ description: event.target.value })}
+                  />
+                </label>
+                <label className="wide-field">
+                  <span>Allowed next stages</span>
+                  <textarea
+                    value={formatAllowedNextStages(workflowDraft)}
+                    onChange={(event) => updateWorkflowDraft({ allowed_next_stages: parseAllowedNextStages(event.target.value) })}
+                  />
+                </label>
+              </div>
+              <div className="form-grid compact-form">
+                <label>
+                  <span>Export enabled</span>
+                  <select
+                    value={workflowDraft.export_package.enabled ? 'true' : 'false'}
+                    onChange={(event) =>
+                      updateWorkflowDraft({
+                        export_package: {
+                          ...workflowDraft.export_package,
+                          enabled: event.target.value === 'true',
+                        },
+                      })
+                    }
+                  >
+                    <option value="true">Enabled</option>
+                    <option value="false">Disabled</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Export package label</span>
+                  <input
+                    value={workflowDraft.export_package.label}
+                    onChange={(event) =>
+                      updateWorkflowDraft({
+                        export_package: {
+                          ...workflowDraft.export_package,
+                          label: event.target.value,
+                        },
+                      })
+                    }
+                  />
+                </label>
+              </div>
+              <div className="metadata-grid compact">
+                <Metadata label="Draft status" value={workflowValidationResult ? titleize(workflowValidationResult.status) : 'Draft'} />
+                <Metadata label="Validation issues" value={String(workflowValidationResult?.issues.length ?? 0)} />
+                <Metadata label="Promotion package" value={workflowPromotionPackage ? workflowPromotionPackage.packageId : 'Not generated'} />
+              </div>
+              {workflowValidationResult?.issues.length ? (
+                <div className="mapping-run-history">
+                  {workflowValidationResult.issues.map((issue) => (
+                    <div className="mapping-run-row" key={issue.id}>
+                      <div>
+                        <strong>{issue.field}</strong>
+                        <span>{issue.evidence}</span>
+                      </div>
+                      <StatusChip status={issue.status} label={issue.status} />
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <div className="empty-state compact">Workflow definitions are not loaded.</div>
           )}
         </div>
         {governanceWorkQueueItems.length > 0 ? (
@@ -21735,12 +21978,15 @@ function ObjectExplorerView({ objects }: { objects: CanonicalObject[] }) {
 }
 
 function TraceabilityView({
+  backendRecords,
   canonicalObjects,
   closureRouteRecords,
   deliveryRecords,
   evidenceRecords,
   events,
   links,
+  mappings,
+  mappingResults,
   onDeliverNotifications,
   onSaveDeliveryResponse,
   onSaveResponseClosureRoute,
@@ -21749,13 +21995,17 @@ function TraceabilityView({
   responseRecords,
   reviewRecords,
   selectedEventId,
+  workflowDefinitions,
 }: {
+  backendRecords: BackendRecord[]
   canonicalObjects: CanonicalObject[]
   closureRouteRecords: BackendRecord<TraceabilityResponseClosureRoute>[]
   deliveryRecords: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>[]
   evidenceRecords: BackendRecord<ReadinessEvidencePacket>[]
   events: QualityEvent[]
   links: TraceabilityLink[]
+  mappings: AppConfig['mappings']
+  mappingResults: Record<string, MappingValidationResult>
   onDeliverNotifications: (payload: NotificationDeliveryPayload) => void
   onSaveDeliveryResponse: (request: {
     deliveryRecord: BackendRecord<{ request: NotificationDeliveryPayload; result: NotificationDeliveryResult }>
@@ -21787,6 +22037,7 @@ function TraceabilityView({
   responseRecords: BackendRecord<TraceabilityDeliveryResponse>[]
   reviewRecords: BackendRecord<TraceabilityExportReview>[]
   selectedEventId: string | null
+  workflowDefinitions: AppConfig['workflowDefinitions']
 }) {
   const [familyFilter, setFamilyFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState<StatusLevel | 'all'>('all')
@@ -21877,6 +22128,29 @@ function TraceabilityView({
         }),
       ]
     : []
+  const canonicalLoadRecords = backendRecords.filter(
+    (record): record is BackendRecord<CanonicalLoadResult> => record.kind === 'canonical_load',
+  )
+  const latestCanonicalLoad = canonicalLoadRecords[0]
+  const workflowLineage = useMemo(
+    () => deriveGovernanceWorkflowLineage(backendRecords, workflowDefinitions),
+    [backendRecords, workflowDefinitions],
+  )
+  const sourceMappings = Object.entries(mappings).map(([mappingId, mapping]) => ({
+    mappingId,
+    sourceConnector: mapping.source_connector,
+    sourceObject: mapping.source_object,
+    targetObject: mapping.object,
+  }))
+  const validationGaps = Object.entries(mappingResults).flatMap(([mappingId, result]) =>
+    result.checks
+      .filter((check) => check.status !== 'pass')
+      .map((check) => ({
+        id: `${mappingId}:${check.id}`,
+        status: check.status,
+        evidence: `${titleize(mappingId)}: ${check.evidence}`,
+      })),
+  )
   function createGraphExportPackage(
     evidencePacket?: BackendRecord<ReadinessEvidencePacket>,
   ): TraceabilityGraphExportPackage {
@@ -21903,6 +22177,14 @@ function TraceabilityView({
         relationshipSummary,
       },
       evidencePackets: selectedEvidencePackets,
+      sourceMappings,
+      validationGaps,
+      latestCanonicalLoad,
+      workflowLineage: {
+        instances: workflowLineage.instances.length,
+        missingParentReferences: workflowLineage.orphanedParentIds.length,
+        latestInstanceId: workflowLineage.instances[0]?.instanceId,
+      },
       coverage: {
         canonicalObjects: canonicalObjects.length,
         filteredLinks: filteredLinks.length,
@@ -22224,6 +22506,12 @@ function TraceabilityView({
           <Metadata label="Graph nodes" value={String(graphNodes.length)} />
           <Metadata label="Graph edges" value={String(filteredLinks.length)} />
           <Metadata label="Evidence packets" value={String(traceEvidencePackets.length)} />
+          <Metadata
+            label="Latest load"
+            value={latestCanonicalLoad ? `${latestCanonicalLoad.payload.objectCount} objects / ${latestCanonicalLoad.payload.linkCount} links` : 'No load'}
+          />
+          <Metadata label="Validation gaps" value={String(validationGaps.length)} />
+          <Metadata label="Workflow lineage" value={`${workflowLineage.instances.length} instance(s)`} />
         </div>
       </section>
 
@@ -23175,6 +23463,13 @@ function MappingStudio({
       : latestCanonicalLoad
         ? 'Latest load completed without warning evidence.'
         : 'No canonical load has been retained for this mapping yet.'
+  const selectedLoadConnector =
+    connectorEntries.find(([connectorId]) =>
+      activeMappingId === 'quality_event' ? connectorId === canonicalLoadConnectorId : connectorId === mapping.source_connector,
+    )?.[1]
+  const canonicalLoadExecutionMode =
+    activeMappingId === 'quality_event' ? 'connector_profile' : 'approved_external_reference'
+  const latestLoadStatus = latestCanonicalLoad?.status ?? (externalMappingApproved ? 'warning' : 'blocking')
   const loadDispositionRequest = () => ({
     dueAt: loadDispositionDueAt,
     owner: loadDispositionOwner,
@@ -23233,6 +23528,24 @@ function MappingStudio({
             <ClipboardCheck size={16} />
             Validate Mapping
           </button>
+        </div>
+      </section>
+
+      <section className="panel canonical-load-runner-panel">
+        <PanelHeader
+          icon={Database}
+          title="Connector-Backed Canonical Load Runner"
+          subtitle="Bounded v1 runner for configured mappings, canonical objects, traceability links, and retained load evidence."
+        />
+        <div className="metadata-grid">
+          <Metadata label="Selected mapping" value={titleize(activeMappingId)} />
+          <Metadata label="Source connector" value={selectedLoadConnector?.display_name ?? mapping.source_connector} />
+          <Metadata label="Target object" value={mapping.object} />
+          <Metadata label="Execution mode" value={titleize(canonicalLoadExecutionMode)} />
+          <Metadata label="Object count" value={String(latestCanonicalLoad?.payload.objectCount ?? 0)} />
+          <Metadata label="Traceability links" value={String(latestCanonicalLoad?.payload.linkCount ?? 0)} />
+          <Metadata label="Warnings" value={String(latestCanonicalLoad?.payload.warnings.length ?? 0)} />
+          <Metadata label="Latest load status" value={titleize(latestLoadStatus)} />
         </div>
       </section>
 

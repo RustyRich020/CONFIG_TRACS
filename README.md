@@ -169,6 +169,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Adds structured workflow metadata to new backend records with `workflowType`, `stage`, `parentRecordId`, `owner`, and `dueAt` while keeping legacy record-kind fallback support.
 - Adds reusable workflow definitions for Closure SLA, notification governance, retry queue, production cutover, traceability, and evidence packet review, with the Backend queue now showing config-backed workflow contracts.
 - Adds workflow parent-child lineage views and workflow-instance export packages for governance review without adding new record-kind chains.
+- Adds connector-backed canonical load runner visibility, enriched traceability graph export packages, and workflow definition draft validation/promotion exports.
 - Exports Closure SLA follow-up closure packages with retained actions, superseded routes, and notification evidence.
 - Delivers Closure SLA follow-up closure packages to governance reviewers with retained delivery evidence.
 - Captures Closure SLA follow-up closure package delivery acknowledgements with reviewer response and retained actions.
@@ -325,6 +326,6 @@ npm run build
 
 Use the canonical load and report config paths while consolidating governance workflows into reusable product infrastructure:
 
-1. Move core TRACS value forward with connector-backed canonical loads, traceability graph exports, report evidence packets, and cross-industry template packages.
-2. Add workflow definition editing, validation status, and promotion controls for tenant-specific governance models.
-3. Add lineage export retention records once workflow-instance packages need formal approval history.
+1. Add cross-industry template package assembly from approved workflow definitions, mappings, connector templates, and report catalog entries.
+2. Add lineage export retention records once workflow-instance packages need formal approval history.
+3. Split large frontend surfaces into focused components to reduce bundle size and make future workflow work safer.

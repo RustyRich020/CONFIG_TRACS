@@ -356,6 +356,28 @@ export type WorkflowDefinition = {
   owner_resolution: string[]
 }
 
+export type WorkflowDefinitionValidationIssue = {
+  id: string
+  status: StatusLevel
+  field: string
+  evidence: string
+}
+
+export type WorkflowDefinitionValidationResult = {
+  status: StatusLevel
+  checkedAt: string
+  issues: WorkflowDefinitionValidationIssue[]
+}
+
+export type WorkflowDefinitionPromotionPackage = {
+  packageId: string
+  generatedAt: string
+  workflowType: string
+  definition: WorkflowDefinition
+  validation: WorkflowDefinitionValidationResult
+  evidence: string
+}
+
 export type BackendRecord<TPayload = unknown> = {
   id: string
   kind: BackendRecordKind
@@ -1005,6 +1027,23 @@ export type TraceabilityGraphExportPackage = {
     relationshipSummary: Record<string, number>
   }
   evidencePackets: Array<BackendRecord<ReadinessEvidencePacket>>
+  sourceMappings?: Array<{
+    mappingId: string
+    sourceConnector: string
+    sourceObject: string
+    targetObject: string
+  }>
+  validationGaps?: Array<{
+    id: string
+    status: StatusLevel
+    evidence: string
+  }>
+  latestCanonicalLoad?: BackendRecord<CanonicalLoadResult>
+  workflowLineage?: {
+    instances: number
+    missingParentReferences: number
+    latestInstanceId?: string
+  }
   coverage: {
     canonicalObjects: number
     filteredLinks: number
