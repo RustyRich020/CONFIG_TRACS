@@ -566,6 +566,25 @@
   gap: 16px;
 }
 
+.template-package-panel {
+  margin-bottom: 18px;
+}
+
+.template-package-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.template-package-actions p {
+  margin: 0;
+  color: #607171;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .asset-library-grid {
   display: grid;
   grid-template-columns: minmax(320px, 0.8fr) minmax(520px, 1.2fr);
@@ -3021,6 +3040,11 @@
   }
 
   .workflow-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .template-package-actions {
     align-items: stretch;
     flex-direction: column;
   }

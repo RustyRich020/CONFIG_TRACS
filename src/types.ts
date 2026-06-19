@@ -953,6 +953,42 @@ export type ControlledTemplatePayload = {
   provenanceNotes: string
 }
 
+export type CrossIndustryTemplatePackage = {
+  packageId: string
+  generatedAt: string
+  industries: Array<{
+    id: string
+    displayName: string
+    domains: string[]
+  }>
+  workflowDefinitions: Record<string, WorkflowDefinition>
+  mappings: Array<{
+    mappingId: string
+    object: string
+    sourceConnector: string
+    sourceObject: string
+    requiredFields: string[]
+    traceabilityLinks: number
+  }>
+  connectorTemplates: Array<{
+    name: string
+    file: string
+    type: string
+    purpose: string
+  }>
+  reportCatalog: ReportCatalogItem[]
+  controlledTemplates: Array<BackendRecord<ControlledTemplatePayload>>
+  summary: {
+    industries: number
+    workflows: number
+    mappings: number
+    connectorTemplates: number
+    reportCatalogItems: number
+    activeControlledTemplates: number
+  }
+  evidence: string
+}
+
 export type CanonicalObject = {
   id: string
   objectType: string

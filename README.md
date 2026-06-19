@@ -170,6 +170,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Adds reusable workflow definitions for Closure SLA, notification governance, retry queue, production cutover, traceability, and evidence packet review, with the Backend queue now showing config-backed workflow contracts.
 - Adds workflow parent-child lineage views and workflow-instance export packages for governance review without adding new record-kind chains.
 - Adds connector-backed canonical load runner visibility, enriched traceability graph export packages, and workflow definition draft validation/promotion exports.
+- Adds cross-industry template package assembly from workflow definitions, mapping profiles, connector templates, report catalog entries, and active controlled templates.
 - Exports Closure SLA follow-up closure packages with retained actions, superseded routes, and notification evidence.
 - Delivers Closure SLA follow-up closure packages to governance reviewers with retained delivery evidence.
 - Captures Closure SLA follow-up closure package delivery acknowledgements with reviewer response and retained actions.
@@ -324,8 +325,8 @@ npm run build
 
 ## Next Phase
 
-Use the canonical load and report config paths while consolidating governance workflows into reusable product infrastructure:
+Use the template package and workflow lineage paths while consolidating governance workflows into reusable product infrastructure:
 
-1. Add cross-industry template package assembly from approved workflow definitions, mappings, connector templates, and report catalog entries.
-2. Add lineage export retention records once workflow-instance packages need formal approval history.
-3. Split large frontend surfaces into focused components to reduce bundle size and make future workflow work safer.
+1. Add lineage export retention records once workflow-instance packages need formal approval history.
+2. Split large frontend surfaces into focused components to reduce bundle size and make future workflow work safer.
+3. Add package approval records and delivery only after package assembly is reviewed.

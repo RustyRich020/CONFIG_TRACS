@@ -103,6 +103,7 @@ import type {
   ClosureSlaResponseFollowUpStatus,
   ControlledTemplatePayload,
   ControlledTemplateStatus,
+  CrossIndustryTemplatePackage,
   LocalAsset,
   ConnectorPreviewResult,
   ConnectorSourceMetadata,
@@ -319,6 +320,55 @@ const statusIcon: Record<StatusLevel, typeof CheckCircle2> = {
   pass: CheckCircle2,
   warning: TriangleAlert,
   blocking: ShieldCheck,
+}
+
+function createCrossIndustryTemplatePackage({
+  config,
+  controlledTemplates,
+  reports,
+}: {
+  config: AppConfig
+  controlledTemplates: BackendRecord<ControlledTemplatePayload>[]
+  reports: ReportCatalogItem[]
+}): CrossIndustryTemplatePackage {
+  const generatedAt = new Date().toISOString()
+  const activeControlledTemplates = controlledTemplates.filter((record) => record.payload.status === 'active')
+  const mappings = Object.entries(config.mappings).map(([mappingId, mapping]) => ({
+    mappingId,
+    object: mapping.object,
+    sourceConnector: mapping.source_connector,
+    sourceObject: mapping.source_object,
+    requiredFields: mapping.required,
+    traceabilityLinks: mapping.traceability_links?.length ?? 0,
+  }))
+  const industries = config.environment.deployment_profile.industries.map((industryId) => ({
+    id: industryId,
+    displayName: config.industries[industryId]?.display_name ?? industryId,
+    domains: config.industries[industryId]?.enabled_domains ?? [],
+  }))
+  const connectorTemplates = templateCatalog.filter((template) =>
+    ['Connector', 'Credential', 'Adapter'].includes(template.type),
+  )
+
+  return {
+    packageId: `cross_industry_template_package:${config.environment.environment.name}:${generatedAt}`,
+    generatedAt,
+    industries,
+    workflowDefinitions: config.workflowDefinitions,
+    mappings,
+    connectorTemplates,
+    reportCatalog: reports,
+    controlledTemplates: activeControlledTemplates,
+    summary: {
+      industries: industries.length,
+      workflows: Object.keys(config.workflowDefinitions).length,
+      mappings: mappings.length,
+      connectorTemplates: connectorTemplates.length,
+      reportCatalogItems: reports.length,
+      activeControlledTemplates: activeControlledTemplates.length,
+    },
+    evidence: `Cross-industry package assembled for ${industries.length} industry profile(s), ${Object.keys(config.workflowDefinitions).length} workflow definition(s), ${mappings.length} mapping profile(s), ${connectorTemplates.length} connector template(s), ${reports.length} report catalog item(s), and ${activeControlledTemplates.length} active controlled template(s).`,
+  }
 }
 
 function titleize(value?: string | null) {
@@ -8107,10 +8157,12 @@ function App() {
         ) : activeView === 'Templates' ? (
           <TemplatesView
             assetRegistry={assetRegistry}
+            config={config}
             onActivateTemplate={activateTemplateRecord}
             onPromoteAsset={promoteTemplateAsset}
             onRefreshAssets={refreshAssetRegistry}
             onUpdateTemplate={updateTemplateRecord}
+            reports={reportCatalog}
             templateRecords={templateRecords}
           />
         ) : activeView === 'Mapping' ? (
@@ -24020,13 +24072,16 @@ function MappingStudio({
 
 function TemplatesView({
   assetRegistry,
+  config,
   onActivateTemplate,
   onPromoteAsset,
   onRefreshAssets,
   onUpdateTemplate,
+  reports,
   templateRecords,
 }: {
   assetRegistry: AssetRegistry | null
+  config: AppConfig
   onActivateTemplate: (templateRecord: BackendRecord<ControlledTemplatePayload>) => void
   onPromoteAsset: (asset: LocalAsset) => void
   onRefreshAssets: () => void
@@ -24034,6 +24089,7 @@ function TemplatesView({
     templateRecord: BackendRecord<ControlledTemplatePayload>,
     updates: Partial<ControlledTemplatePayload>,
   ) => void
+  reports: ReportCatalogItem[]
   templateRecords: BackendRecord<ControlledTemplatePayload>[]
 }) {
   const [activeCategory, setActiveCategory] = useState('All')
@@ -24073,6 +24129,19 @@ function TemplatesView({
   const selectedTemplate =
     latestTemplateRecords.find((record) => record.id === selectedTemplateId) ??
     latestTemplateRecords[0]
+  const crossIndustryPackage = useMemo(
+    () =>
+      createCrossIndustryTemplatePackage({
+        config,
+        controlledTemplates: latestTemplateRecords,
+        reports,
+      }),
+    [config, latestTemplateRecords, reports],
+  )
+
+  function downloadCrossIndustryPackage() {
+    downloadJson('tracs-cross-industry-template-package.json', crossIndustryPackage)
+  }
 
   return (
     <>
@@ -24092,6 +24161,29 @@ function TemplatesView({
             <ExternalLink size={15} />
             Open Contract Template
           </a>
+        </div>
+      </section>
+
+      <section className="panel template-package-panel">
+        <PanelHeader
+          icon={Package}
+          title="Cross-Industry Template Package"
+          subtitle="Assemble deployable starter evidence from workflow definitions, mappings, connector templates, reports, and active controlled templates."
+        />
+        <div className="metadata-grid">
+          <Metadata label="Industries" value={String(crossIndustryPackage.summary.industries)} />
+          <Metadata label="Workflows" value={String(crossIndustryPackage.summary.workflows)} />
+          <Metadata label="Mappings" value={String(crossIndustryPackage.summary.mappings)} />
+          <Metadata label="Connector templates" value={String(crossIndustryPackage.summary.connectorTemplates)} />
+          <Metadata label="Report catalog" value={String(crossIndustryPackage.summary.reportCatalogItems)} />
+          <Metadata label="Active controlled" value={String(crossIndustryPackage.summary.activeControlledTemplates)} />
+        </div>
+        <div className="template-package-actions">
+          <p>{crossIndustryPackage.evidence}</p>
+          <button className="primary-action" onClick={downloadCrossIndustryPackage} type="button">
+            <Download size={15} />
+            Download Package
+          </button>
         </div>
       </section>
 
