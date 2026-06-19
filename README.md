@@ -183,6 +183,8 @@ This prototype now includes the first practical build phases for TRACS:
 - Adds retained package workflow-type and retention-class filters plus selected retained-package evidence downloads.
 - Adds same-workflow retained package comparison metrics and JSON comparison exports.
 - Extracts Traceability graph filter, review, retention, export, and delivery controls into a focused frontend component.
+- Extracts Traceability delivery evidence, reviewer response tracking, and closure routing into focused frontend components.
+- Adds same-workflow retained package comparison rows with version, reviewer, retention, coverage, and missing-parent detail.
 - Exports Closure SLA follow-up closure packages with retained actions, superseded routes, and notification evidence.
 - Delivers Closure SLA follow-up closure packages to governance reviewers with retained delivery evidence.
 - Captures Closure SLA follow-up closure package delivery acknowledgements with reviewer response and retained actions.
@@ -340,5 +342,5 @@ npm run build
 Use the template package and workflow lineage paths while consolidating governance workflows into reusable product infrastructure:
 
 1. Continue splitting large frontend surfaces into focused Backend, Templates, and Traceability components to reduce bundle size.
-2. Split Traceability delivery response and closure routing controls into focused components.
-3. Add retained-package compare table details once multiple retained packages exist for the same workflow.
+2. Split Traceability evidence packet links and signed export retention history into focused components.
+3. Extract Backend closure/SLA dashboard surfaces into reusable governance summary components.

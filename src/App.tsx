@@ -34,6 +34,8 @@ import { adapterContracts } from './backendContracts'
 import { backendClient } from './backendClient'
 import { RetainedPackageCatalogPanel } from './components/RetainedPackageCatalogPanel'
 import { TemplatePackageGovernancePanel } from './components/TemplatePackageGovernancePanel'
+import { TraceabilityClosureRoutingPanel } from './components/TraceabilityClosureRoutingPanel'
+import { TraceabilityDeliveryResponsePanel } from './components/TraceabilityDeliveryResponsePanel'
 import { TraceabilityExportControlsPanel } from './components/TraceabilityExportControlsPanel'
 import { WorkflowLineageRetentionPanel } from './components/WorkflowLineageRetentionPanel'
 import { loadAppConfig } from './configLoader'
@@ -22925,216 +22927,46 @@ function TraceabilityView({
         )}
       </section>
 
-      <section className="panel trace-review-history-panel">
-        <PanelHeader
-          icon={Bell}
-          title="Traceability Delivery Evidence"
-          subtitle="Reviewer notification records for delivered traceability graph export packages."
-        />
-        {traceabilityDeliveryRecords.length > 0 ? (
-          <div className="mapping-run-history">
-            {traceabilityDeliveryRecords.slice(0, 6).map((record) => (
-              <div className="mapping-run-row" key={record.id}>
-                <div>
-                  <strong>{record.payload.request.subject}</strong>
-                  <span>
-                    v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ') || 'No recipients'}
-                  </span>
-                  <small>{record.payload.result.evidence}</small>
-                </div>
-                <div className="toolbar-actions">
-                  <button className="secondary-action compact" onClick={() => saveDeliveryResponse(record)} type="button">
-                    <ClipboardCheck size={14} />
-                    Respond
-                  </button>
-                  <StatusChip
-                    status={acknowledgedDeliveryIds.has(record.id) ? 'pass' : record.status}
-                    label={acknowledgedDeliveryIds.has(record.id) ? 'responded' : record.status}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="empty-state">No traceability export delivery has been recorded yet.</div>
-        )}
-      </section>
+      <TraceabilityDeliveryResponsePanel
+        acknowledgedDeliveryIds={acknowledgedDeliveryIds}
+        deliveryResponseActions={deliveryResponseActions}
+        deliveryResponseNotes={deliveryResponseNotes}
+        deliveryResponseReviewer={deliveryResponseReviewer}
+        deliveryResponseRouteStage={deliveryResponseRouteStage}
+        deliveryResponseStatus={deliveryResponseStatus}
+        latestClosureRoute={latestClosureRoute}
+        latestDeliveryResponse={latestDeliveryResponse}
+        latestTraceabilityDelivery={latestTraceabilityDelivery}
+        onDeliveryResponseActionsChange={setDeliveryResponseActions}
+        onDeliveryResponseNotesChange={setDeliveryResponseNotes}
+        onDeliveryResponseReviewerChange={setDeliveryResponseReviewer}
+        onDeliveryResponseRouteStageChange={setDeliveryResponseRouteStage}
+        onDeliveryResponseStatusChange={setDeliveryResponseStatus}
+        onSaveDeliveryResponse={saveDeliveryResponse}
+        openClosureRouteCount={openClosureRouteCount}
+        openDeliveryCount={openDeliveryCount}
+        responseRecords={responseRecords}
+        traceabilityDeliveryRecords={traceabilityDeliveryRecords}
+      />
 
-      <section className="panel trace-review-history-panel">
-        <PanelHeader
-          icon={ClipboardCheck}
-          title="Reviewer Response Tracking"
-          subtitle="Capture acknowledgement, approval, or requested changes for delivered traceability export packages."
-        />
-        <div className="trace-review-grid">
-          <label>
-            <span>Response reviewer</span>
-            <input value={deliveryResponseReviewer} onChange={(event) => setDeliveryResponseReviewer(event.target.value)} />
-          </label>
-          <label>
-            <span>Response status</span>
-            <select
-              value={deliveryResponseStatus}
-              onChange={(event) => setDeliveryResponseStatus(event.target.value as TraceabilityDeliveryResponseStatus)}
-            >
-              <option value="acknowledged">Acknowledged</option>
-              <option value="approved">Approved</option>
-              <option value="changes_requested">Changes requested</option>
-              <option value="rejected">Rejected</option>
-            </select>
-          </label>
-          <label>
-            <span>Route stage</span>
-            <select
-              value={deliveryResponseRouteStage}
-              onChange={(event) =>
-                setDeliveryResponseRouteStage(event.target.value as TraceabilityDeliveryResponse['routeStage'])
-              }
-            >
-              <option value="reviewer_acknowledgement">Reviewer acknowledgement</option>
-              <option value="quality_follow_up">Quality follow-up</option>
-              <option value="closed">Closed</option>
-            </select>
-          </label>
-          <label className="trace-review-rationale">
-            <span>Response notes</span>
-            <textarea value={deliveryResponseNotes} onChange={(event) => setDeliveryResponseNotes(event.target.value)} />
-          </label>
-          <label className="trace-review-rationale">
-            <span>Requested actions</span>
-            <textarea
-              value={deliveryResponseActions}
-              onChange={(event) => setDeliveryResponseActions(event.target.value)}
-              placeholder="One requested action per line"
-            />
-          </label>
-        </div>
-        <div className="toolbar-actions notification-approval-actions">
-          <button
-            className="primary-action"
-            disabled={!latestTraceabilityDelivery}
-            onClick={() => saveDeliveryResponse()}
-            type="button"
-          >
-            <ClipboardCheck size={15} />
-            Save Latest Response
-          </button>
-        </div>
-        <div className="trace-path-summary">
-          <Metadata label="Responses" value={String(responseRecords.length)} />
-          <Metadata label="Open deliveries" value={String(openDeliveryCount)} />
-          <Metadata label="Open closure routes" value={String(openClosureRouteCount)} />
-          <Metadata
-            label="Latest response"
-            value={latestDeliveryResponse ? traceabilityResponseLabel(latestDeliveryResponse.payload.status) : 'Not recorded'}
-          />
-          <Metadata
-            label="Latest closure route"
-            value={latestClosureRoute ? traceabilityClosureRouteLabel(latestClosureRoute.payload.status) : 'Not routed'}
-          />
-        </div>
-        <div className="mapping-run-history">
-          <h4>Closure Notifications & Follow-Up Routing</h4>
-          <div className="trace-review-grid">
-            <label>
-              <span>Closure owner</span>
-              <input value={closureRouteReviewer} onChange={(event) => setClosureRouteReviewer(event.target.value)} />
-            </label>
-            <label>
-              <span>Closure status</span>
-              <select
-                value={closureRouteStatus}
-                onChange={(event) => setClosureRouteStatus(event.target.value as TraceabilityResponseClosureRouteStatus)}
-              >
-                <option value="follow_up_open">Follow-up open</option>
-                <option value="closure_ready">Closure ready</option>
-                <option value="closed">Closed</option>
-                <option value="escalated">Escalated</option>
-              </select>
-            </label>
-            <label>
-              <span>Route stage</span>
-              <select
-                value={closureRouteStage}
-                onChange={(event) => setClosureRouteStage(event.target.value as TraceabilityResponseClosureRouteStage)}
-              >
-                <option value="quality_follow_up">Quality follow-up</option>
-                <option value="closure_review">Closure review</option>
-                <option value="closed">Closed</option>
-                <option value="escalated">Escalated</option>
-              </select>
-            </label>
-            <label>
-              <span>Due date</span>
-              <input type="date" value={closureRouteDueAt} onChange={(event) => setClosureRouteDueAt(event.target.value)} />
-            </label>
-            <label className="trace-review-rationale">
-              <span>Closure reviewers</span>
-              <input value={closureRouteReviewers} onChange={(event) => setClosureRouteReviewers(event.target.value)} />
-            </label>
-            <label className="trace-review-rationale">
-              <span>Closure notes</span>
-              <textarea value={closureRouteNotes} onChange={(event) => setClosureRouteNotes(event.target.value)} />
-            </label>
-          </div>
-          <div className="toolbar-actions notification-approval-actions">
-            <button
-              className="secondary-action"
-              disabled={!latestDeliveryResponse}
-              onClick={() => closureRouteRequest()}
-              type="button"
-            >
-              <ClipboardCheck size={15} />
-              Save Follow-Up Route
-            </button>
-            <button
-              className="primary-action"
-              disabled={!latestDeliveryResponse}
-              onClick={() => closureRouteRequest(latestDeliveryResponse, true)}
-              type="button"
-            >
-              <Bell size={15} />
-              Notify Closure Reviewers
-            </button>
-          </div>
-          {traceabilityClosureRoutes.length > 0 ? (
-            <div className="mapping-run-history">
-              {traceabilityClosureRoutes.slice(0, 5).map((record) => (
-                <div className="mapping-run-row" key={record.id}>
-                  <div>
-                    <strong>{record.payload.deliverySubject}</strong>
-                    <span>
-                      v{record.version} / {record.payload.reviewer} / due {record.payload.dueAt || 'not scheduled'}
-                    </span>
-                    <small>{record.payload.evidence}</small>
-                  </div>
-                  <StatusChip status={record.status} label={traceabilityClosureRouteLabel(record.payload.status)} />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state compact">No traceability response closure routes have been retained yet.</div>
-          )}
-        </div>
-        {responseRecords.length > 0 ? (
-          <div className="mapping-run-history">
-            {responseRecords.slice(0, 6).map((record) => (
-              <div className="mapping-run-row" key={record.id}>
-                <div>
-                  <strong>{record.payload.deliverySubject}</strong>
-                  <span>
-                    v{record.version} / {record.payload.reviewer} / {new Date(record.payload.respondedAt).toLocaleString()}
-                  </span>
-                  <small>{record.payload.evidence}</small>
-                </div>
-                <StatusChip status={record.status} label={traceabilityResponseLabel(record.payload.status)} />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="empty-state">No reviewer responses have been retained yet.</div>
-        )}
-      </section>
+      <TraceabilityClosureRoutingPanel
+        closureRouteDueAt={closureRouteDueAt}
+        closureRouteNotes={closureRouteNotes}
+        closureRouteReviewer={closureRouteReviewer}
+        closureRouteReviewers={closureRouteReviewers}
+        closureRouteStage={closureRouteStage}
+        closureRouteStatus={closureRouteStatus}
+        latestDeliveryResponse={latestDeliveryResponse}
+        onClosureRouteDueAtChange={setClosureRouteDueAt}
+        onClosureRouteNotesChange={setClosureRouteNotes}
+        onClosureRouteReviewerChange={setClosureRouteReviewer}
+        onClosureRouteReviewersChange={setClosureRouteReviewers}
+        onClosureRouteStageChange={setClosureRouteStage}
+        onClosureRouteStatusChange={setClosureRouteStatus}
+        onNotifyClosureRoute={() => closureRouteRequest(latestDeliveryResponse, true)}
+        onSaveClosureRoute={() => closureRouteRequest()}
+        traceabilityClosureRoutes={traceabilityClosureRoutes}
+      />
     </>
   )
 }

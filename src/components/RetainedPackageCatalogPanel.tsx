@@ -199,6 +199,28 @@ export function RetainedPackageCatalogPanel({
               Export Comparison
             </button>
           </div>
+          {selectedWorkflowRecords.length > 0 ? (
+            <div className="mapping-run-history">
+              <h4>Same-workflow comparison</h4>
+              {selectedWorkflowRecords.slice(0, 6).map((record) => (
+                <div className="mapping-run-row" key={record.id}>
+                  <div>
+                    <strong>{record.payload.packageId}</strong>
+                    <span>
+                      v{record.version} / {record.payload.reviewer} / {new Date(record.payload.retainedAt).toLocaleString()}
+                    </span>
+                    <small>
+                      {record.payload.coverage.records} record(s), {record.payload.coverage.stages} stage(s), {record.payload.coverage.missingParentReferences} missing parent reference(s)
+                    </small>
+                  </div>
+                  <div className="queue-record-side">
+                    <StatusChip status={record.status} label={titleize(record.status)} />
+                    <span>{titleize(record.payload.retention.class)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
