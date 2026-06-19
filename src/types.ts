@@ -221,6 +221,7 @@ export type SavedVersionKind =
   | 'closure_sla_follow_up_closure_export_package'
   | 'closure_sla_follow_up_closure_package_acknowledgement'
   | 'closure_sla_follow_up_closure_package_acknowledgement_closure'
+  | 'workflow_instance_export_retention'
   | 'traceability_export_review'
   | 'traceability_delivery_response'
   | 'traceability_response_closure_route'
@@ -305,6 +306,7 @@ export type BackendRecordKind =
   | 'closure_sla_follow_up_closure_export_package'
   | 'closure_sla_follow_up_closure_package_acknowledgement'
   | 'closure_sla_follow_up_closure_package_acknowledgement_closure'
+  | 'workflow_instance_export_retention'
   | 'traceability_export_review'
   | 'traceability_delivery_response'
   | 'traceability_response_closure_route'
@@ -389,6 +391,67 @@ export type BackendRecord<TPayload = unknown> = {
   summary: string
   workflow?: GovernanceWorkflowMetadata
   payload: TPayload
+}
+
+export type WorkflowInstanceExportPackage = {
+  packageId: string
+  generatedAt: string
+  workflowType: string
+  workflowLabel: string
+  definition?: WorkflowDefinition
+  status: StatusLevel
+  owner: string
+  latestUpdatedAt: string
+  rootRecordId: string
+  stages: GovernanceWorkflowStage[]
+  allowedNextStages: GovernanceWorkflowStage[]
+  missingParentRecordIds: string[]
+  lineage: Array<{
+    recordId: string
+    parentRecordId?: string
+    childRecordIds: string[]
+    missingParent: boolean
+    kind: BackendRecordKind
+    label: string
+    stage: GovernanceWorkflowStage
+    status: StatusLevel
+    owner: string
+    dueAt?: string
+    createdAt: string
+    updatedAt: string
+  }>
+  records: BackendRecord[]
+  evidence: string
+}
+
+export type WorkflowInstanceExportRetention = {
+  retentionId: string
+  packageId: string
+  retainedAt: string
+  reviewer: string
+  workflowType: string
+  workflowLabel: string
+  rootRecordId: string
+  status: StatusLevel
+  retention: {
+    class: TraceabilityExportRetentionClass
+    retainUntil: string
+    evidence: string
+  }
+  coverage: {
+    records: number
+    stages: number
+    missingParentReferences: number
+  }
+  package: WorkflowInstanceExportPackage
+  auditHistory: Array<{
+    action: 'retained_workflow_instance_export'
+    actor: string
+    timestamp: string
+    status: StatusLevel
+    summary: string
+  }>
+  evidence: string
 }
 
 export type BackendHealth = {

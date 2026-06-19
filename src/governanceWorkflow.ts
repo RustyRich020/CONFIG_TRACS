@@ -5,6 +5,7 @@ import type {
   GovernanceWorkflowStage,
   StatusLevel,
   WorkflowDefinition,
+  WorkflowInstanceExportPackage,
 } from './types'
 
 export type GovernanceWorkflowItem = {
@@ -191,7 +192,7 @@ export function deriveGovernanceWorkflowLineage(
   }
 }
 
-export function createWorkflowInstanceExportPackage(instance: GovernanceWorkflowInstance) {
+export function createWorkflowInstanceExportPackage(instance: GovernanceWorkflowInstance): WorkflowInstanceExportPackage {
   return {
     packageId: `${instance.instanceId}:export:${new Date().toISOString()}`,
     generatedAt: new Date().toISOString(),

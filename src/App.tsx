@@ -51,6 +51,7 @@ import {
   deriveGovernanceWorkflowLineage,
   deriveGovernanceWorkflowQueue,
 } from './governanceWorkflow'
+import type { GovernanceWorkflowInstance } from './governanceWorkflow'
 import { createSavedVersion, loadSavedVersions, persistSavedVersions } from './persistence'
 import {
   createWorkflowDefinitionPromotionPackage,
@@ -171,6 +172,7 @@ import type {
   TraceabilityResponseClosureRouteStage,
   TraceabilityResponseClosureRouteStatus,
   TraceabilityLink,
+  WorkflowInstanceExportRetention,
 } from './types'
 
 const navItems = [
@@ -2169,6 +2171,87 @@ function App() {
       'traceability',
       'sign_export_review',
       `Traceability export review saved as backend record v${saved.version}.`,
+    )
+    return saved
+  }
+
+  async function saveWorkflowInstanceExportRetention({
+    instance,
+    retentionClass,
+    reviewer,
+  }: {
+    instance: GovernanceWorkflowInstance
+    retentionClass: TraceabilityExportRetentionClass
+    reviewer: string
+  }) {
+    const retainedAt = new Date().toISOString()
+    const reviewerName = reviewer.trim() || 'Governance Reviewer'
+    const packagePayload = createWorkflowInstanceExportPackage(instance)
+    const retainUntil = traceabilityRetentionUntil(retentionClass, retainedAt)
+    const retentionLabel = traceabilityRetentionLabel(retentionClass)
+    const status: StatusLevel = instance.missingParentRecordIds.length > 0 ? 'warning' : 'pass'
+    const payload: WorkflowInstanceExportRetention = {
+      retentionId: `workflow_instance_export_retention:${instance.instanceId}:${retainedAt}`,
+      packageId: packagePayload.packageId,
+      retainedAt,
+      reviewer: reviewerName,
+      workflowType: instance.workflowType,
+      workflowLabel: instance.workflowLabel,
+      rootRecordId: instance.rootRecordId,
+      status,
+      retention: {
+        class: retentionClass,
+        retainUntil,
+        evidence:
+          retainUntil === 'indefinite'
+            ? `${retentionLabel} retention selected; retain until legal hold is released.`
+            : `${retentionLabel} retention selected; retain until ${new Date(retainUntil).toLocaleDateString()}.`,
+      },
+      coverage: {
+        records: instance.nodes.length,
+        stages: instance.stages.length,
+        missingParentReferences: instance.missingParentRecordIds.length,
+      },
+      package: packagePayload,
+      auditHistory: [
+        {
+          action: 'retained_workflow_instance_export',
+          actor: reviewerName,
+          timestamp: retainedAt,
+          status,
+          summary: `${reviewerName} retained ${instance.workflowLabel} export package ${packagePayload.packageId}.`,
+        },
+      ],
+      evidence: `${packagePayload.evidence} Retained by ${reviewerName}. ${retentionLabel} retention applied.`,
+    }
+    const saved = await backendClient.saveRecord({
+      kind: 'workflow_instance_export_retention',
+      label: instance.instanceId,
+      status,
+      summary: payload.evidence,
+      payload,
+      workflow: {
+        metadataVersion: 'workflow_metadata_v1',
+        workflowType: instance.workflowType,
+        stage: 'final_evidence',
+        parentRecordId: instance.rootRecordId,
+        owner: reviewerName,
+      },
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'workflow_instance_export_retention',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record(
+      'backend',
+      'retain_workflow_instance_export',
+      `Workflow instance export retention saved as backend record v${saved.version}.`,
     )
     return saved
   }
@@ -8666,6 +8749,7 @@ function App() {
             onSavePostgresCutoverChecklistPackage={savePostgresCutoverChecklistPackage}
             onSaveSnapshot={saveBackendSnapshot}
             onSaveNotificationLiveApproval={saveNotificationLiveChannelApproval}
+            onSaveWorkflowInstanceExportRetention={saveWorkflowInstanceExportRetention}
             storageSchema={storageSchema}
             postgresMigrationChecklist={postgresMigrationChecklist}
           />
@@ -9420,6 +9504,7 @@ function BackendPersistenceView({
   onSavePostgresCutoverChecklistPackage,
   onSaveSnapshot,
   onSaveNotificationLiveApproval,
+  onSaveWorkflowInstanceExportRetention,
   postgresMigrationChecklist,
   storageSchema,
 }: {
@@ -9971,6 +10056,11 @@ function BackendPersistenceView({
     rationale: string
     reviewer: string
     status: NotificationLiveChannelApprovalStatus
+  }) => void
+  onSaveWorkflowInstanceExportRetention: (request: {
+    instance: GovernanceWorkflowInstance
+    retentionClass: TraceabilityExportRetentionClass
+    reviewer: string
   }) => void
   postgresMigrationChecklist: PostgresMigrationChecklist | null
   storageSchema: RecordStoreSchema | null
@@ -10806,6 +10896,14 @@ function BackendPersistenceView({
   const governanceWorkQueueItems = governanceWorkflowQueue.items.slice(0, 8)
   const selectedWorkflowItem = governanceWorkQueueItems[0]
   const selectedWorkflowInstance = governanceWorkflowLineage.instances[0]
+  const workflowInstanceRetentionRecords = backendRecords.filter(
+    (record): record is BackendRecord<WorkflowInstanceExportRetention> =>
+      record.kind === 'workflow_instance_export_retention',
+  )
+  const latestWorkflowInstanceRetention = workflowInstanceRetentionRecords[0]
+  const [workflowRetentionReviewer, setWorkflowRetentionReviewer] = useState('Governance Reviewer')
+  const [workflowRetentionClass, setWorkflowRetentionClass] =
+    useState<TraceabilityExportRetentionClass>('standard_7_year')
   const workflowDefinitionEntries = Object.entries(workflowDefinitions)
   const initialWorkflowEditorKey = workflowDefinitionEntries[0]?.[0] ?? ''
   const [workflowEditorKey, setWorkflowEditorKey] = useState(initialWorkflowEditorKey)
@@ -10850,6 +10948,14 @@ function BackendPersistenceView({
     if (!selectedWorkflowInstance) return
     const packagePayload = createWorkflowInstanceExportPackage(selectedWorkflowInstance)
     downloadJson('tracs-workflow-instance-export-package.json', packagePayload)
+  }
+  function retainSelectedWorkflowInstanceExport() {
+    if (!selectedWorkflowInstance) return
+    onSaveWorkflowInstanceExportRetention({
+      instance: selectedWorkflowInstance,
+      retentionClass: workflowRetentionClass,
+      reviewer: workflowRetentionReviewer,
+    })
   }
   function selectWorkflowDefinitionDraft(workflowType: string) {
     setWorkflowEditorKey(workflowType)
@@ -13507,6 +13613,14 @@ function BackendPersistenceView({
             >
               Export instance
             </button>
+            <button
+              className="primary-action compact"
+              disabled={!selectedWorkflowInstance}
+              onClick={retainSelectedWorkflowInstanceExport}
+              type="button"
+            >
+              Retain export
+            </button>
           </div>
           {selectedWorkflowInstance ? (
             <>
@@ -13522,6 +13636,40 @@ function BackendPersistenceView({
                       : 'None'
                   }
                 />
+                <Metadata
+                  label="Retained exports"
+                  value={String(workflowInstanceRetentionRecords.length)}
+                />
+                <Metadata
+                  label="Latest retention"
+                  value={
+                    latestWorkflowInstanceRetention
+                      ? new Date(latestWorkflowInstanceRetention.payload.retainedAt).toLocaleString()
+                      : 'Not retained'
+                  }
+                />
+              </div>
+              <div className="form-grid compact-form">
+                <label>
+                  <span>Retention reviewer</span>
+                  <input
+                    value={workflowRetentionReviewer}
+                    onChange={(event) => setWorkflowRetentionReviewer(event.target.value)}
+                  />
+                </label>
+                <label>
+                  <span>Retention class</span>
+                  <select
+                    value={workflowRetentionClass}
+                    onChange={(event) =>
+                      setWorkflowRetentionClass(event.target.value as TraceabilityExportRetentionClass)
+                    }
+                  >
+                    <option value="standard_7_year">Standard 7 year</option>
+                    <option value="project_lifetime">Project lifetime</option>
+                    <option value="legal_hold">Legal hold</option>
+                  </select>
+                </label>
               </div>
               <div className="workflow-lineage-path">
                 {selectedWorkflowInstance.nodes.map((node) => (
