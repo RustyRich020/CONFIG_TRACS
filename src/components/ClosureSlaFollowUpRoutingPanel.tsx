@@ -6,26 +6,8 @@ import type {
   ClosureSlaResponseFollowUpStatus,
   StatusLevel,
 } from '../types'
-
-function titleize(value?: string | null) {
-  return (value ?? 'unknown')
-    .split('_')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ')
-}
-
-function Metadata({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="metadata-item">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  )
-}
-
-function StatusChip({ status, label }: { status: StatusLevel; label: string }) {
-  return <span className={`status-chip ${status}`}>{label}</span>
-}
+import { Metadata, StatusChip } from './common'
+import { titleize } from './formatters'
 
 function followUpStatusLevel(status: ClosureSlaResponseFollowUpStatus): StatusLevel {
   if (status === 'escalated') return 'blocking'

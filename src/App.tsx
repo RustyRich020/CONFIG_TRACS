@@ -33,6 +33,9 @@ import './App.css'
 import { adapterContracts } from './backendContracts'
 import { backendClient } from './backendClient'
 import { ClosureSlaDashboardPanel } from './components/ClosureSlaDashboardPanel'
+import { ClosureSlaFollowUpClosurePackageAcknowledgementPanel } from './components/ClosureSlaFollowUpClosurePackageAcknowledgementPanel'
+import { ClosureSlaFollowUpClosurePackagePanel } from './components/ClosureSlaFollowUpClosurePackagePanel'
+import { ClosureSlaFollowUpClosurePanel } from './components/ClosureSlaFollowUpClosurePanel'
 import { ClosureSlaFollowUpRoutingPanel } from './components/ClosureSlaFollowUpRoutingPanel'
 import { ClosureSlaGovernanceResponsePanel } from './components/ClosureSlaGovernanceResponsePanel'
 import { RetainedPackageCatalogPanel } from './components/RetainedPackageCatalogPanel'
@@ -14647,452 +14650,102 @@ function BackendPersistenceView({
           routeNotes={closureSlaFollowUpNotes}
           routeRecords={closureSlaResponseFollowUpRouteRecords}
         />
-        <div className="notification-approval-grid renewal-routing-grid">
-          <div className="notification-approval-form">
-            <div className="dashboard-heading">
-              <h4>Follow-Up Closure Record</h4>
-              <StatusChip
-                status={closureSlaFollowUpClosureStatusLevel(closureSlaFollowUpClosureStatus)}
-                label={closureSlaFollowUpClosureLabel(closureSlaFollowUpClosureStatus)}
-              />
-            </div>
-            <div className="trace-review-grid">
-              <label>
-                <span>Closure reviewer</span>
-                <input
-                  value={closureSlaFollowUpClosureReviewer}
-                  onChange={(event) => setClosureSlaFollowUpClosureReviewer(event.target.value)}
-                />
-              </label>
-              <label>
-                <span>Closure disposition</span>
-                <select
-                  value={closureSlaFollowUpClosureStatus}
-                  onChange={(event) =>
-                    setClosureSlaFollowUpClosureStatus(event.target.value as ClosureSlaResponseFollowUpClosureStatus)
-                  }
-                >
-                  <option value="closed">Closed</option>
-                  <option value="closed_with_actions">Closed with actions</option>
-                  <option value="rejected">Rejected</option>
-                </select>
-              </label>
-              <label className="trace-review-rationale">
-                <span>Closure notes</span>
-                <textarea
-                  value={closureSlaFollowUpClosureNotes}
-                  onChange={(event) => setClosureSlaFollowUpClosureNotes(event.target.value)}
-                />
-              </label>
-              <label className="trace-review-rationale">
-                <span>Superseded route evidence</span>
-                <textarea
-                  value={closureSlaFollowUpSupersededEvidence}
-                  onChange={(event) => setClosureSlaFollowUpSupersededEvidence(event.target.value)}
-                />
-              </label>
-            </div>
-            <div className="toolbar-actions notification-approval-actions">
-              <button
-                className="primary-action"
-                disabled={!latestClosureSlaResponseFollowUpRoute}
-                onClick={() =>
-                  onSaveClosureSlaResponseFollowUpClosure(
-                    closureSlaResponseFollowUpClosureRequest(latestClosureSlaResponseFollowUpRoute),
-                  )
-                }
-                type="button"
-              >
-                <ClipboardCheck size={15} />
-                Save Follow-Up Closure
-              </button>
-            </div>
-          </div>
-          <div className="notification-approval-summary">
-            <div className="metadata-grid">
-              <Metadata label="Closure records" value={String(closureSlaResponseFollowUpClosureRecords.length)} />
-              <Metadata
-                label="Latest route"
-                value={
-                  latestClosureSlaResponseFollowUpRoute
-                    ? closureSlaFollowUpLabel(latestClosureSlaResponseFollowUpRoute.payload.status)
-                    : 'Not routed'
-                }
-              />
-              <Metadata
-                label="Superseded routes"
-                value={String(Math.max(closureSlaResponseFollowUpRouteRecords.length - 1, 0))}
-              />
-              <Metadata
-                label="Retained actions"
-                value={String(closureSlaFollowUpClosureActionList(latestClosureSlaResponseFollowUpRoute).length)}
-              />
-            </div>
-            {latestClosureSlaResponseFollowUpClosure ? (
-              <div className="connector-run-history">
-                <h4>Latest follow-up closure</h4>
-                <div className="connector-run-row">
-                  <div>
-                    <strong>{latestClosureSlaResponseFollowUpClosure.payload.reviewer}</strong>
-                    <span>
-                      v{latestClosureSlaResponseFollowUpClosure.version} / {closureSlaFollowUpClosureLabel(latestClosureSlaResponseFollowUpClosure.payload.status)} / {new Date(latestClosureSlaResponseFollowUpClosure.createdAt).toLocaleString()}
-                    </span>
-                    <small>{latestClosureSlaResponseFollowUpClosure.payload.evidence}</small>
-                  </div>
-                  <StatusChip
-                    status={latestClosureSlaResponseFollowUpClosure.status}
-                    label={closureSlaFollowUpClosureLabel(latestClosureSlaResponseFollowUpClosure.payload.status)}
-                  />
-                </div>
-                {latestClosureSlaResponseFollowUpClosure.payload.supersededEvidence.length > 0 ? (
-                  <div className="storage-column-list">
-                    {latestClosureSlaResponseFollowUpClosure.payload.supersededEvidence.slice(0, 4).map((evidence) => (
-                      <span key={evidence}>{evidence}</span>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <div className="empty-state compact">No Closure SLA follow-up closure has been retained yet.</div>
-            )}
-          </div>
-        </div>
+        <ClosureSlaFollowUpClosurePanel
+          closureNotes={closureSlaFollowUpClosureNotes}
+          closureRecords={closureSlaResponseFollowUpClosureRecords}
+          closureReviewer={closureSlaFollowUpClosureReviewer}
+          closureStatus={closureSlaFollowUpClosureStatus}
+          latestClosure={latestClosureSlaResponseFollowUpClosure}
+          latestRoute={latestClosureSlaResponseFollowUpRoute}
+          onClosureNotesChange={setClosureSlaFollowUpClosureNotes}
+          onClosureReviewerChange={setClosureSlaFollowUpClosureReviewer}
+          onClosureStatusChange={setClosureSlaFollowUpClosureStatus}
+          onSaveClosure={() =>
+            onSaveClosureSlaResponseFollowUpClosure(
+              closureSlaResponseFollowUpClosureRequest(latestClosureSlaResponseFollowUpRoute),
+            )
+          }
+          onSupersededEvidenceChange={setClosureSlaFollowUpSupersededEvidence}
+          retainedActionCount={closureSlaFollowUpClosureActionList(latestClosureSlaResponseFollowUpRoute).length}
+          routeRecords={closureSlaResponseFollowUpRouteRecords}
+          supersededEvidence={closureSlaFollowUpSupersededEvidence}
+        />
         <div className="connector-run-history retry-aging-dashboard">
-          <div className="dashboard-heading">
-            <h4>Follow-Up Closure Export Package</h4>
-            <StatusChip status={closureSlaFollowUpClosurePackageStatus} label={closureSlaFollowUpClosurePackageStatus} />
-          </div>
-          <div className="trace-review-grid">
-            <label className="trace-review-rationale">
-              <span>Governance reviewers</span>
-              <textarea
-                value={closureSlaClosurePackageReviewers}
-                onChange={(event) => setClosureSlaClosurePackageReviewers(event.target.value)}
-              />
-            </label>
-            <label className="trace-review-rationale">
-              <span>Package notes</span>
-              <textarea
-                value={closureSlaClosurePackageNotes}
-                onChange={(event) => setClosureSlaClosurePackageNotes(event.target.value)}
-              />
-            </label>
-          </div>
-          <div className="toolbar-actions notification-approval-actions">
-            <button
-              className="secondary-action"
-              onClick={() =>
-                onSaveClosureSlaFollowUpClosureExportPackage({
-                  download: false,
-                  packagePayload: buildClosureSlaFollowUpClosureExportPackage(),
-                })
-              }
-              type="button"
-            >
-              <ClipboardCheck size={15} />
-              Save Closure Export Package
-            </button>
-            <button
-              className="primary-action"
-              onClick={() =>
-                onSaveClosureSlaFollowUpClosureExportPackage({
-                  download: true,
-                  packagePayload: buildClosureSlaFollowUpClosureExportPackage(),
-                })
-              }
-              type="button"
-            >
-              <Download size={15} />
-              Save & Download Closure Package
-            </button>
-            <button
-              className="primary-action"
-              onClick={() =>
-                onDeliverClosureSlaFollowUpClosureExportPackage({
-                  download: false,
-                  packagePayload: buildClosureSlaFollowUpClosureExportPackage(),
-                })
-              }
-              type="button"
-            >
-              <Bell size={15} />
-              Save & Notify Closure Reviewers
-            </button>
-          </div>
-          <div className="metadata-grid">
-            <Metadata label="Closure packages" value={String(closureSlaFollowUpClosureExportPackageRecords.length)} />
-            <Metadata label="Closure records" value={String(closureSlaFollowUpClosureMetrics.totalClosures)} />
-            <Metadata label="Retained actions" value={String(closureSlaFollowUpClosureMetrics.retainedActions)} />
-            <Metadata label="Superseded routes" value={String(closureSlaFollowUpClosureMetrics.supersededRoutes)} />
-            <Metadata label="Required actions" value={String(closureSlaFollowUpClosurePackageRequiredActions().length)} />
-            <Metadata label="Notification evidence" value={String(closureSlaFollowUpNotificationRecords.length)} />
-            <Metadata label="Package deliveries" value={String(closureSlaFollowUpClosurePackageDeliveryRecords.length)} />
-          </div>
-          {latestClosureSlaFollowUpClosureExportPackage ? (
-            <div className="retry-aging-list">
-              <h4>Latest follow-up closure package</h4>
-              <div className="connector-run-row">
-                <div>
-                  <strong>{latestClosureSlaFollowUpClosureExportPackage.payload.governanceReviewers.join(', ')}</strong>
-                  <span>
-                    v{latestClosureSlaFollowUpClosureExportPackage.version} / {new Date(latestClosureSlaFollowUpClosureExportPackage.createdAt).toLocaleString()} / {latestClosureSlaFollowUpClosureExportPackage.payload.closureRecords.length} closure record(s)
-                  </span>
-                  <small>{latestClosureSlaFollowUpClosureExportPackage.payload.evidence}</small>
-                </div>
-                <StatusChip status={latestClosureSlaFollowUpClosureExportPackage.status} label={latestClosureSlaFollowUpClosureExportPackage.status} />
-              </div>
-              {latestClosureSlaFollowUpClosureExportPackage.payload.requiredActions.length > 0 ? (
-                <ul className="compact-list">
-                  {latestClosureSlaFollowUpClosureExportPackage.payload.requiredActions.slice(0, 5).map((action) => (
-                    <li key={action}>{action}</li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-          ) : (
-            <div className="empty-state compact">No Closure SLA follow-up closure export package has been retained yet.</div>
-          )}
-          {closureSlaFollowUpClosurePackageDeliveryRecords.length > 0 ? (
-            <div className="retry-aging-list">
-              <h4>Follow-up closure package delivery evidence</h4>
-              {closureSlaFollowUpClosurePackageDeliveryRecords.slice(0, 3).map((record) => (
-                <div className="connector-run-row" key={record.id}>
-                  <div>
-                    <strong>{record.payload.request.subject}</strong>
-                    <span>
-                      v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
-                    </span>
-                    <small>{record.payload.result.evidence}</small>
-                  </div>
-                  <StatusChip status={record.status} label={record.status} />
-                </div>
-              ))}
-            </div>
-          ) : null}
-          <div className="retry-aging-list">
-            <div className="dashboard-heading">
-              <h4>Follow-up closure package acknowledgement</h4>
-              <StatusChip
-                status={closureSlaDeliveryAcknowledgementStatusLevel(closureSlaClosurePackageAckStatus)}
-                label={closureSlaDeliveryAcknowledgementLabel(closureSlaClosurePackageAckStatus)}
-              />
-            </div>
-            <div className="trace-review-grid">
-              <label>
-                <span>Reviewer</span>
-                <input
-                  value={closureSlaClosurePackageAckReviewer}
-                  onChange={(event) => setClosureSlaClosurePackageAckReviewer(event.target.value)}
-                />
-              </label>
-              <label>
-                <span>Response status</span>
-                <select
-                  value={closureSlaClosurePackageAckStatus}
-                  onChange={(event) =>
-                    setClosureSlaClosurePackageAckStatus(event.target.value as ClosureSlaDeliveryAcknowledgementStatus)
-                  }
-                >
-                  <option value="acknowledged">Acknowledged</option>
-                  <option value="approved">Approved</option>
-                  <option value="changes_requested">Changes requested</option>
-                  <option value="rejected">Rejected</option>
-                </select>
-              </label>
-              <label className="toggle-row">
-                <input
-                  checked={closureSlaClosurePackageAckReady}
-                  onChange={(event) => setClosureSlaClosurePackageAckReady(event.target.checked)}
-                  type="checkbox"
-                />
-                <span>Closure package ready</span>
-              </label>
-              <label className="trace-review-rationale">
-                <span>Requested actions</span>
-                <textarea
-                  value={closureSlaClosurePackageAckActions}
-                  onChange={(event) => setClosureSlaClosurePackageAckActions(event.target.value)}
-                />
-              </label>
-              <label className="trace-review-rationale">
-                <span>Response notes</span>
-                <textarea
-                  value={closureSlaClosurePackageAckNotes}
-                  onChange={(event) => setClosureSlaClosurePackageAckNotes(event.target.value)}
-                />
-              </label>
-            </div>
-            <div className="toolbar-actions notification-approval-actions">
-              <button
-                className="primary-action"
-                disabled={!latestClosureSlaFollowUpClosurePackageDelivery}
-                onClick={() => {
-                  const request = closureSlaFollowUpClosurePackageAcknowledgementRequest(
-                    latestClosureSlaFollowUpClosurePackageDelivery,
-                  )
-                  if (request) onSaveClosureSlaFollowUpClosurePackageAcknowledgement(request)
-                }}
-                type="button"
-              >
-                <ClipboardCheck size={15} />
-                Save Closure Package Acknowledgement
-              </button>
-            </div>
-            <div className="metadata-grid">
-              <Metadata
-                label="Acknowledgements"
-                value={String(closureSlaFollowUpClosurePackageAcknowledgementRecords.length)}
-              />
-              <Metadata
-                label="Latest delivery"
-                value={
-                  latestClosureSlaFollowUpClosurePackageDelivery
-                    ? new Date(latestClosureSlaFollowUpClosurePackageDelivery.createdAt).toLocaleString()
-                    : 'Not delivered'
-                }
-              />
-              <Metadata
-                label="Open deliveries"
-                value={String(
-                  closureSlaFollowUpClosurePackageDeliveryRecords.filter(
-                    (record) => !closureSlaFollowUpClosurePackageAcknowledgedDeliveryIds.has(record.id),
-                  ).length,
-                )}
-              />
-              <Metadata label="Requested actions" value={String(closureSlaClosurePackageAckActionList().length)} />
-            </div>
-            {latestClosureSlaFollowUpClosurePackageAcknowledgement ? (
-              <div className="connector-run-row">
-                <div>
-                  <strong>{latestClosureSlaFollowUpClosurePackageAcknowledgement.payload.reviewer}</strong>
-                  <span>
-                    v{latestClosureSlaFollowUpClosurePackageAcknowledgement.version} / {closureSlaDeliveryAcknowledgementLabel(latestClosureSlaFollowUpClosurePackageAcknowledgement.payload.status)} / {new Date(latestClosureSlaFollowUpClosurePackageAcknowledgement.createdAt).toLocaleString()}
-                  </span>
-                  <small>{latestClosureSlaFollowUpClosurePackageAcknowledgement.payload.evidence}</small>
-                </div>
-                <StatusChip
-                  status={latestClosureSlaFollowUpClosurePackageAcknowledgement.status}
-                  label={closureSlaDeliveryAcknowledgementLabel(latestClosureSlaFollowUpClosurePackageAcknowledgement.payload.status)}
-                />
-              </div>
-            ) : (
-              <div className="empty-state compact">No follow-up closure package acknowledgement has been retained yet.</div>
-            )}
-          </div>
-          <div className="retry-aging-list">
-            <div className="dashboard-heading">
-              <h4>Follow-up closure acknowledgement closeout</h4>
-              <StatusChip
-                status={closureSlaFollowUpClosureStatusLevel(closureSlaClosurePackageAckClosureStatus)}
-                label={closureSlaFollowUpClosureLabel(closureSlaClosurePackageAckClosureStatus)}
-              />
-            </div>
-            <div className="trace-review-grid">
-              <label>
-                <span>Closure reviewer</span>
-                <input
-                  value={closureSlaClosurePackageAckClosureReviewer}
-                  onChange={(event) => setClosureSlaClosurePackageAckClosureReviewer(event.target.value)}
-                />
-              </label>
-              <label>
-                <span>Closure disposition</span>
-                <select
-                  value={closureSlaClosurePackageAckClosureStatus}
-                  onChange={(event) =>
-                    setClosureSlaClosurePackageAckClosureStatus(
-                      event.target.value as ClosureSlaResponseFollowUpClosureStatus,
-                    )
-                  }
-                >
-                  <option value="closed">Closed</option>
-                  <option value="closed_with_actions">Closed with actions</option>
-                  <option value="rejected">Rejected</option>
-                </select>
-              </label>
-              <label className="trace-review-rationale">
-                <span>Retained actions</span>
-                <textarea
-                  value={closureSlaClosurePackageAckClosureActions}
-                  onChange={(event) => setClosureSlaClosurePackageAckClosureActions(event.target.value)}
-                />
-              </label>
-              <label className="trace-review-rationale">
-                <span>Closure notes</span>
-                <textarea
-                  value={closureSlaClosurePackageAckClosureNotes}
-                  onChange={(event) => setClosureSlaClosurePackageAckClosureNotes(event.target.value)}
-                />
-              </label>
-              <label className="trace-review-rationale">
-                <span>Superseded acknowledgement evidence</span>
-                <textarea
-                  value={closureSlaClosurePackageAckSupersededEvidence}
-                  onChange={(event) => setClosureSlaClosurePackageAckSupersededEvidence(event.target.value)}
-                />
-              </label>
-            </div>
-            <div className="toolbar-actions notification-approval-actions">
-              <button
-                className="primary-action"
-                disabled={closureSlaFollowUpClosurePackageAcknowledgementRecords.length === 0}
-                onClick={() =>
-                  onSaveClosureSlaFollowUpClosurePackageAcknowledgementClosure(
-                    closureSlaFollowUpClosurePackageAcknowledgementClosureRequest(),
-                  )
-                }
-                type="button"
-              >
-                <ClipboardCheck size={15} />
-                Save Acknowledgement Closure
-              </button>
-            </div>
-            <div className="metadata-grid">
-              <Metadata
-                label="Closure records"
-                value={String(closureSlaFollowUpClosurePackageAcknowledgementClosureRecords.length)}
-              />
-              <Metadata
-                label="Acknowledgements"
-                value={String(closureSlaFollowUpClosurePackageAcknowledgementClosureMetrics.totalAcknowledgements)}
-              />
-              <Metadata
-                label="Closure ready"
-                value={String(closureSlaFollowUpClosurePackageAcknowledgementClosureMetrics.closureReady)}
-              />
-              <Metadata
-                label="Retained actions"
-                value={String(closureSlaFollowUpClosurePackageAcknowledgementClosureMetrics.retainedActions)}
-              />
-              <Metadata
-                label="Closure status"
-                value={closureSlaFollowUpClosurePackageAcknowledgementClosureStatus}
-              />
-              <Metadata
-                label="Superseded notes"
-                value={String(closureSlaClosurePackageAckSupersededEvidenceList().length)}
-              />
-            </div>
-            {latestClosureSlaFollowUpClosurePackageAcknowledgementClosure ? (
-              <div className="connector-run-row">
-                <div>
-                  <strong>{latestClosureSlaFollowUpClosurePackageAcknowledgementClosure.payload.reviewer}</strong>
-                  <span>
-                    v{latestClosureSlaFollowUpClosurePackageAcknowledgementClosure.version} / {closureSlaFollowUpClosureLabel(latestClosureSlaFollowUpClosurePackageAcknowledgementClosure.payload.status)} / {new Date(latestClosureSlaFollowUpClosurePackageAcknowledgementClosure.createdAt).toLocaleString()}
-                  </span>
-                  <small>{latestClosureSlaFollowUpClosurePackageAcknowledgementClosure.payload.evidence}</small>
-                </div>
-                <StatusChip
-                  status={latestClosureSlaFollowUpClosurePackageAcknowledgementClosure.status}
-                  label={closureSlaFollowUpClosureLabel(
-                    latestClosureSlaFollowUpClosurePackageAcknowledgementClosure.payload.status,
-                  )}
-                />
-              </div>
-            ) : (
-              <div className="empty-state compact">No Closure SLA follow-up closure package acknowledgement closure has been retained yet.</div>
-            )}
-          </div>
+          <ClosureSlaFollowUpClosurePackagePanel
+            deliveryRecords={closureSlaFollowUpClosurePackageDeliveryRecords}
+            latestPackage={latestClosureSlaFollowUpClosureExportPackage}
+            metrics={closureSlaFollowUpClosureMetrics}
+            notificationCount={closureSlaFollowUpNotificationRecords.length}
+            onDeliverPackage={() =>
+              onDeliverClosureSlaFollowUpClosureExportPackage({
+                download: false,
+                packagePayload: buildClosureSlaFollowUpClosureExportPackage(),
+              })
+            }
+            onNotesChange={setClosureSlaClosurePackageNotes}
+            onReviewersChange={setClosureSlaClosurePackageReviewers}
+            onSavePackage={() =>
+              onSaveClosureSlaFollowUpClosureExportPackage({
+                download: false,
+                packagePayload: buildClosureSlaFollowUpClosureExportPackage(),
+              })
+            }
+            onSavePackageWithDownload={() =>
+              onSaveClosureSlaFollowUpClosureExportPackage({
+                download: true,
+                packagePayload: buildClosureSlaFollowUpClosureExportPackage(),
+              })
+            }
+            packageCount={closureSlaFollowUpClosureExportPackageRecords.length}
+            packageNotes={closureSlaClosurePackageNotes}
+            packageStatus={closureSlaFollowUpClosurePackageStatus}
+            requiredActionCount={closureSlaFollowUpClosurePackageRequiredActions().length}
+            reviewers={closureSlaClosurePackageReviewers}
+          />
+          <ClosureSlaFollowUpClosurePackageAcknowledgementPanel
+            ackActions={closureSlaClosurePackageAckActions}
+            ackClosureActions={closureSlaClosurePackageAckClosureActions}
+            ackClosureNotes={closureSlaClosurePackageAckClosureNotes}
+            ackClosureReviewer={closureSlaClosurePackageAckClosureReviewer}
+            ackClosureStatus={closureSlaClosurePackageAckClosureStatus}
+            ackNotes={closureSlaClosurePackageAckNotes}
+            ackReady={closureSlaClosurePackageAckReady}
+            ackReviewer={closureSlaClosurePackageAckReviewer}
+            ackStatus={closureSlaClosurePackageAckStatus}
+            acknowledgedDeliveryIds={closureSlaFollowUpClosurePackageAcknowledgedDeliveryIds}
+            acknowledgementClosureMetrics={closureSlaFollowUpClosurePackageAcknowledgementClosureMetrics}
+            acknowledgementClosureRecords={closureSlaFollowUpClosurePackageAcknowledgementClosureRecords}
+            acknowledgementRecords={closureSlaFollowUpClosurePackageAcknowledgementRecords}
+            closureStatus={closureSlaFollowUpClosurePackageAcknowledgementClosureStatus}
+            deliveryRecords={closureSlaFollowUpClosurePackageDeliveryRecords}
+            latestAcknowledgement={latestClosureSlaFollowUpClosurePackageAcknowledgement}
+            latestAcknowledgementClosure={latestClosureSlaFollowUpClosurePackageAcknowledgementClosure}
+            latestDelivery={latestClosureSlaFollowUpClosurePackageDelivery}
+            onAckActionsChange={setClosureSlaClosurePackageAckActions}
+            onAckClosureActionsChange={setClosureSlaClosurePackageAckClosureActions}
+            onAckClosureNotesChange={setClosureSlaClosurePackageAckClosureNotes}
+            onAckClosureReviewerChange={setClosureSlaClosurePackageAckClosureReviewer}
+            onAckClosureStatusChange={setClosureSlaClosurePackageAckClosureStatus}
+            onAckNotesChange={setClosureSlaClosurePackageAckNotes}
+            onAckReadyChange={setClosureSlaClosurePackageAckReady}
+            onAckReviewerChange={setClosureSlaClosurePackageAckReviewer}
+            onAckStatusChange={setClosureSlaClosurePackageAckStatus}
+            onSaveAcknowledgement={() => {
+              const request = closureSlaFollowUpClosurePackageAcknowledgementRequest(
+                latestClosureSlaFollowUpClosurePackageDelivery,
+              )
+              if (request) onSaveClosureSlaFollowUpClosurePackageAcknowledgement(request)
+            }}
+            onSaveAcknowledgementClosure={() =>
+              onSaveClosureSlaFollowUpClosurePackageAcknowledgementClosure(
+                closureSlaFollowUpClosurePackageAcknowledgementClosureRequest(),
+              )
+            }
+            onSupersededEvidenceChange={setClosureSlaClosurePackageAckSupersededEvidence}
+            requestedActionCount={closureSlaClosurePackageAckActionList().length}
+            supersededEvidence={closureSlaClosurePackageAckSupersededEvidence}
+            supersededEvidenceCount={closureSlaClosurePackageAckSupersededEvidenceList().length}
+          />
         </div>
         {closureSlaDeliveryAcknowledgementRecords.length > 1 ? (
           <div className="mapping-run-history">

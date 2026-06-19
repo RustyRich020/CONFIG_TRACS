@@ -1,45 +1,7 @@
 import { GitBranch, Route } from 'lucide-react'
-import type { CanonicalLoadResult, CanonicalObject, QualityEvent, StatusLevel, TraceabilityLink } from '../types'
-
-function titleize(value?: string | null) {
-  return (value ?? 'unknown')
-    .split('_')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ')
-}
-
-function Metadata({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="metadata-item">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  )
-}
-
-function StatusChip({ status, label }: { status: StatusLevel; label: string }) {
-  return <span className={`status-chip ${status}`}>{label}</span>
-}
-
-function PanelHeader({
-  icon: Icon,
-  subtitle,
-  title,
-}: {
-  icon: typeof GitBranch
-  subtitle: string
-  title: string
-}) {
-  return (
-    <div className="panel-header">
-      <Icon size={18} />
-      <div>
-        <h2>{title}</h2>
-        <p>{subtitle}</p>
-      </div>
-    </div>
-  )
-}
+import type { CanonicalLoadResult, CanonicalObject, QualityEvent, TraceabilityLink } from '../types'
+import { Metadata, PanelHeader, StatusChip } from './common'
+import { titleize } from './formatters'
 
 export function TraceabilityGraphPathPanel({
   canonicalById,
