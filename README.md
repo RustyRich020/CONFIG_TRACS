@@ -167,6 +167,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Retains final acknowledgement closure final closeout acknowledgement closure final evidence with closeout delivery acknowledgements, closeout evidence records, notification evidence, retained actions, and superseded acknowledgement evidence.
 - Adds a normalized governance workflow queue that classifies existing package, delivery, acknowledgement, closure, closeout, retry, and final-evidence records without migrating persisted data.
 - Adds structured workflow metadata to new backend records with `workflowType`, `stage`, `parentRecordId`, `owner`, and `dueAt` while keeping legacy record-kind fallback support.
+- Adds reusable workflow definitions for Closure SLA, notification governance, retry queue, production cutover, traceability, and evidence packet review, with the Backend queue now showing config-backed workflow contracts.
 - Exports Closure SLA follow-up closure packages with retained actions, superseded routes, and notification evidence.
 - Delivers Closure SLA follow-up closure packages to governance reviewers with retained delivery evidence.
 - Captures Closure SLA follow-up closure package delivery acknowledgements with reviewer response and retained actions.
@@ -323,6 +324,6 @@ npm run build
 
 Use the canonical load and report config paths while consolidating governance workflows into reusable product infrastructure:
 
-1. Promote structured workflow metadata into reusable workflow definitions for package, delivery, acknowledgement, closure, closeout, retry, and final-evidence stages.
-2. Add workflow parent-child lineage views and workflow-instance export packages for governance review.
-3. Move core TRACS value forward with connector-backed canonical loads, traceability graph exports, report evidence packets, and cross-industry template packages.
+1. Add workflow parent-child lineage views and workflow-instance export packages for governance review.
+2. Move core TRACS value forward with connector-backed canonical loads, traceability graph exports, report evidence packets, and cross-industry template packages.
+3. Add workflow definition editing, validation status, and promotion controls for tenant-specific governance models.

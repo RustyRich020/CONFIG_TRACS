@@ -80,6 +80,7 @@ export type AppConfig = {
   objectFamilies: Record<string, ObjectFamily>
   connectors: ConnectorManifest
   mappings: Record<string, MappingManifest>
+  workflowDefinitions: Record<string, WorkflowDefinition>
   readinessRules: ReadinessRule[]
 }
 
@@ -336,6 +337,23 @@ export type GovernanceWorkflowMetadata = {
   parentRecordId?: string
   owner?: string
   dueAt?: string
+}
+
+export type WorkflowDefinition = {
+  display_name: string
+  description: string
+  applicable_domains: string[]
+  default_owner_role: string
+  sla_days: number
+  stages: GovernanceWorkflowStage[]
+  allowed_next_stages: Partial<Record<GovernanceWorkflowStage, GovernanceWorkflowStage[]>>
+  parent_link_fields: string[]
+  export_package: {
+    enabled: boolean
+    label: string
+    evidence_required: boolean
+  }
+  owner_resolution: string[]
 }
 
 export type BackendRecord<TPayload = unknown> = {

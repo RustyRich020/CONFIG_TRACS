@@ -1203,6 +1203,49 @@
   padding-top: 6px;
 }
 
+.workflow-definition-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.workflow-definition-card {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #e2eae9;
+  border-radius: 8px;
+  background: #fbfdfc;
+}
+
+.workflow-definition-card > div:first-child strong,
+.workflow-definition-card > div:first-child span {
+  display: block;
+}
+
+.workflow-definition-card > div:first-child strong {
+  color: #1e3030;
+  font-size: 13px;
+}
+
+.workflow-definition-card > div:first-child span {
+  margin-top: 5px;
+  color: #607171;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.workflow-definition-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.metadata-grid.compact {
+  margin-top: 12px;
+}
+
 .queue-record-side {
   display: flex;
   align-items: flex-end;

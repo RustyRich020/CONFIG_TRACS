@@ -4,6 +4,7 @@ import type {
   GovernanceWorkflowMetadata,
   GovernanceWorkflowStage,
   StatusLevel,
+  WorkflowDefinition,
 } from './types'
 
 export type GovernanceWorkflowItem = {
@@ -15,6 +16,10 @@ export type GovernanceWorkflowItem = {
   actionLabel: string
   owner: string
   dueAt?: string
+  dueStatus: 'not_scheduled' | 'on_track' | 'due_soon' | 'overdue'
+  definition?: WorkflowDefinition
+  allowedNextStages: GovernanceWorkflowStage[]
+  exportPackageLabel?: string
   ageDays: number
   status: StatusLevel
 }
@@ -40,13 +45,16 @@ const emptyStageCounts: Record<GovernanceWorkflowStage, number> = {
   source: 0,
 }
 
-export function deriveGovernanceWorkflowQueue(records: BackendRecord[]): {
+export function deriveGovernanceWorkflowQueue(
+  records: BackendRecord[],
+  workflowDefinitions: Record<string, WorkflowDefinition> = {},
+): {
   items: GovernanceWorkflowItem[]
   summary: GovernanceWorkflowSummary
 } {
   const items = records
     .filter(isGovernanceRecord)
-    .map(toGovernanceWorkflowItem)
+    .map((record) => toGovernanceWorkflowItem(record, workflowDefinitions))
     .sort((first, second) => {
       const statusDelta = statusRank(second.status) - statusRank(first.status)
       if (statusDelta !== 0) return statusDelta
@@ -120,22 +128,32 @@ function isGovernanceRecord(record: BackendRecord) {
   )
 }
 
-function toGovernanceWorkflowItem(record: BackendRecord): GovernanceWorkflowItem {
+function toGovernanceWorkflowItem(
+  record: BackendRecord,
+  workflowDefinitions: Record<string, WorkflowDefinition>,
+): GovernanceWorkflowItem {
   const explicitWorkflow = hasStructuredWorkflowMetadata(record.workflow) ? record.workflow : undefined
   const stage = explicitWorkflow?.stage ?? governanceStage(record.kind)
   const payload = asObject(record.payload)
   const workflowType = explicitWorkflow?.workflowType ?? workflowTypeFor(record)
-  const status = governanceStatus(record, stage)
+  const definition = workflowDefinitions[workflowType]
+  const dueAt = explicitWorkflow?.dueAt ?? dueAtFor(payload)
+  const dueStatus = dueStatusFor(dueAt)
+  const status = governanceStatus(record, stage, dueStatus)
 
   return {
     record,
     workflowType,
-    workflowLabel: labelize(workflowType),
+    workflowLabel: definition?.display_name ?? labelize(workflowType),
     stage,
     stageLabel: labelize(stage),
-    actionLabel: actionLabelFor(status, stage),
-    owner: explicitWorkflow?.owner ?? ownerFor(payload, record.label),
-    dueAt: explicitWorkflow?.dueAt ?? dueAtFor(payload),
+    actionLabel: actionLabelFor(status, stage, definition),
+    owner: explicitWorkflow?.owner ?? ownerFor(payload, record.label, definition),
+    dueAt,
+    dueStatus,
+    definition,
+    allowedNextStages: definition?.allowed_next_stages?.[stage] ?? [],
+    exportPackageLabel: definition?.export_package?.enabled ? definition.export_package.label : undefined,
     ageDays: daysSince(record.updatedAt),
     status,
   }
@@ -176,12 +194,18 @@ function workflowTypeFor(record: BackendRecord) {
   return record.kind
 }
 
-function governanceStatus(record: BackendRecord, stage: GovernanceWorkflowStage): StatusLevel {
+function governanceStatus(
+  record: BackendRecord,
+  stage: GovernanceWorkflowStage,
+  dueStatus: GovernanceWorkflowItem['dueStatus'],
+): StatusLevel {
   const payload = asObject(record.payload)
   const payloadStatus = typeof payload.status === 'string' ? payload.status : ''
 
+  if (dueStatus === 'overdue') return 'blocking'
   if (record.status === 'blocking' || /rejected|failed|blocked|overdue/.test(payloadStatus)) return 'blocking'
   if (record.status === 'warning') return 'warning'
+  if (dueStatus === 'due_soon') return 'warning'
   if (
     /pending|draft|queued|active|changes_requested|with_actions/.test(payloadStatus) ||
     stage === 'delivery' ||
@@ -192,17 +216,18 @@ function governanceStatus(record: BackendRecord, stage: GovernanceWorkflowStage)
   return 'pass'
 }
 
-function ownerFor(payload: Record<string, unknown>, fallback: string) {
-  const ownerFields = [
-    payload.owner,
-    payload.actor,
-    payload.reviewer,
-    firstText(payload.reviewers),
-    firstText(payload.recipients),
-    firstText(payload.routedReviewers),
-    firstText(payload.infrastructureOwners),
-    firstText(payload.messagingOwners),
-  ]
+function ownerFor(payload: Record<string, unknown>, fallback: string, definition?: WorkflowDefinition) {
+  const ownerFields =
+    definition?.owner_resolution?.map((field) => fieldValueFor(payload, field)) ?? [
+      payload.owner,
+      payload.actor,
+      payload.reviewer,
+      firstText(payload.reviewers),
+      firstText(payload.recipients),
+      firstText(payload.routedReviewers),
+      firstText(payload.infrastructureOwners),
+      firstText(payload.messagingOwners),
+    ]
   return ownerFields.find((value): value is string => typeof value === 'string' && value.trim().length > 0) ?? fallback
 }
 
@@ -228,10 +253,11 @@ function dueAtFor(payload: Record<string, unknown>) {
   return candidates.find((value): value is string => typeof value === 'string' && value.trim().length > 0)
 }
 
-function actionLabelFor(status: StatusLevel, stage: GovernanceWorkflowStage) {
+function actionLabelFor(status: StatusLevel, stage: GovernanceWorkflowStage, definition?: WorkflowDefinition) {
+  const workflow = definition?.display_name
   if (status === 'blocking') return `Escalate ${labelize(stage)}`
-  if (status === 'warning') return `Review ${labelize(stage)}`
-  return `Retain ${labelize(stage)}`
+  if (status === 'warning') return workflow ? `Review ${workflow}` : `Review ${labelize(stage)}`
+  return workflow ? `Retain ${workflow}` : `Retain ${labelize(stage)}`
 }
 
 function daysSince(value: string) {
@@ -244,6 +270,16 @@ function statusRank(status: StatusLevel) {
   if (status === 'blocking') return 3
   if (status === 'warning') return 2
   return 1
+}
+
+function dueStatusFor(value: string | undefined): GovernanceWorkflowItem['dueStatus'] {
+  if (!value) return 'not_scheduled'
+  const timestamp = new Date(value).getTime()
+  if (Number.isNaN(timestamp)) return 'not_scheduled'
+  const remainingMs = timestamp - Date.now()
+  if (remainingMs < 0) return 'overdue'
+  if (remainingMs <= 3 * 86_400_000) return 'due_soon'
+  return 'on_track'
 }
 
 function labelize(value: string) {
@@ -263,4 +299,8 @@ function firstText(value: unknown) {
     return value.find((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
   }
   return undefined
+}
+
+function fieldValueFor(payload: Record<string, unknown>, field: string) {
+  return Array.isArray(payload[field]) ? firstText(payload[field]) : payload[field]
 }

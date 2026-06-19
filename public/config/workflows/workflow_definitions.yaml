@@ -1,0 +1,283 @@
+workflow_definitions:
+  closure_sla:
+    display_name: Closure SLA
+    description: Governance workflow for Closure SLA packages, delivery acknowledgements, follow-up routing, closure, and evidence retention.
+    applicable_domains:
+      - quality
+      - qms
+      - reporting_bi
+    default_owner_role: Quality Governance Reviewer
+    sla_days: 7
+    stages:
+      - source
+      - package
+      - delivery
+      - acknowledgement
+      - closure
+      - closeout
+      - final_evidence
+    allowed_next_stages:
+      source:
+        - package
+        - closure
+      package:
+        - delivery
+      delivery:
+        - acknowledgement
+      acknowledgement:
+        - closure
+        - closeout
+      closure:
+        - closeout
+        - final_evidence
+      closeout:
+        - final_evidence
+      final_evidence: []
+    parent_link_fields:
+      - parentRecordId
+      - deliveryRecordId
+      - closureRecordId
+      - packageRecordId
+    export_package:
+      enabled: true
+      label: Closure SLA governance package
+      evidence_required: true
+    owner_resolution:
+      - owner
+      - reviewer
+      - reviewers
+      - actor
+
+  notification_governance:
+    display_name: Notification Governance
+    description: Reviewer-controlled approval, renewal, delivery, closure, and retained evidence workflow for tenant notification channels.
+    applicable_domains:
+      - qms
+      - reporting_bi
+      - scm
+    default_owner_role: Messaging Owner
+    sla_days: 5
+    stages:
+      - source
+      - package
+      - delivery
+      - acknowledgement
+      - closure
+      - final_evidence
+    allowed_next_stages:
+      source:
+        - package
+        - delivery
+      package:
+        - delivery
+      delivery:
+        - acknowledgement
+      acknowledgement:
+        - closure
+      closure:
+        - final_evidence
+      final_evidence: []
+    parent_link_fields:
+      - parentRecordId
+      - deliveryRecordId
+      - responseRecordId
+    export_package:
+      enabled: true
+      label: Notification governance package
+      evidence_required: true
+    owner_resolution:
+      - messagingOwners
+      - recipients
+      - owner
+      - reviewer
+
+  notification_retry_queue:
+    display_name: Notification Retry Queue
+    description: Operational retry workflow for notification failures, retry package review, acknowledgement, and closure evidence.
+    applicable_domains:
+      - reporting_bi
+      - scm
+      - qms
+    default_owner_role: Notification Operations
+    sla_days: 3
+    stages:
+      - retry
+      - package
+      - delivery
+      - acknowledgement
+      - closure
+      - closeout
+      - final_evidence
+    allowed_next_stages:
+      retry:
+        - package
+        - delivery
+      package:
+        - delivery
+      delivery:
+        - acknowledgement
+      acknowledgement:
+        - closure
+        - closeout
+      closure:
+        - closeout
+        - final_evidence
+      closeout:
+        - final_evidence
+      final_evidence: []
+    parent_link_fields:
+      - parentRecordId
+      - originalDeliveryRecordId
+      - deliveryRecordId
+      - closureRecordId
+    export_package:
+      enabled: true
+      label: Retry queue operations package
+      evidence_required: true
+    owner_resolution:
+      - owner
+      - actor
+      - reviewer
+      - recipients
+
+  production_cutover:
+    display_name: Production Cutover
+    description: Infrastructure-owner workflow for Postgres cutover readiness, acknowledgement, final handoff, closure package, and retained evidence.
+    applicable_domains:
+      - erp
+      - mes
+      - qms
+      - reporting_bi
+    default_owner_role: Infrastructure Owner
+    sla_days: 10
+    stages:
+      - source
+      - package
+      - delivery
+      - acknowledgement
+      - closure
+      - closeout
+      - final_evidence
+    allowed_next_stages:
+      source:
+        - package
+      package:
+        - delivery
+      delivery:
+        - acknowledgement
+      acknowledgement:
+        - closure
+      closure:
+        - closeout
+        - final_evidence
+      closeout:
+        - final_evidence
+      final_evidence: []
+    parent_link_fields:
+      - parentRecordId
+      - packageRecordId
+      - deliveryRecordId
+      - closureRecordId
+    export_package:
+      enabled: true
+      label: Production cutover handoff package
+      evidence_required: true
+    owner_resolution:
+      - infrastructureOwners
+      - reviewer
+      - owner
+      - actor
+
+  traceability:
+    display_name: Traceability
+    description: Traceability graph review workflow for route closure, reviewer response tracking, evidence packets, and retained exports.
+    applicable_domains:
+      - traceability
+      - quality
+      - qms
+      - plm
+    default_owner_role: Traceability Reviewer
+    sla_days: 7
+    stages:
+      - source
+      - package
+      - delivery
+      - acknowledgement
+      - closure
+      - final_evidence
+    allowed_next_stages:
+      source:
+        - package
+      package:
+        - delivery
+      delivery:
+        - acknowledgement
+      acknowledgement:
+        - closure
+      closure:
+        - final_evidence
+      final_evidence: []
+    parent_link_fields:
+      - parentRecordId
+      - deliveryRecordId
+      - responseRecordId
+    export_package:
+      enabled: true
+      label: Traceability graph evidence package
+      evidence_required: true
+    owner_resolution:
+      - reviewer
+      - reviewers
+      - owner
+
+  evidence_packet_review:
+    display_name: Evidence Packet Review
+    description: Generic evidence packet workflow for cross-industry reviewer approval, delivery acknowledgement, closeout, and final retained evidence.
+    applicable_domains:
+      - erp
+      - scm
+      - mes
+      - quality
+      - qms
+      - reporting_bi
+      - traceability
+    default_owner_role: Governance Reviewer
+    sla_days: 7
+    stages:
+      - source
+      - package
+      - delivery
+      - acknowledgement
+      - closure
+      - closeout
+      - final_evidence
+    allowed_next_stages:
+      source:
+        - package
+      package:
+        - delivery
+      delivery:
+        - acknowledgement
+      acknowledgement:
+        - closure
+        - closeout
+      closure:
+        - closeout
+        - final_evidence
+      closeout:
+        - final_evidence
+      final_evidence: []
+    parent_link_fields:
+      - parentRecordId
+      - packageRecordId
+      - deliveryRecordId
+      - closureRecordId
+    export_package:
+      enabled: true
+      label: Evidence packet review package
+      evidence_required: true
+    owner_resolution:
+      - reviewers
+      - reviewer
+      - owner
+      - actor

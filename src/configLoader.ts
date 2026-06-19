@@ -8,12 +8,26 @@ import type {
   ReadinessRule,
   SolutionDomain,
   MappingManifest,
+  WorkflowDefinition,
+  GovernanceWorkflowStage,
 } from './types'
 
 type RawIndustries = { industries?: Record<string, IndustryProfile> }
 type RawSolutions = { solution_domains?: Record<string, SolutionDomain> }
 type RawFamilies = { object_families?: Record<string, ObjectFamily> }
 type RawRules = { checks?: ReadinessRule[] }
+type RawWorkflowDefinitions = { workflow_definitions?: Record<string, WorkflowDefinition> }
+
+const validWorkflowStages: GovernanceWorkflowStage[] = [
+  'source',
+  'package',
+  'delivery',
+  'acknowledgement',
+  'closure',
+  'closeout',
+  'final_evidence',
+  'retry',
+]
 
 async function loadYaml<T>(path: string): Promise<T> {
   const response = await fetch(path)
@@ -30,6 +44,40 @@ function requireKeys(name: string, value: Record<string, unknown> | undefined) {
   }
 }
 
+function validateWorkflowDefinitions(workflowDefinitions: Record<string, WorkflowDefinition> | undefined) {
+  requireKeys('workflow_definitions', workflowDefinitions)
+
+  for (const [workflowType, definition] of Object.entries(workflowDefinitions ?? {})) {
+    if (!definition.display_name) {
+      throw new Error(`workflow_definitions.${workflowType}.display_name is missing`)
+    }
+
+    if (!definition.stages?.length) {
+      throw new Error(`workflow_definitions.${workflowType}.stages is missing`)
+    }
+
+    for (const stage of definition.stages) {
+      if (!validWorkflowStages.includes(stage)) {
+        throw new Error(`workflow_definitions.${workflowType}.stages contains invalid stage ${stage}`)
+      }
+    }
+
+    for (const [stage, nextStages] of Object.entries(definition.allowed_next_stages ?? {})) {
+      if (!validWorkflowStages.includes(stage as GovernanceWorkflowStage)) {
+        throw new Error(`workflow_definitions.${workflowType}.allowed_next_stages contains invalid stage ${stage}`)
+      }
+
+      for (const nextStage of nextStages ?? []) {
+        if (!validWorkflowStages.includes(nextStage)) {
+          throw new Error(
+            `workflow_definitions.${workflowType}.allowed_next_stages.${stage} contains invalid stage ${nextStage}`,
+          )
+        }
+      }
+    }
+  }
+}
+
 export async function loadAppConfig(): Promise<AppConfig> {
   const [
     environment,
@@ -41,6 +89,7 @@ export async function loadAppConfig(): Promise<AppConfig> {
     capaReferenceMapping,
     supplierMapping,
     documentReferenceMapping,
+    workflowDefinitionsRaw,
     rulesRaw,
   ] =
     await Promise.all([
@@ -53,6 +102,7 @@ export async function loadAppConfig(): Promise<AppConfig> {
       loadYaml<MappingManifest>('/config/mappings/capa_reference.yaml'),
       loadYaml<MappingManifest>('/config/mappings/supplier.yaml'),
       loadYaml<MappingManifest>('/config/mappings/document_reference.yaml'),
+      loadYaml<RawWorkflowDefinitions>('/config/workflows/workflow_definitions.yaml'),
       loadYaml<RawRules>('/config/rules/readiness_checks.yaml'),
     ])
 
@@ -60,6 +110,7 @@ export async function loadAppConfig(): Promise<AppConfig> {
   requireKeys('solution_domains', solutionsRaw.solution_domains)
   requireKeys('object_families', familiesRaw.object_families)
   requireKeys('connectors', connectors.connectors)
+  validateWorkflowDefinitions(workflowDefinitionsRaw.workflow_definitions)
 
   if (!environment.deployment_profile?.industries?.length) {
     throw new Error('environment deployment_profile.industries is missing')
@@ -81,6 +132,7 @@ export async function loadAppConfig(): Promise<AppConfig> {
       supplier: supplierMapping,
       document_reference: documentReferenceMapping,
     },
+    workflowDefinitions: workflowDefinitionsRaw.workflow_definitions ?? {},
     readinessRules: rulesRaw.checks ?? [],
   }
 }

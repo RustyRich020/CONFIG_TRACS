@@ -8190,6 +8190,7 @@ function App() {
             adapterDryRuns={adapterDryRuns}
             backendHealth={backendHealth}
             backendRecords={backendRecords}
+            workflowDefinitions={config.workflowDefinitions}
             connectorEntries={connectorEntries}
             notificationApprovalRecords={backendRecords.filter(
               (record): record is BackendRecord<NotificationLiveChannelApproval> =>
@@ -9195,6 +9196,7 @@ function BackendPersistenceView({
   adapterDryRuns,
   backendHealth,
   backendRecords,
+  workflowDefinitions,
   closurePackageAcknowledgementCloseoutExportPackageAcknowledgementRecords,
   closurePackageAcknowledgementCloseoutExportPackageAcknowledgementClosureRecords,
   closurePackageAcknowledgementCloseoutNotificationClosureRecords,
@@ -9330,6 +9332,7 @@ function BackendPersistenceView({
   adapterDryRuns: Record<string, AdapterDryRunResult>
   backendHealth: BackendHealth | null
   backendRecords: BackendRecord[]
+  workflowDefinitions: AppConfig['workflowDefinitions']
   closurePackageAcknowledgementCloseoutExportPackageAcknowledgementRecords: BackendRecord<ClosurePackageAcknowledgementCloseoutExportPackageAcknowledgement>[]
   closurePackageAcknowledgementCloseoutExportPackageAcknowledgementClosureRecords: BackendRecord<ClosurePackageAcknowledgementCloseoutExportPackageAcknowledgementClosure>[]
   closurePackageAcknowledgementCloseoutNotificationClosureRecords: BackendRecord<ClosurePackageAcknowledgementCloseoutNotificationClosure>[]
@@ -10698,10 +10701,19 @@ function BackendPersistenceView({
     {} as Record<string, number>,
   )
   const governanceWorkflowQueue = useMemo(
-    () => deriveGovernanceWorkflowQueue(backendRecords),
-    [backendRecords],
+    () => deriveGovernanceWorkflowQueue(backendRecords, workflowDefinitions),
+    [backendRecords, workflowDefinitions],
   )
   const governanceWorkQueueItems = governanceWorkflowQueue.items.slice(0, 8)
+  const selectedWorkflowItem = governanceWorkQueueItems[0]
+  const workflowDefinitionEntries = Object.entries(workflowDefinitions)
+  const selectedWorkflowDefinition = selectedWorkflowItem?.definition ?? workflowDefinitionEntries[0]?.[1]
+  const selectedWorkflowStage = selectedWorkflowItem?.stage ?? selectedWorkflowDefinition?.stages[0]
+  const selectedAllowedNextStages =
+    selectedWorkflowItem?.allowedNextStages ??
+    (selectedWorkflowStage ? selectedWorkflowDefinition?.allowed_next_stages[selectedWorkflowStage] : undefined) ??
+    []
+  const configuredWorkflowItemCount = governanceWorkflowQueue.items.filter((item) => Boolean(item.definition)).length
   const structuredWorkflowRecordCount = governanceWorkflowQueue.items.filter(
     (item) => item.record.workflow?.metadataVersion === 'workflow_metadata_v1',
   ).length
@@ -13273,6 +13285,66 @@ function BackendPersistenceView({
           <span>{governanceWorkflowQueue.summary.byStage.closure} closures</span>
           <span>{governanceWorkflowQueue.summary.byStage.closeout} closeouts</span>
           <span>{governanceWorkflowQueue.summary.byStage.final_evidence} final evidence</span>
+        </div>
+        <div className="workflow-definition-grid">
+          <article className="workflow-definition-card">
+            <div>
+              <strong>Workflow Definition Contracts</strong>
+              <span>{workflowDefinitionEntries.length} reusable workflow definition(s) loaded from config.</span>
+            </div>
+            <div className="metadata-grid compact">
+              <Metadata label="Config-backed records" value={String(configuredWorkflowItemCount)} />
+              <Metadata
+                label="Configured workflows"
+                value={workflowDefinitionEntries.map(([, definition]) => definition.display_name).join(', ')}
+              />
+            </div>
+          </article>
+          <article className="workflow-definition-card">
+            {selectedWorkflowDefinition ? (
+              <>
+                <div>
+                  <strong>{selectedWorkflowDefinition.display_name}</strong>
+                  <span>{selectedWorkflowDefinition.description}</span>
+                </div>
+                <div className="workflow-definition-tags">
+                  <span className="chip active">{selectedWorkflowDefinition.sla_days} day SLA</span>
+                  <span className="chip">
+                    {selectedWorkflowItem
+                      ? selectedWorkflowItem.dueStatus === 'not_scheduled'
+                        ? 'No due date'
+                        : titleize(selectedWorkflowItem.dueStatus)
+                      : 'Definition preview'}
+                  </span>
+                  <span className="chip">{selectedWorkflowDefinition.default_owner_role}</span>
+                </div>
+                <div className="metadata-grid compact">
+                  <Metadata
+                    label="Allowed next"
+                    value={
+                      selectedAllowedNextStages.length > 0
+                        ? selectedAllowedNextStages.map(titleize).join(', ')
+                        : 'Terminal stage'
+                    }
+                  />
+                  <Metadata
+                    label="Parent links"
+                    value={selectedWorkflowDefinition.parent_link_fields.join(', ')}
+                  />
+                  <Metadata
+                    label="Export package"
+                    value={selectedWorkflowItem?.exportPackageLabel ?? selectedWorkflowDefinition.export_package.label}
+                  />
+                  <Metadata
+                    label="Applies to"
+                    value={selectedWorkflowDefinition.applicable_domains.map(titleize).join(', ')}
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="empty-state compact">Workflow definition details appear after a configured queue item is available.</div>
+            )}
+          </article>
         </div>
         {governanceWorkQueueItems.length > 0 ? (
           <div className="backend-record-list governance-work-queue-list">
