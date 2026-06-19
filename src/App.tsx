@@ -33,13 +33,17 @@ import './App.css'
 import { adapterContracts } from './backendContracts'
 import { backendClient } from './backendClient'
 import { ClosureSlaDashboardPanel } from './components/ClosureSlaDashboardPanel'
+import { ClosureSlaFollowUpRoutingPanel } from './components/ClosureSlaFollowUpRoutingPanel'
+import { ClosureSlaGovernanceResponsePanel } from './components/ClosureSlaGovernanceResponsePanel'
 import { RetainedPackageCatalogPanel } from './components/RetainedPackageCatalogPanel'
 import { TemplatePackageGovernancePanel } from './components/TemplatePackageGovernancePanel'
 import { TraceabilityClosureRoutingPanel } from './components/TraceabilityClosureRoutingPanel'
 import { TraceabilityDeliveryResponsePanel } from './components/TraceabilityDeliveryResponsePanel'
 import { TraceabilityEvidencePacketLinksPanel } from './components/TraceabilityEvidencePacketLinksPanel'
 import { TraceabilityExportControlsPanel } from './components/TraceabilityExportControlsPanel'
+import { TraceabilityGraphPathPanel } from './components/TraceabilityGraphPathPanel'
 import { TraceabilitySignedExportHistoryPanel } from './components/TraceabilitySignedExportHistoryPanel'
+import { TraceabilitySourceLinksPanel } from './components/TraceabilitySourceLinksPanel'
 import { WorkflowLineageRetentionPanel } from './components/WorkflowLineageRetentionPanel'
 import { loadAppConfig } from './configLoader'
 import {
@@ -14595,272 +14599,54 @@ function BackendPersistenceView({
           packageCount={closureSlaExportPackageRecords.length}
           reviewerNotes={closureSlaReviewerNotes}
         />
-        <div className="notification-approval-grid renewal-routing-grid">
-          <div className="notification-approval-form">
-            <div className="trace-review-grid">
-              <label>
-                <span>Governance response reviewer</span>
-                <input value={closureSlaAckReviewer} onChange={(event) => setClosureSlaAckReviewer(event.target.value)} />
-              </label>
-              <label>
-                <span>Response status</span>
-                <select
-                  value={closureSlaAckStatus}
-                  onChange={(event) =>
-                    setClosureSlaAckStatus(event.target.value as ClosureSlaDeliveryAcknowledgementStatus)
-                  }
-                >
-                  <option value="acknowledged">Acknowledged</option>
-                  <option value="approved">Approved</option>
-                  <option value="changes_requested">Changes requested</option>
-                  <option value="rejected">Rejected</option>
-                </select>
-              </label>
-              <label>
-                <span>Route stage</span>
-                <select
-                  value={closureSlaAckRouteStage}
-                  onChange={(event) =>
-                    setClosureSlaAckRouteStage(event.target.value as ClosureSlaDeliveryAcknowledgement['routeStage'])
-                  }
-                >
-                  <option value="governance_acknowledgement">Governance acknowledgement</option>
-                  <option value="owner_follow_up">Owner follow-up</option>
-                  <option value="closed">Closed</option>
-                </select>
-              </label>
-              <label className="trace-review-rationale">
-                <span>Response notes</span>
-                <textarea value={closureSlaAckNotes} onChange={(event) => setClosureSlaAckNotes(event.target.value)} />
-              </label>
-              <label className="trace-review-rationale">
-                <span>Requested actions</span>
-                <textarea value={closureSlaAckActions} onChange={(event) => setClosureSlaAckActions(event.target.value)} />
-              </label>
-            </div>
-            <div className="toolbar-actions notification-approval-actions">
-              <button
-                className="primary-action"
-                disabled={!latestClosureSlaPackageDelivery}
-                onClick={() =>
-                  latestClosureSlaPackageDelivery
-                    ? onSaveClosureSlaDeliveryAcknowledgement(
-                        closureSlaDeliveryAcknowledgementRequest(latestClosureSlaPackageDelivery),
-                      )
-                    : undefined
-                }
-                type="button"
-              >
-                <ClipboardCheck size={15} />
-                Save Governance Response
-              </button>
-            </div>
-          </div>
-          <div className="notification-approval-summary">
-            <div className="metadata-grid">
-              <Metadata label="Delivery responses" value={String(closureSlaDeliveryAcknowledgementRecords.length)} />
-              <Metadata label="Open deliveries" value={String(openClosureSlaDeliveryCount)} />
-              <Metadata
-                label="Latest response"
-                value={
-                  latestClosureSlaDeliveryAcknowledgement
-                    ? closureSlaDeliveryAcknowledgementLabel(latestClosureSlaDeliveryAcknowledgement.payload.status)
-                    : 'Not recorded'
-                }
-              />
-              <Metadata
-                label="Latest package"
-                value={
-                  latestClosureSlaDeliveryAcknowledgement?.payload.packageVersion
-                    ? `v${latestClosureSlaDeliveryAcknowledgement.payload.packageVersion}`
-                    : 'Not linked'
-                }
-              />
-            </div>
-            {latestClosureSlaDeliveryAcknowledgement ? (
-              <div className="connector-run-history">
-                <h4>Latest governance response</h4>
-                <div className="connector-run-row">
-                  <div>
-                    <strong>{latestClosureSlaDeliveryAcknowledgement.payload.reviewer}</strong>
-                    <span>
-                      v{latestClosureSlaDeliveryAcknowledgement.version} / {titleize(latestClosureSlaDeliveryAcknowledgement.payload.routeStage)} / {new Date(latestClosureSlaDeliveryAcknowledgement.createdAt).toLocaleString()}
-                    </span>
-                    <small>{latestClosureSlaDeliveryAcknowledgement.payload.evidence}</small>
-                  </div>
-                  <StatusChip
-                    status={latestClosureSlaDeliveryAcknowledgement.status}
-                    label={closureSlaDeliveryAcknowledgementLabel(latestClosureSlaDeliveryAcknowledgement.payload.status)}
-                  />
-                </div>
-                {latestClosureSlaDeliveryAcknowledgement.payload.requestedActions.length > 0 ? (
-                  <div className="storage-column-list">
-                    {latestClosureSlaDeliveryAcknowledgement.payload.requestedActions.map((action) => (
-                      <span key={action}>{action}</span>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <div className="empty-state compact">No Closure SLA governance response has been retained yet.</div>
-            )}
-          </div>
-        </div>
-        {closureSlaPackageDeliveryRecords.length > 0 ? (
-          <div className="mapping-run-history">
-            <h4>Closure SLA delivery response queue</h4>
-            {closureSlaPackageDeliveryRecords.slice(0, 5).map((record) => {
-              const responseRecorded = closureSlaAcknowledgedDeliveryIds.has(record.id)
-              return (
-                <div className="mapping-run-row" key={record.id}>
-                  <div>
-                    <strong>{record.payload.request.subject}</strong>
-                    <span>
-                      v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
-                    </span>
-                    <small>{record.payload.result.evidence}</small>
-                  </div>
-                  <div className="row-actions">
-                    <button
-                      className="secondary-action compact"
-                      onClick={() =>
-                        onSaveClosureSlaDeliveryAcknowledgement(
-                          closureSlaDeliveryAcknowledgementRequest(record),
-                        )
-                      }
-                      type="button"
-                    >
-                      Record Response
-                    </button>
-                    <StatusChip status={responseRecorded ? 'pass' : record.status} label={responseRecorded ? 'responded' : record.status} />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        ) : null}
-        <div className="notification-approval-grid renewal-routing-grid">
-          <div className="notification-approval-form">
-            <div className="dashboard-heading">
-              <h4>Governance Response Follow-Up Routing</h4>
-              <StatusChip status={closureSlaFollowUpStatusLevel(closureSlaFollowUpStatus)} label={closureSlaFollowUpLabel(closureSlaFollowUpStatus)} />
-            </div>
-            <div className="trace-review-grid">
-              <label>
-                <span>Follow-up owners</span>
-                <input value={closureSlaFollowUpOwners} onChange={(event) => setClosureSlaFollowUpOwners(event.target.value)} />
-              </label>
-              <label>
-                <span>Follow-up status</span>
-                <select
-                  value={closureSlaFollowUpStatus}
-                  onChange={(event) =>
-                    setClosureSlaFollowUpStatus(event.target.value as ClosureSlaResponseFollowUpStatus)
-                  }
-                >
-                  <option value="routed">Routed</option>
-                  <option value="in_progress">In progress</option>
-                  <option value="escalated">Escalated</option>
-                  <option value="closed">Closed</option>
-                </select>
-              </label>
-              <label>
-                <span>Follow-up stage</span>
-                <select
-                  value={closureSlaFollowUpStage}
-                  onChange={(event) =>
-                    setClosureSlaFollowUpStage(event.target.value as ClosureSlaResponseFollowUpRoute['followUpStage'])
-                  }
-                >
-                  <option value="governance_review">Governance review</option>
-                  <option value="owner_follow_up">Owner follow-up</option>
-                  <option value="escalation">Escalation</option>
-                  <option value="closed">Closed</option>
-                </select>
-              </label>
-              <label>
-                <span>Due date</span>
-                <input
-                  type="date"
-                  value={closureSlaFollowUpDueAt}
-                  onChange={(event) => setClosureSlaFollowUpDueAt(event.target.value)}
-                />
-              </label>
-              <label className="trace-review-rationale">
-                <span>Escalation path</span>
-                <textarea
-                  value={closureSlaFollowUpEscalationPath}
-                  onChange={(event) => setClosureSlaFollowUpEscalationPath(event.target.value)}
-                />
-              </label>
-              <label className="trace-review-rationale">
-                <span>Route notes</span>
-                <textarea value={closureSlaFollowUpNotes} onChange={(event) => setClosureSlaFollowUpNotes(event.target.value)} />
-              </label>
-            </div>
-            <div className="toolbar-actions notification-approval-actions">
-              <button
-                className="secondary-action"
-                disabled={!latestClosureSlaDeliveryAcknowledgement}
-                onClick={() => {
-                  const request = closureSlaResponseFollowUpRequest(latestClosureSlaDeliveryAcknowledgement, false)
-                  if (request) onSaveClosureSlaResponseFollowUpRoute(request)
-                }}
-                type="button"
-              >
-                <ClipboardCheck size={15} />
-                Save Follow-Up Route
-              </button>
-              <button
-                className="primary-action"
-                disabled={!latestClosureSlaDeliveryAcknowledgement}
-                onClick={() => {
-                  const request = closureSlaResponseFollowUpRequest(latestClosureSlaDeliveryAcknowledgement, true)
-                  if (request) onSaveClosureSlaResponseFollowUpRoute(request)
-                }}
-                type="button"
-              >
-                <Bell size={15} />
-                Save & Notify Owners
-              </button>
-            </div>
-          </div>
-          <div className="notification-approval-summary">
-            <div className="metadata-grid">
-              <Metadata label="Follow-up routes" value={String(closureSlaResponseFollowUpRouteRecords.length)} />
-              <Metadata label="Open routes" value={String(closureSlaResponseFollowUpRouteRecords.filter((record) => record.payload.status !== 'closed').length)} />
-              <Metadata label="Owner count" value={String(closureSlaFollowUpOwnerList().length)} />
-              <Metadata label="Notifications" value={String(closureSlaFollowUpNotificationRecords.length)} />
-            </div>
-            {latestClosureSlaResponseFollowUpRoute ? (
-              <div className="connector-run-history">
-                <h4>Latest follow-up route</h4>
-                <div className="connector-run-row">
-                  <div>
-                    <strong>{latestClosureSlaResponseFollowUpRoute.payload.deliverySubject}</strong>
-                    <span>
-                      v{latestClosureSlaResponseFollowUpRoute.version} / {titleize(latestClosureSlaResponseFollowUpRoute.payload.followUpStage)} / due {latestClosureSlaResponseFollowUpRoute.payload.dueAt || 'not scheduled'}
-                    </span>
-                    <small>{latestClosureSlaResponseFollowUpRoute.payload.evidence}</small>
-                  </div>
-                  <StatusChip
-                    status={latestClosureSlaResponseFollowUpRoute.status}
-                    label={closureSlaFollowUpLabel(latestClosureSlaResponseFollowUpRoute.payload.status)}
-                  />
-                </div>
-                {latestClosureSlaResponseFollowUpRoute.payload.requestedActions.length > 0 ? (
-                  <div className="storage-column-list">
-                    {latestClosureSlaResponseFollowUpRoute.payload.requestedActions.map((action) => (
-                      <span key={action}>{action}</span>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <div className="empty-state compact">No Closure SLA response follow-up route has been retained yet.</div>
-            )}
-          </div>
-        </div>
+        <ClosureSlaGovernanceResponsePanel
+          acknowledgedDeliveryIds={closureSlaAcknowledgedDeliveryIds}
+          acknowledgementRecords={closureSlaDeliveryAcknowledgementRecords}
+          ackActions={closureSlaAckActions}
+          ackNotes={closureSlaAckNotes}
+          ackReviewer={closureSlaAckReviewer}
+          ackRouteStage={closureSlaAckRouteStage}
+          ackStatus={closureSlaAckStatus}
+          deliveryRecords={closureSlaPackageDeliveryRecords}
+          latestAcknowledgement={latestClosureSlaDeliveryAcknowledgement}
+          latestDelivery={latestClosureSlaPackageDelivery}
+          onAckActionsChange={setClosureSlaAckActions}
+          onAckNotesChange={setClosureSlaAckNotes}
+          onAckReviewerChange={setClosureSlaAckReviewer}
+          onAckRouteStageChange={setClosureSlaAckRouteStage}
+          onAckStatusChange={setClosureSlaAckStatus}
+          onSaveResponse={(record) =>
+            onSaveClosureSlaDeliveryAcknowledgement(closureSlaDeliveryAcknowledgementRequest(record))
+          }
+          openDeliveryCount={openClosureSlaDeliveryCount}
+        />
+        <ClosureSlaFollowUpRoutingPanel
+          dueAt={closureSlaFollowUpDueAt}
+          escalationPath={closureSlaFollowUpEscalationPath}
+          followUpOwners={closureSlaFollowUpOwners}
+          followUpStage={closureSlaFollowUpStage}
+          followUpStatus={closureSlaFollowUpStatus}
+          latestAcknowledgement={latestClosureSlaDeliveryAcknowledgement}
+          latestRoute={latestClosureSlaResponseFollowUpRoute}
+          notificationCount={closureSlaFollowUpNotificationRecords.length}
+          onDueAtChange={setClosureSlaFollowUpDueAt}
+          onEscalationPathChange={setClosureSlaFollowUpEscalationPath}
+          onFollowUpOwnersChange={setClosureSlaFollowUpOwners}
+          onFollowUpStageChange={setClosureSlaFollowUpStage}
+          onFollowUpStatusChange={setClosureSlaFollowUpStatus}
+          onNotifyRoute={() => {
+            const request = closureSlaResponseFollowUpRequest(latestClosureSlaDeliveryAcknowledgement, true)
+            if (request) onSaveClosureSlaResponseFollowUpRoute(request)
+          }}
+          onRouteNotesChange={setClosureSlaFollowUpNotes}
+          onSaveRoute={() => {
+            const request = closureSlaResponseFollowUpRequest(latestClosureSlaDeliveryAcknowledgement, false)
+            if (request) onSaveClosureSlaResponseFollowUpRoute(request)
+          }}
+          ownerCount={closureSlaFollowUpOwnerList().length}
+          routeNotes={closureSlaFollowUpNotes}
+          routeRecords={closureSlaResponseFollowUpRouteRecords}
+        />
         <div className="notification-approval-grid renewal-routing-grid">
           <div className="notification-approval-form">
             <div className="dashboard-heading">
@@ -22632,143 +22418,23 @@ function TraceabilityView({
         statusFilter={statusFilter}
       />
 
-      <section className="traceability-grid">
-        <section className="panel trace-source-panel">
-          <PanelHeader
-            icon={ShieldCheck}
-            title="Source Event"
-            subtitle={selectedEvent ? selectedEvent.displayName : 'No source event selected.'}
-          />
-          {selectedEvent ? (
-            <div className="workflow-detail">
-              <div className="trace-node source">
-                <strong>{selectedEvent.canonical.event_id}</strong>
-                <span>{selectedEvent.canonical.narrative}</span>
-              </div>
-              <div className="metadata-grid">
-                <Metadata label="Product" value={selectedEvent.canonical.product_code} />
-                <Metadata label="Lot" value={selectedEvent.canonical.lot_number} />
-                <Metadata label="Serial" value={selectedEvent.canonical.serial_number} />
-                <Metadata label="Status" value={titleize(selectedEvent.canonical.status)} />
-              </div>
-            </div>
-          ) : (
-            <div className="empty-state compact">No event selected.</div>
-          )}
-        </section>
+      <TraceabilitySourceLinksPanel
+        filteredLinks={filteredLinks}
+        selectedEvent={selectedEvent}
+        selectedLinkCount={selectedLinks.length}
+      />
 
-        <section className="panel trace-links-panel">
-          <PanelHeader
-            icon={Route}
-            title="Linked Objects"
-            subtitle={`${filteredLinks.length} of ${selectedLinks.length} relationship(s) shown after filters.`}
-          />
-          <div className="trace-node-list">
-            {filteredLinks.map((link) => (
-              <div className="trace-link-card" key={link.id}>
-                <div className="trace-line" />
-                <div className="trace-node">
-                  <strong>{link.targetLabel}</strong>
-                  <span>{titleize(link.targetObjectType)} / {titleize(link.relationshipType)}</span>
-                </div>
-                <p>{link.evidence}</p>
-                <StatusChip status={link.status} label={link.status} />
-              </div>
-            ))}
-            {filteredLinks.length === 0 ? (
-              <div className="empty-state compact">No linked objects match the active filters.</div>
-            ) : null}
-          </div>
-        </section>
-      </section>
-
-      <section className="panel trace-graph-panel">
-        <PanelHeader
-          icon={GitBranch}
-          title="Filtered Traceability Graph"
-          subtitle="Graph-style node and edge inventory derived from the selected event and active filters."
-        />
-        <div className="trace-graph-canvas">
-          <div className="trace-graph-node source">
-            <strong>{selectedEvent?.canonical.event_id ?? 'No event'}</strong>
-            <span>quality_event / quality</span>
-          </div>
-          <div className="trace-graph-edges">
-            {filteredLinks.map((link) => {
-              const object = canonicalById.get(link.targetObjectId)
-              return (
-                <div className="trace-graph-edge" key={link.id}>
-                  <span>{titleize(link.relationshipType)}</span>
-                  <div className="trace-line" />
-                  <div className="trace-graph-node">
-                    <strong>{link.targetLabel}</strong>
-                    <span>{titleize(object?.family ?? link.targetObjectType)} / {titleize(link.targetObjectType)}</span>
-                  </div>
-                </div>
-              )
-            })}
-            {filteredLinks.length === 0 ? (
-              <div className="empty-state compact">No graph edges match the active filters.</div>
-            ) : null}
-          </div>
-        </div>
-        <div className="trace-path-summary">
-          <Metadata label="Graph nodes" value={String(graphNodes.length)} />
-          <Metadata label="Graph edges" value={String(filteredLinks.length)} />
-          <Metadata label="Evidence packets" value={String(traceEvidencePackets.length)} />
-          <Metadata
-            label="Latest load"
-            value={latestCanonicalLoad ? `${latestCanonicalLoad.payload.objectCount} objects / ${latestCanonicalLoad.payload.linkCount} links` : 'No load'}
-          />
-          <Metadata label="Validation gaps" value={String(validationGaps.length)} />
-          <Metadata label="Workflow lineage" value={`${workflowLineage.instances.length} instance(s)`} />
-        </div>
-      </section>
-
-      <section className="panel trace-path-panel">
-        <PanelHeader
-          icon={Route}
-          title="Path Explorer"
-          subtitle="Readable event-to-object paths for audit, impact analysis, and cross-system evidence review."
-        />
-        <div className="trace-path-summary">
-          <Metadata label="Paths" value={String(filteredLinks.length)} />
-          <Metadata label="Target types" value={String(Object.keys(relationshipSummary).length)} />
-          <Metadata
-            label="Coverage"
-            value={
-              Object.entries(relationshipSummary)
-                .map(([type, count]) => `${titleize(type)} ${count}`)
-                .join(', ') || 'No links'
-            }
-          />
-        </div>
-        <div className="trace-path-list">
-          {filteredLinks.map((link, index) => (
-            <div className="trace-path-row" key={link.id}>
-              <div className="trace-step source">
-                <strong>{selectedEvent?.canonical.event_id}</strong>
-                <span>quality_event</span>
-              </div>
-              <Route size={16} />
-              <div className="trace-step">
-                <strong>{titleize(link.relationshipType)}</strong>
-                <span>Path {index + 1}</span>
-              </div>
-              <Route size={16} />
-              <div className="trace-step target">
-                <strong>{link.targetLabel}</strong>
-                <span>{titleize(link.targetObjectType)}</span>
-              </div>
-              <StatusChip status={link.status} label={link.status} />
-              <p>{link.evidence}</p>
-            </div>
-          ))}
-          {filteredLinks.length === 0 ? (
-            <div className="empty-state compact">No traceability paths are available for this event.</div>
-          ) : null}
-        </div>
-      </section>
+      <TraceabilityGraphPathPanel
+        canonicalById={canonicalById}
+        evidencePacketCount={traceEvidencePackets.length}
+        filteredLinks={filteredLinks}
+        graphNodeCount={graphNodes.length}
+        latestCanonicalLoad={latestCanonicalLoad}
+        relationshipSummary={relationshipSummary}
+        selectedEvent={selectedEvent}
+        validationGapCount={validationGaps.length}
+        workflowLineageCount={workflowLineage.instances.length}
+      />
 
       <TraceabilityEvidencePacketLinksPanel
         evidencePackets={traceEvidencePackets}
