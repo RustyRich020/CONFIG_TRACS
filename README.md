@@ -194,6 +194,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Adds a shared history-row primitive and migrates additional Closure SLA and Traceability panels onto common UI primitives.
 - Extracts Postgres import reconciliation and production cutover history lists into focused Backend components using shared UI primitives.
 - Splits heavy workspace views into lazy-loaded modules and vendor chunks so production assets stay below the Vite warning threshold.
+- Removes dead copied App-level helpers from the Backend workspace while preserving existing backend record contracts and lazy-loaded chunk behavior.
 - Adds same-workflow retained package comparison rows with version, reviewer, retention, coverage, and missing-parent detail.
 - Exports Closure SLA follow-up closure packages with retained actions, superseded routes, and notification evidence.
 - Delivers Closure SLA follow-up closure packages to governance reviewers with retained delivery evidence.
@@ -351,6 +352,6 @@ npm run build
 
 Use the template package and workflow lineage paths while consolidating governance workflows into reusable product infrastructure:
 
-1. Continue splitting the legacy Backend workspace into smaller focused panels so `BackendPersistenceView.tsx` can return to normal ESLint parsing.
+1. Extract the bottom closeout/final-evidence governance chain from `BackendPersistenceView.tsx` into a focused Backend component so the source file can return under the 500KB parser threshold.
 2. Continue migrating existing extracted panels to shared `PanelHeader`, `Metadata`, `StatusChip`, `HistoryRow`, and title-formatting primitives.
-3. Extract the remaining production cutover forms and retry queue dashboard sections into focused Backend components.
+3. Reduce the Backend workspace prop contract by deriving record-kind subsets inside focused components instead of passing long filtered lists from `App.tsx`.

@@ -1,26 +1,15 @@
 import {
 Activity,
 Bell,
-Boxes,
-CheckCircle2,
 ClipboardCheck,
 Database,
 Download,
-Factory,
-FileCog,
-Gauge,
-GitBranch,
 History,
-Layers3,
 Package,
-PanelTop,
 PlugZap,
 Route,
-ScrollText,
 ServerCog,
 ShieldCheck,
-SlidersHorizontal,
-TriangleAlert
 } from 'lucide-react'
 import { useMemo,useState } from 'react'
 import { ClosureSlaDashboardPanel } from '../../components/ClosureSlaDashboardPanel'
@@ -43,7 +32,6 @@ import { RetainedPackageCatalogPanel } from '../../components/RetainedPackageCat
 import { WorkflowLineageRetentionPanel } from '../../components/WorkflowLineageRetentionPanel'
 import {
 downloadJson,
-inferCsvSchema
 } from '../../foundation'
 import type { GovernanceWorkflowInstance } from '../../governanceWorkflow'
 import {
@@ -57,8 +45,6 @@ AdapterDryRunResult,
 AppConfig,
 BackendHealth,
 BackendRecord,
-CanonicalLoadResult,
-CanonicalObject,
 ClosurePackageAcknowledgementCloseoutExportPackage,
 ClosurePackageAcknowledgementCloseoutExportPackageAcknowledgement,
 ClosurePackageAcknowledgementCloseoutExportPackageAcknowledgementClosure,
@@ -93,18 +79,6 @@ ClosureSlaResponseFollowUpClosure,
 ClosureSlaResponseFollowUpClosureStatus,
 ClosureSlaResponseFollowUpRoute,
 ClosureSlaResponseFollowUpStatus,
-ConnectorPreviewResult,
-ConnectorSourceMetadata,
-ControlledTemplatePayload,
-CrossIndustryTemplatePackage,
-CrossIndustryTemplatePackageApproval,
-CrossIndustryTemplatePackageApprovalStatus,
-CrossIndustryTemplatePackageDelivery,
-CrossIndustryTemplatePackageLifecycleExport,
-CsvSchemaInference,
-ExternalReferenceLoadExceptionDispositionStatus,
-ExtractionJobPayload,
-ExtractionRunPayload,
 NotificationApprovalRenewalClosure,
 NotificationApprovalRenewalClosureStatus,
 NotificationApprovalRenewalRoute,
@@ -138,18 +112,9 @@ PostgresCutoverReminderClosure,
 PostgresCutoverReminderClosureStatus,
 PostgresImportReconciliation,
 PostgresMigrationChecklist,
-ReadinessCheck,
-ReadinessEvidenceApproval,
-ReadinessEvidenceApprovalStatus,
-ReadinessEvidenceException,
-ReadinessEvidencePacket,
 RecordStoreSchema,
-ReportCatalogItem,
 StatusLevel,
-TraceabilityDeliveryResponseStatus,
 TraceabilityExportRetentionClass,
-TraceabilityExportReviewStatus,
-TraceabilityGraphExportPackage,
 TraceabilityResponseClosureRoute,
 TraceabilityResponseClosureRouteStatus,
 WorkflowInstanceExportRetention
@@ -158,236 +123,6 @@ import {
 createWorkflowDefinitionPromotionPackage,
 validateWorkflowDefinitionDraft,
 } from '../../workflowDefinitionDraft'
-const navItems = [
-  { label: 'Overview', icon: Activity },
-  { label: 'Profiles', icon: Factory },
-  { label: 'Domains', icon: Layers3 },
-  { label: 'Connectors', icon: Database },
-  { label: 'Templates', icon: PanelTop },
-  { label: 'Mapping', icon: GitBranch },
-  { label: 'Quality Events', icon: ShieldCheck },
-  { label: 'Object Explorer', icon: Boxes },
-  { label: 'Traceability', icon: Route },
-  { label: 'Reports', icon: Gauge },
-  { label: 'Evidence', icon: ClipboardCheck },
-  { label: 'Versions', icon: History },
-  { label: 'Backend', icon: ServerCog },
-  { label: 'Readiness', icon: SlidersHorizontal },
-  { label: 'Audit', icon: ScrollText },
-  { label: 'Contract', icon: FileCog },
-]
-
-const preferredDomainOrder = [
-  'erp',
-  'scm',
-  'mes',
-  'quality',
-  'qms',
-  'reporting_bi',
-  'traceability',
-  'shop_floor',
-  'pcs',
-  'engineering',
-  'plm',
-  'app',
-  'spc_sqc',
-  'gage_management',
-  'quoting_costing',
-]
-
-const domainDisplayNames: Record<string, string> = {
-  erp: 'ERP',
-  scm: 'SCM',
-  mes: 'MES',
-  qms: 'QMS',
-  reporting_bi: 'Reporting & BI',
-  shop_floor: 'Shop Floor',
-  pcs: 'PCS',
-  plm: 'PLM',
-  app: 'APP',
-  spc_sqc: 'SPC / SQC',
-}
-
-const templateCatalog = [
-  {
-    name: 'Deployment Profile',
-    file: 'deployment_profile.template.yaml',
-    type: 'Profile',
-    purpose: 'Start a customer/site profile with industries, domains, terminology, and approvals.',
-  },
-  {
-    name: 'Snowflake Connector',
-    file: 'snowflake_connector.template.yaml',
-    type: 'Connector',
-    purpose: 'Register warehouse database, schema, role, refresh cadence, and source objects.',
-  },
-  {
-    name: 'SharePoint Excel Connector',
-    file: 'sharepoint_excel_connector.template.yaml',
-    type: 'Connector',
-    purpose: 'Register site, library, workbook, sheet, target object, and refresh mode.',
-  },
-  {
-    name: 'CSV Connector',
-    file: 'csv_connector.template.yaml',
-    type: 'Connector',
-    purpose: 'Create a manual upload path with target object and schema inference defaults.',
-  },
-  {
-    name: 'Snowflake Credential Provider',
-    file: 'credential_provider_snowflake.template.yaml',
-    type: 'Credential',
-    purpose: 'Declare server-only Snowflake SQL API environment references, rotation evidence, and validation checks.',
-  },
-  {
-    name: 'Microsoft Graph Credential Provider',
-    file: 'credential_provider_microsoft_graph.template.yaml',
-    type: 'Credential',
-    purpose: 'Declare server-only Graph token references for SharePoint Excel discovery and rotation validation.',
-  },
-  {
-    name: 'External Reference Credential Provider',
-    file: 'credential_provider_external_reference.template.yaml',
-    type: 'Credential',
-    purpose: 'Start a no-secret provider contract for vendor APIs and future REST-backed connectors.',
-  },
-  {
-    name: 'Mapping Manifest',
-    file: 'mapping_manifest.template.yaml',
-    type: 'Mapping',
-    purpose: 'Map source fields into canonical objects with required fields and transforms.',
-  },
-  {
-    name: 'CAPA External Reference Mapping',
-    file: 'external_reference_capa_mapping.template.yaml',
-    type: 'Mapping',
-    purpose: 'Map eQMS or CAPA API records into reference-only CAPA traceability objects.',
-  },
-  {
-    name: 'Supplier External Reference Mapping',
-    file: 'external_reference_supplier_mapping.template.yaml',
-    type: 'Mapping',
-    purpose: 'Map supplier master, qualification, scorecard, and risk evidence into canonical supplier records.',
-  },
-  {
-    name: 'Document External Reference Mapping',
-    file: 'external_reference_document_mapping.template.yaml',
-    type: 'Mapping',
-    purpose: 'Map document control or PLM document records into governed document references.',
-  },
-  {
-    name: 'Readiness Check',
-    file: 'readiness_check.template.yaml',
-    type: 'Readiness',
-    purpose: 'Define blocking or warning checks with expected evidence and remediation.',
-  },
-  {
-    name: 'Notification Smoke Fixture',
-    file: 'notification_smoke_fixture.template.yaml',
-    type: 'Notification',
-    purpose: 'Review tenant approval gates for guarded email and Teams delivery smoke checks.',
-  },
-  {
-    name: 'Integration Contract',
-    file: 'integration_contract.template.md',
-    type: 'Governance',
-    purpose: 'Document deployment profile, sources, mappings, readiness evidence, gaps, and approvals.',
-  },
-  {
-    name: 'Adapter Implementation',
-    file: 'adapter_implementation.template.md',
-    type: 'Adapter',
-    purpose: 'Guide live connector adapter methods, evidence capture, and failure handling.',
-  },
-]
-
-const statusIcon: Record<StatusLevel, typeof CheckCircle2> = {
-  pass: CheckCircle2,
-  warning: TriangleAlert,
-  blocking: ShieldCheck,
-}
-
-function createCrossIndustryTemplatePackage({
-  config,
-  controlledTemplates,
-  reports,
-}: {
-  config: AppConfig
-  controlledTemplates: BackendRecord<ControlledTemplatePayload>[]
-  reports: ReportCatalogItem[]
-}): CrossIndustryTemplatePackage {
-  const generatedAt = new Date().toISOString()
-  const activeControlledTemplates = controlledTemplates.filter((record) => record.payload.status === 'active')
-  const mappings = Object.entries(config.mappings).map(([mappingId, mapping]) => ({
-    mappingId,
-    object: mapping.object,
-    sourceConnector: mapping.source_connector,
-    sourceObject: mapping.source_object,
-    requiredFields: mapping.required,
-    traceabilityLinks: mapping.traceability_links?.length ?? 0,
-  }))
-  const industries = config.environment.deployment_profile.industries.map((industryId) => ({
-    id: industryId,
-    displayName: config.industries[industryId]?.display_name ?? industryId,
-    domains: config.industries[industryId]?.enabled_domains ?? [],
-  }))
-  const connectorTemplates = templateCatalog.filter((template) =>
-    ['Connector', 'Credential', 'Adapter'].includes(template.type),
-  )
-
-  return {
-    packageId: `cross_industry_template_package:${config.environment.environment.name}:${generatedAt}`,
-    generatedAt,
-    industries,
-    workflowDefinitions: config.workflowDefinitions,
-    mappings,
-    connectorTemplates,
-    reportCatalog: reports,
-    controlledTemplates: activeControlledTemplates,
-    summary: {
-      industries: industries.length,
-      workflows: Object.keys(config.workflowDefinitions).length,
-      mappings: mappings.length,
-      connectorTemplates: connectorTemplates.length,
-      reportCatalogItems: reports.length,
-      activeControlledTemplates: activeControlledTemplates.length,
-    },
-    evidence: `Cross-industry package assembled for ${industries.length} industry profile(s), ${Object.keys(config.workflowDefinitions).length} workflow definition(s), ${mappings.length} mapping profile(s), ${connectorTemplates.length} connector template(s), ${reports.length} report catalog item(s), and ${activeControlledTemplates.length} active controlled template(s).`,
-  }
-}
-
-function createTemplatePackageLifecycleExport({
-  approvals,
-  deliveries,
-  packagePayload,
-}: {
-  approvals: BackendRecord<CrossIndustryTemplatePackageApproval>[]
-  deliveries: BackendRecord<CrossIndustryTemplatePackageDelivery>[]
-  packagePayload: CrossIndustryTemplatePackage
-}): CrossIndustryTemplatePackageLifecycleExport {
-  const generatedAt = new Date().toISOString()
-  return {
-    exportId: `cross_industry_template_package_lifecycle:${packagePayload.packageId}:${generatedAt}`,
-    generatedAt,
-    package: packagePayload,
-    approvals,
-    deliveries,
-    summary: {
-      approvals: approvals.length,
-      deliveries: deliveries.length,
-      latestApprovalStatus: approvals[0]?.payload.status,
-      latestDeliveryStatus: deliveries[0]?.payload.status,
-    },
-    evidence: `${packagePayload.packageId} lifecycle export includes ${approvals.length} approval record(s), ${deliveries.length} delivery record(s), and package coverage for ${packagePayload.summary.industries} industry profile(s).`,
-  }
-}
-
-function templatePackageApprovalStatusLevel(status: CrossIndustryTemplatePackageApprovalStatus): StatusLevel {
-  if (status === 'rejected') return 'blocking'
-  if (status === 'draft' || status === 'approved_with_conditions') return 'warning'
-  return 'pass'
-}
-
 function titleize(value?: string | null) {
   return (value ?? 'unknown')
     .split('_')
@@ -426,113 +161,10 @@ function parseAllowedNextStages(value: string): AppConfig['workflowDefinitions']
     }, {})
 }
 
-function severityStatus(severity: string): StatusLevel {
-  if (severity === 'critical') return 'blocking'
-  if (severity === 'high' || severity === 'medium') return 'warning'
-  return 'pass'
-}
-
 function mostSevereStatus(statuses: StatusLevel[]): StatusLevel {
   if (statuses.includes('blocking')) return 'blocking'
   if (statuses.includes('warning')) return 'warning'
   return 'pass'
-}
-
-function readinessException(check: ReadinessCheck): ReadinessEvidenceException | null {
-  if (check.status === 'pass') return null
-  return {
-    id: check.id,
-    area: 'readiness',
-    status: check.status,
-    summary: check.label,
-    evidence: check.evidence,
-    remediation: check.remediation,
-    source: 'readiness_checks',
-  }
-}
-
-function reportFreshnessException(report: ReportCatalogItem): ReadinessEvidenceException | null {
-  if (report.refreshStatus === 'pass') return null
-  return {
-    id: `report:${report.id}:freshness`,
-    area: 'report_freshness',
-    status: report.refreshStatus,
-    summary: `${report.title} freshness is ${report.refreshStatus}.`,
-    evidence: report.freshnessEvidence,
-    remediation: `Refresh ${report.semanticModel} or update the catalog SLA if the report is intentionally paused.`,
-    source: report.id,
-  }
-}
-
-function reportFreshnessStatus(lastRefresh: string, maxAgeHours: number) {
-  const ageHours = (Date.now() - Date.parse(lastRefresh)) / 36e5
-  if (!Number.isFinite(ageHours)) {
-    return {
-      refreshStatus: 'blocking' as StatusLevel,
-      freshnessEvidence: 'Last refresh timestamp is missing or invalid.',
-    }
-  }
-  const roundedAge = Math.max(0, Math.round(ageHours * 10) / 10)
-  return {
-    refreshStatus: ageHours <= maxAgeHours ? 'pass' as StatusLevel : 'warning' as StatusLevel,
-    freshnessEvidence: `Last refreshed ${roundedAge} hour(s) ago; threshold is ${maxAgeHours} hour(s).`,
-  }
-}
-
-function evaluateReportPublishGate(report: ReportCatalogItem, canonicalObjects: CanonicalObject[]) {
-  const availableObjectTypes = new Set(canonicalObjects.map((object) => object.objectType))
-  const missingDependencies = report.sourceDependencies.filter(
-    (dependency) => !availableObjectTypes.has(dependency),
-  )
-  const blockers = [
-    report.refreshStatus === 'pass' ? null : `freshness status is ${report.refreshStatus}`,
-    missingDependencies.length > 0 ? `missing canonical dependencies: ${missingDependencies.join(', ')}` : null,
-  ].filter((item): item is string => Boolean(item))
-  return {
-    status: blockers.length > 0 ? 'blocking' as StatusLevel : 'pass' as StatusLevel,
-    evidence:
-      blockers.length > 0
-        ? `Publish blocked because ${blockers.join('; ')}.`
-        : `Publish gate passed with ${report.sourceDependencies.length} canonical dependency check(s) and fresh report data.`,
-  }
-}
-
-type ReportCatalogSaveAction = 'draft' | 'publish' | 'signoff'
-
-function reportApprovalStatusLevel(status: NonNullable<ReportCatalogItem['approvalStatus']>): StatusLevel {
-  if (status === 'approved') return 'pass'
-  if (status === 'rejected') return 'blocking'
-  return 'warning'
-}
-
-function reportApprovalLabel(status?: ReportCatalogItem['approvalStatus']) {
-  return status ? titleize(status) : 'Not signed'
-}
-
-function reportRouteLabel(stage?: ReportCatalogItem['reviewerRouteStage']) {
-  return stage ? titleize(stage) : 'Owner Review'
-}
-
-function traceabilityReviewStatusLevel(status: TraceabilityExportReviewStatus): StatusLevel {
-  if (status === 'approved') return 'pass'
-  if (status === 'rejected') return 'blocking'
-  return 'warning'
-}
-
-function traceabilityResponseStatusLevel(status: TraceabilityDeliveryResponseStatus): StatusLevel {
-  if (status === 'approved' || status === 'acknowledged') return 'pass'
-  if (status === 'rejected') return 'blocking'
-  return 'warning'
-}
-
-function traceabilityResponseLabel(status: TraceabilityDeliveryResponseStatus) {
-  return status === 'changes_requested' ? 'Changes requested' : titleize(status)
-}
-
-function traceabilityClosureRouteStatusLevel(status: TraceabilityResponseClosureRouteStatus): StatusLevel {
-  if (status === 'closed') return 'pass'
-  if (status === 'escalated') return 'blocking'
-  return 'warning'
 }
 
 function traceabilityClosureRouteLabel(status: TraceabilityResponseClosureRouteStatus) {
@@ -557,201 +189,6 @@ function closureSlaStatus(dueAt: string, closed: boolean, escalated = false): St
   return 'pass'
 }
 
-function externalReferenceDispositionStatusLevel(
-  status: ExternalReferenceLoadExceptionDispositionStatus,
-): StatusLevel {
-  if (status === 'blocked') return 'blocking'
-  if (status === 'retry_planned') return 'warning'
-  return 'pass'
-}
-
-function externalReferenceDispositionLabel(status: ExternalReferenceLoadExceptionDispositionStatus) {
-  if (status === 'retry_planned') return 'Retry planned'
-  return titleize(status)
-}
-
-function traceabilityRetentionLabel(retentionClass: TraceabilityExportRetentionClass) {
-  if (retentionClass === 'standard_7_year') return 'Standard 7 Year'
-  if (retentionClass === 'project_lifetime') return 'Project Lifetime'
-  return 'Legal Hold'
-}
-
-function traceabilityRetentionUntil(
-  retentionClass: TraceabilityExportRetentionClass,
-  signedAt: string,
-) {
-  if (retentionClass === 'legal_hold') return 'indefinite'
-  const date = new Date(signedAt)
-  date.setFullYear(date.getFullYear() + (retentionClass === 'standard_7_year' ? 7 : 15))
-  return date.toISOString()
-}
-
-function createReportApprovalNotification(report: ReportCatalogItem) {
-  const generatedAt = new Date().toISOString()
-  const recipients = report.routedReviewers?.length
-    ? report.routedReviewers
-    : [report.approvalReviewer, report.owner].filter((recipient): recipient is string => Boolean(recipient))
-  return {
-    notificationId: `report_notice:${report.id}:${generatedAt}`,
-    generatedAt,
-    type: 'report_catalog_approval',
-    reportId: report.id,
-    title: report.title,
-    owner: report.owner,
-    workspace: report.workspace,
-    semanticModel: report.semanticModel,
-    routeStage: report.reviewerRouteStage ?? 'owner_review',
-    recipients,
-    dueAt: report.routeDueAt ?? '',
-    approvalStatus: report.approvalStatus ?? 'pending',
-    publishStatus: report.publishStatus ?? 'draft',
-    freshnessStatus: report.refreshStatus,
-    summary: `${report.title} is routed for ${reportRouteLabel(report.reviewerRouteStage)} with ${reportApprovalLabel(report.approvalStatus)} approval state.`,
-    evidence: [
-      report.freshnessEvidence,
-      report.publishGateEvidence ?? 'Publish gate has not been run.',
-      report.approvalRationale || 'No reviewer rationale recorded.',
-    ],
-    sourceDependencies: report.sourceDependencies,
-  }
-}
-
-function createEvidenceApprovalNotification(packet: ReadinessEvidencePacket, approval: ReadinessEvidenceApproval) {
-  const generatedAt = new Date().toISOString()
-  return {
-    notificationId: `evidence_notice:${packet.packetId}:${generatedAt}`,
-    generatedAt,
-    type: 'readiness_evidence_approval',
-    packetId: packet.packetId,
-    environment: packet.environment,
-    status: packet.status,
-    approvalStatus: approval.status,
-    routeStage: approval.routeStage ?? 'quality_review',
-    recipients: approval.routedReviewers ?? [],
-    dueAt: approval.routeDueAt ?? '',
-    reviewer: approval.reviewer,
-    nextReviewAt: approval.nextReviewAt,
-    summary: `${packet.environment.toUpperCase()} evidence packet is routed for ${titleize(approval.routeStage ?? 'quality_review')} with ${evidenceApprovalLabel(approval.status)} state.`,
-    evidence: packet.evidence,
-    openExceptions: packet.openExceptions.map((exception) => ({
-      id: exception.id,
-      status: exception.status,
-      summary: exception.summary,
-      remediation: exception.remediation,
-    })),
-    dispositions: approval.dispositions,
-  }
-}
-
-function createTraceabilityExportNotification(
-  graphPackage: TraceabilityGraphExportPackage,
-  review: {
-    reviewer: string
-    status: TraceabilityExportReviewStatus
-    rationale: string
-    retentionClass: TraceabilityExportRetentionClass
-  },
-) {
-  const generatedAt = new Date().toISOString()
-  const reviewer = review.reviewer.trim() || 'TRACS traceability reviewer'
-  return {
-    notificationId: `traceability_export_notice:${graphPackage.packageId}:${generatedAt}`,
-    generatedAt,
-    type: 'traceability_export_review',
-    packageId: graphPackage.packageId,
-    selectedEventId: graphPackage.selectedEvent?.canonical.event_id ?? 'all',
-    routeStage: 'traceability_review',
-    recipients: [reviewer],
-    dueAt: '',
-    reviewer,
-    reviewStatus: review.status,
-    retentionClass: review.retentionClass,
-    summary: `Traceability export ${graphPackage.selectedEvent?.canonical.event_id ?? 'all'} is ready for reviewer handoff with ${titleize(review.status)} review state.`,
-    evidence: [
-      graphPackage.evidence,
-      `${graphPackage.coverage.filteredLinks} filtered link(s), ${graphPackage.graph.nodes.length} graph node(s), and ${graphPackage.coverage.evidencePackets} evidence packet(s).`,
-      review.rationale || 'No reviewer rationale recorded.',
-    ],
-    coverage: graphPackage.coverage,
-    filters: graphPackage.filters,
-    relationshipSummary: graphPackage.graph.relationshipSummary,
-    graphPackage,
-  }
-}
-
-function extractionQueueStatus(job: ExtractionJobPayload, runs: BackendRecord<ExtractionRunPayload>[]) {
-  const latestRun = runs
-    .filter((run) => run.payload.jobId === job.jobId)
-    .sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt))[0]
-  const nextRunMs = Date.parse(job.nextRunAt)
-  const isScheduled = job.status === 'active' && job.scheduleMode === 'scheduled_stub' && Number.isFinite(nextRunMs)
-  const isDue = isScheduled && nextRunMs <= Date.now()
-  if (latestRun?.payload.retryEligible) return 'retry eligible'
-  if (isDue) return 'due now'
-  if (isScheduled) return 'scheduled'
-  if (job.status === 'paused') return 'paused'
-  return 'manual'
-}
-
-function createExtractionQueueExport(
-  jobs: BackendRecord<ExtractionJobPayload>[],
-  runs: BackendRecord<ExtractionRunPayload>[],
-) {
-  const generatedAt = new Date().toISOString()
-  return {
-    exportId: `extraction_queue:${generatedAt}`,
-    generatedAt,
-    type: 'extraction_job_queue',
-    jobs: jobs.map((job) => {
-      const jobRuns = runs.filter((run) => run.payload.jobId === job.payload.jobId)
-      const latestRun = jobRuns
-        .slice()
-        .sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt))[0]
-      return {
-        jobId: job.payload.jobId,
-        name: job.payload.name,
-        connectorId: job.payload.connectorId,
-        status: job.payload.status,
-        scheduleMode: job.payload.scheduleMode,
-        scheduleCadence: job.payload.scheduleCadence,
-        nextRunAt: job.payload.nextRunAt,
-        queueStatus: extractionQueueStatus(job.payload, runs),
-        runCount: jobRuns.length,
-        latestRunStatus: latestRun?.payload.status ?? 'not_run',
-        retryEligible: latestRun?.payload.retryEligible ?? false,
-        evidence: job.payload.evidence,
-      }
-    }),
-  }
-}
-
-function notificationToDeliveryPayload(
-  source: NotificationDeliveryPayload['source'],
-  subject: string,
-  notification: {
-    notificationId: string
-    recipients: string[]
-    summary: string
-  } & Record<string, unknown>,
-): NotificationDeliveryPayload {
-  return {
-    deliveryId: `notification_delivery:${notification.notificationId}`,
-    generatedAt: new Date().toISOString(),
-    source,
-    channels: ['email', 'teams', 'sharepoint_folder'],
-    recipients: notification.recipients,
-    subject,
-    summary: notification.summary,
-    evidence: notification,
-  }
-}
-
-function notificationDeliveryRetryStatusLevel(status: NotificationDeliveryRetryStatus, retryStatus?: StatusLevel): StatusLevel {
-  if (status === 'blocked') return 'blocking'
-  if (status === 'executed') return retryStatus ?? 'warning'
-  return 'warning'
-}
-
 function closureSlaDeliveryAcknowledgementStatusLevel(
   status: ClosureSlaDeliveryAcknowledgementStatus,
 ): StatusLevel {
@@ -762,17 +199,6 @@ function closureSlaDeliveryAcknowledgementStatusLevel(
 
 function closureSlaDeliveryAcknowledgementLabel(status: ClosureSlaDeliveryAcknowledgementStatus) {
   if (status === 'changes_requested') return 'Changes requested'
-  return titleize(status)
-}
-
-function closureSlaFollowUpStatusLevel(status: ClosureSlaResponseFollowUpStatus): StatusLevel {
-  if (status === 'closed') return 'pass'
-  if (status === 'escalated') return 'blocking'
-  return 'warning'
-}
-
-function closureSlaFollowUpLabel(status: ClosureSlaResponseFollowUpStatus) {
-  if (status === 'in_progress') return 'In progress'
   return titleize(status)
 }
 
@@ -866,18 +292,6 @@ function deliverySourceLabel(source: NotificationDeliveryPayload['source']) {
   return titleize(source)
 }
 
-function notificationApprovalStatusLevel(status: NotificationLiveChannelApprovalStatus): StatusLevel {
-  if (status === 'approved') return 'pass'
-  if (status === 'rejected') return 'blocking'
-  return 'warning'
-}
-
-function notificationRenewalClosureStatusLevel(status: NotificationApprovalRenewalClosureStatus): StatusLevel {
-  if (status === 'closed') return 'pass'
-  if (status === 'rejected') return 'blocking'
-  return 'warning'
-}
-
 function notificationRenewalClosureLabel(status: NotificationApprovalRenewalClosureStatus) {
   return status === 'closed_with_conditions' ? 'Closed with conditions' : titleize(status)
 }
@@ -927,26 +341,6 @@ function notificationApprovalRenewalDueAt(approval?: BackendRecord<NotificationL
   return dueAt.toISOString().slice(0, 10)
 }
 
-function createNotificationApprovalRenewalNotification(route: NotificationApprovalRenewalRoute) {
-  return {
-    notificationId: `notification_approval_renewal_notice:${route.routeId}`,
-    generatedAt: new Date().toISOString(),
-    type: 'notification_approval_renewal',
-    routeId: route.routeId,
-    approvalId: route.approvalId,
-    routeStage: route.routeStage,
-    recipients: route.routedReviewers,
-    dueAt: route.dueAt,
-    summary: `Notification live-channel approval renewal is routed for ${titleize(route.routeStage)} with ${route.expiryStatus} expiry status.`,
-    evidence: [
-      route.evidence,
-      `Approval expires ${route.approvalExpiresAt || 'without a retained expiry date'}.`,
-      route.rationale,
-    ],
-    route,
-  }
-}
-
 function postgresCutoverApprovalStatusLevel(status: PostgresCutoverApprovalStatus, gateStatus: StatusLevel): StatusLevel {
   if (status === 'rejected') return 'blocking'
   if (status === 'approved') return gateStatus
@@ -958,21 +352,9 @@ function postgresCutoverApprovalLabel(status: PostgresCutoverApprovalStatus) {
   return status === 'approved_with_conditions' ? 'Approved with conditions' : titleize(status)
 }
 
-function postgresCutoverAcknowledgementStatusLevel(status: PostgresCutoverAcknowledgementStatus): StatusLevel {
-  if (status === 'acknowledged') return 'pass'
-  if (status === 'rejected') return 'blocking'
-  return 'warning'
-}
-
 function postgresCutoverAcknowledgementLabel(status: PostgresCutoverAcknowledgementStatus) {
   if (status === 'acknowledged_with_actions') return 'Acknowledged with actions'
   return titleize(status)
-}
-
-function postgresCutoverOwnerReminderStatusLevel(status: PostgresCutoverOwnerReminderStatus): StatusLevel {
-  if (status === 'closed' || status === 'sent') return 'pass'
-  if (status === 'deferred') return 'blocking'
-  return 'warning'
 }
 
 function postgresCutoverOwnerReminderLabel(status: PostgresCutoverOwnerReminderStatus) {
@@ -992,24 +374,6 @@ function postgresCutoverReminderClosureStatusLevel(status: PostgresCutoverRemind
 function postgresCutoverReminderClosureLabel(status: PostgresCutoverReminderClosureStatus) {
   if (status === 'closed_with_actions') return 'Closed with actions'
   return titleize(status)
-}
-
-function postgresCutoverClosurePackageStatus({
-  acknowledgement,
-  closure,
-  requiredActions,
-}: {
-  acknowledgement?: PostgresCutoverAcknowledgement
-  closure?: PostgresCutoverReminderClosure
-  requiredActions: string[]
-}): StatusLevel {
-  if (!closure || closure.status === 'rejected') return 'blocking'
-  if (acknowledgement?.productionReadiness === 'not_ready') return 'blocking'
-  if (closure.status === 'deferred') return 'warning'
-  if (requiredActions.length > 0) return 'warning'
-  if (closure.status === 'closed_with_actions') return 'warning'
-  if (acknowledgement?.productionReadiness === 'ready_with_conditions') return 'warning'
-  return 'pass'
 }
 
 function postgresCutoverFinalHandoffAcknowledgementStatusLevel(
@@ -1087,223 +451,6 @@ function evaluatePostgresCutoverGates({
     status: mostSevereStatus(gates.map((gate) => gate.status)),
   }
 }
-
-function notificationApprovalExpiresAt(approvedAt: string) {
-  const date = new Date(approvedAt)
-  date.setDate(date.getDate() + 90)
-  return date.toISOString()
-}
-
-function defaultEvidenceApproval(): ReadinessEvidenceApproval {
-  return {
-    status: 'draft',
-    reviewer: '',
-    routeStage: 'quality_review',
-    routedReviewers: [],
-    routeDueAt: '',
-    nextReviewAt: '',
-    rationale: '',
-    dispositions: [],
-    auditHistory: [],
-  }
-}
-
-function evidenceApprovalStatusLevel(status: ReadinessEvidenceApprovalStatus): StatusLevel {
-  if (status === 'approved') return 'pass'
-  if (status === 'rejected') return 'blocking'
-  return 'warning'
-}
-
-function evidenceApprovalLabel(status: ReadinessEvidenceApprovalStatus) {
-  return titleize(status)
-}
-
-function evidenceApprovalAuditAction(status: ReadinessEvidenceApprovalStatus) {
-  if (status === 'submitted') return 'submitted'
-  if (status === 'approved') return 'approved'
-  if (status === 'approved_with_exceptions') return 'approved_with_exceptions'
-  if (status === 'rejected') return 'rejected'
-  return 'updated'
-}
-
-function createReadinessEvidencePacket({
-  approval,
-  backendRecords,
-  environment,
-  readinessChecks,
-  readinessSummary,
-  reports,
-}: {
-  approval?: ReadinessEvidenceApproval
-  backendRecords: BackendRecord[]
-  environment: string
-  readinessChecks: ReadinessCheck[]
-  readinessSummary: Record<StatusLevel, number>
-  reports: ReportCatalogItem[]
-}): ReadinessEvidencePacket {
-  const canonicalLoads = backendRecords.filter(
-    (record): record is BackendRecord<CanonicalLoadResult> => record.kind === 'canonical_load',
-  )
-  const openExceptions = [
-    ...readinessChecks.map(readinessException),
-    ...reports.map(reportFreshnessException),
-  ].filter((item): item is ReadinessEvidenceException => Boolean(item))
-  const reportFreshness = {
-    total: reports.length,
-    pass: reports.filter((report) => report.refreshStatus === 'pass').length,
-    warning: reports.filter((report) => report.refreshStatus === 'warning').length,
-    blocking: reports.filter((report) => report.refreshStatus === 'blocking').length,
-    items: reports,
-  }
-  const status = mostSevereStatus([
-    ...readinessChecks.map((check) => check.status),
-    ...reports.map((report) => report.refreshStatus),
-    canonicalLoads.length > 0 ? 'pass' : 'warning',
-  ])
-  const generatedAt = new Date().toISOString()
-
-  return {
-    packetId: `readiness_evidence:${environment}:${generatedAt}`,
-    generatedAt,
-    environment,
-    status,
-    summary: {
-      readiness: readinessSummary,
-      canonicalLoads: canonicalLoads.length,
-      reportCatalogItems: reports.length,
-      openExceptions: openExceptions.length,
-    },
-    canonicalLoads,
-    reportFreshness,
-    openExceptions,
-    approval: approval ?? defaultEvidenceApproval(),
-    evidence: `${canonicalLoads.length} canonical load record(s), ${reports.length} report freshness item(s), and ${openExceptions.length} open exception(s) packaged for readiness review.`,
-  }
-}
-
-function canonicalLoadProfileForConnector(
-  connectorId: string,
-  connector: AppConfig['connectors']['connectors'][string],
-  mapping: AppConfig['mappings'][string],
-) {
-  const mappedObject = connector.objects?.find((object) => object.target === mapping.object)
-  const firstObject = connector.objects?.[0]
-  return {
-    mappingId: mapping.object,
-    sourceConnector: connectorId,
-    connectorType: connector.type,
-    sourceObject:
-      mappedObject?.source ??
-      firstObject?.source ??
-      connector.sheet ??
-      connector.workbook ??
-      mapping.source_object,
-    targetObject: mappedObject?.target ?? firstObject?.target ?? connector.target ?? mapping.object,
-  }
-}
-
-function schemaForMappingProfile(mappingId: string, mapping: AppConfig['mappings'][string], csvText: string) {
-  if (mappingId === 'quality_event') return inferCsvSchema(csvText)
-  const sourceFields = Array.from(new Set(Object.values(mapping.fields)))
-  return {
-    rowCount: 1,
-    columns: sourceFields.map((field) => ({
-      name: field,
-      nonEmptyCount: 1,
-      sampleValues: [`${field}_sample`],
-      inferredType:
-        field.endsWith('_at') || field.includes('date') || field.includes('due')
-          ? 'date'
-          : field.includes('count') || field.includes('rate') || field.endsWith('_ppm')
-            ? 'number'
-            : 'text',
-    })),
-  } satisfies CsvSchemaInference
-}
-
-function schemaFromExternalPreview(
-  mappingId: string,
-  mapping: AppConfig['mappings'][string],
-  metadata?: ConnectorSourceMetadata,
-  preview?: ConnectorPreviewResult,
-) {
-  const metadataColumns = metadata?.columns ?? []
-  const hasLiveRows = (metadata?.rowCount ?? 0) > 0 || (preview?.returnedRows ?? 0) > 0
-  const hasCompleteMetadata = metadataColumns.length >= Object.keys(mapping.fields).length
-  if (metadataColumns.length > 0 && (hasLiveRows || hasCompleteMetadata)) {
-    return {
-      rowCount: metadata?.rowCount ?? 0,
-      columns: metadataColumns,
-    } satisfies CsvSchemaInference
-  }
-
-  const hasCompletePreview = (preview?.columns.length ?? 0) >= Object.keys(mapping.fields).length
-  if (preview?.columns.length && ((preview?.returnedRows ?? 0) > 0 || hasCompletePreview)) {
-    return {
-      rowCount: preview.rowCount,
-      columns: preview.columns.map((column) => {
-        const values = preview.rows.map((row) => row[column] ?? '').filter(Boolean)
-        return {
-          name: column,
-          nonEmptyCount: values.length,
-          sampleValues: Array.from(new Set(values)).slice(0, 3),
-          inferredType:
-            values.some((value) => !Number.isNaN(Number(value)))
-              ? 'number'
-              : values.some((value) => /^\d{4}-\d{2}-\d{2}/.test(value))
-                ? 'date'
-                : 'text',
-        }
-      }),
-    } satisfies CsvSchemaInference
-  }
-
-  return schemaForMappingProfile(mappingId, mapping, '')
-}
-
-
-void [
-  navItems,
-  preferredDomainOrder,
-  domainDisplayNames,
-  statusIcon,
-  createCrossIndustryTemplatePackage,
-  createTemplatePackageLifecycleExport,
-  templatePackageApprovalStatusLevel,
-  severityStatus,
-  reportFreshnessStatus,
-  evaluateReportPublishGate,
-  reportApprovalStatusLevel,
-  traceabilityReviewStatusLevel,
-  traceabilityResponseStatusLevel,
-  traceabilityResponseLabel,
-  traceabilityClosureRouteStatusLevel,
-  externalReferenceDispositionStatusLevel,
-  externalReferenceDispositionLabel,
-  traceabilityRetentionLabel,
-  traceabilityRetentionUntil,
-  createReportApprovalNotification,
-  createEvidenceApprovalNotification,
-  createTraceabilityExportNotification,
-  createExtractionQueueExport,
-  notificationToDeliveryPayload,
-  notificationDeliveryRetryStatusLevel,
-  closureSlaFollowUpStatusLevel,
-  closureSlaFollowUpLabel,
-  notificationApprovalStatusLevel,
-  notificationRenewalClosureStatusLevel,
-  createNotificationApprovalRenewalNotification,
-  postgresCutoverAcknowledgementStatusLevel,
-  postgresCutoverOwnerReminderStatusLevel,
-  postgresCutoverClosurePackageStatus,
-  notificationApprovalExpiresAt,
-  evidenceApprovalStatusLevel,
-  evidenceApprovalAuditAction,
-  createReadinessEvidencePacket,
-  canonicalLoadProfileForConnector,
-  schemaFromExternalPreview,
-]
-export type BackendUnusedReportCatalogSaveAction = ReportCatalogSaveAction
 
 export function BackendPersistenceView({
   adapterContracts,
