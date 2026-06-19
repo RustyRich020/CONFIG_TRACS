@@ -172,6 +172,10 @@ This prototype now includes the first practical build phases for TRACS:
 - Adds connector-backed canonical load runner visibility, enriched traceability graph export packages, and workflow definition draft validation/promotion exports.
 - Adds cross-industry template package assembly from workflow definitions, mapping profiles, connector templates, report catalog entries, and active controlled templates.
 - Retains workflow-instance export packages as formal backend records with reviewer, retention class, lineage coverage, parent linkage, audit history, and version evidence.
+- Extracts the workflow lineage retention panel into a focused frontend component while preserving the existing Backend workspace behavior.
+- Captures cross-industry template package approval records with reviewer rationale, approval status, package snapshot, audit history, and workflow metadata.
+- Captures cross-industry template package delivery handoff records linked to the latest approval record when available.
+- Adds retained workflow export package search, status filtering, lifecycle counts, covered-record totals, and missing-parent totals in the Backend workspace.
 - Exports Closure SLA follow-up closure packages with retained actions, superseded routes, and notification evidence.
 - Delivers Closure SLA follow-up closure packages to governance reviewers with retained delivery evidence.
 - Captures Closure SLA follow-up closure package delivery acknowledgements with reviewer response and retained actions.
@@ -328,6 +332,6 @@ npm run build
 
 Use the template package and workflow lineage paths while consolidating governance workflows into reusable product infrastructure:
 
-1. Split large frontend surfaces into focused components to reduce bundle size and make future workflow work safer.
-2. Add package approval records and delivery only after package assembly is reviewed.
-3. Add retained-package search and filtering after retention records accumulate across workflows.
+1. Continue splitting large frontend surfaces into focused Backend, Templates, and Traceability components to reduce bundle size.
+2. Add retained-package detail drawers or drilldowns once package records accumulate across workflows.
+3. Add package approval/delivery export bundles for external implementation teams.

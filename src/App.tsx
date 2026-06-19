@@ -32,6 +32,7 @@ import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 import { adapterContracts } from './backendContracts'
 import { backendClient } from './backendClient'
+import { WorkflowLineageRetentionPanel } from './components/WorkflowLineageRetentionPanel'
 import { loadAppConfig } from './configLoader'
 import {
   createAuditEvent,
@@ -105,6 +106,9 @@ import type {
   ControlledTemplatePayload,
   ControlledTemplateStatus,
   CrossIndustryTemplatePackage,
+  CrossIndustryTemplatePackageApproval,
+  CrossIndustryTemplatePackageApprovalStatus,
+  CrossIndustryTemplatePackageDelivery,
   LocalAsset,
   ConnectorPreviewResult,
   ConnectorSourceMetadata,
@@ -371,6 +375,12 @@ function createCrossIndustryTemplatePackage({
     },
     evidence: `Cross-industry package assembled for ${industries.length} industry profile(s), ${Object.keys(config.workflowDefinitions).length} workflow definition(s), ${mappings.length} mapping profile(s), ${connectorTemplates.length} connector template(s), ${reports.length} report catalog item(s), and ${activeControlledTemplates.length} active controlled template(s).`,
   }
+}
+
+function templatePackageApprovalStatusLevel(status: CrossIndustryTemplatePackageApprovalStatus): StatusLevel {
+  if (status === 'rejected') return 'blocking'
+  if (status === 'draft' || status === 'approved_with_conditions') return 'warning'
+  return 'pass'
 }
 
 function titleize(value?: string | null) {
@@ -1448,6 +1458,118 @@ function App() {
       'update',
       `${templateRecord.payload.templateId} updated as controlled template v${saved.version}.`,
     )
+  }
+
+  async function saveTemplatePackageApproval({
+    packagePayload,
+    rationale,
+    reviewer,
+    status,
+  }: {
+    packagePayload: CrossIndustryTemplatePackage
+    rationale: string
+    reviewer: string
+    status: CrossIndustryTemplatePackageApprovalStatus
+  }) {
+    const reviewedAt = new Date().toISOString()
+    const reviewerName = reviewer.trim() || 'Template Governance Reviewer'
+    const approvalStatus = templatePackageApprovalStatusLevel(status)
+    const payload: CrossIndustryTemplatePackageApproval = {
+      approvalId: `cross_industry_template_package_approval:${packagePayload.packageId}:${reviewedAt}`,
+      packageId: packagePayload.packageId,
+      reviewedAt,
+      reviewer: reviewerName,
+      status,
+      rationale: rationale.trim() || 'No approval rationale recorded.',
+      package: packagePayload,
+      auditHistory: [
+        {
+          action: 'reviewed_cross_industry_template_package',
+          actor: reviewerName,
+          timestamp: reviewedAt,
+          status,
+          summary: `${reviewerName} reviewed ${packagePayload.packageId} as ${titleize(status)}.`,
+        },
+      ],
+      evidence: `${packagePayload.evidence} Reviewed by ${reviewerName} as ${titleize(status)}.`,
+    }
+    const saved = await backendClient.saveRecord({
+      kind: 'cross_industry_template_package_approval',
+      label: packagePayload.packageId,
+      status: approvalStatus,
+      summary: payload.evidence,
+      payload,
+      workflow: {
+        metadataVersion: 'workflow_metadata_v1',
+        workflowType: 'cross_industry_template_package',
+        stage: 'package',
+        owner: reviewerName,
+      },
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'cross_industry_template_package_approval',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record('template', 'approve_package', `Template package approval saved as backend record v${saved.version}.`)
+    return saved
+  }
+
+  async function saveTemplatePackageDelivery({
+    approvalRecord,
+    channel,
+    packagePayload,
+    recipients,
+  }: {
+    approvalRecord?: BackendRecord<CrossIndustryTemplatePackageApproval>
+    channel: CrossIndustryTemplatePackageDelivery['channel']
+    packagePayload: CrossIndustryTemplatePackage
+    recipients: string[]
+  }) {
+    const deliveredAt = new Date().toISOString()
+    const normalizedRecipients = recipients.map((recipient) => recipient.trim()).filter(Boolean)
+    const payload: CrossIndustryTemplatePackageDelivery = {
+      deliveryId: `cross_industry_template_package_delivery:${packagePayload.packageId}:${deliveredAt}`,
+      packageId: packagePayload.packageId,
+      approvalRecordId: approvalRecord?.id,
+      deliveredAt,
+      channel,
+      recipients: normalizedRecipients.length > 0 ? normalizedRecipients : ['Template Owner'],
+      status: approvalRecord?.status === 'blocking' ? 'blocked' : 'delivered',
+      package: packagePayload,
+      evidence: `${packagePayload.packageId} delivered to ${normalizedRecipients.length || 1} recipient(s) through ${titleize(channel)}${approvalRecord ? ` after approval record ${approvalRecord.id}` : ''}.`,
+    }
+    const saved = await backendClient.saveRecord({
+      kind: 'cross_industry_template_package_delivery',
+      label: packagePayload.packageId,
+      status: payload.status === 'blocked' ? 'blocking' : 'pass',
+      summary: payload.evidence,
+      payload,
+      workflow: {
+        metadataVersion: 'workflow_metadata_v1',
+        workflowType: 'cross_industry_template_package',
+        stage: 'delivery',
+        parentRecordId: approvalRecord?.id,
+        owner: payload.recipients.join(', '),
+      },
+    })
+    await refreshBackend()
+    saveVersion(
+      createSavedVersion({
+        kind: 'cross_industry_template_package_delivery',
+        label: saved.label,
+        status: saved.status,
+        summary: saved.summary,
+        payload: saved,
+      }),
+    )
+    record('template', 'deliver_package', `Template package delivery saved as backend record v${saved.version}.`)
+    return saved
   }
 
   function deploymentReadinessStatus(): StatusLevel {
@@ -8239,11 +8361,21 @@ function App() {
           />
         ) : activeView === 'Templates' ? (
           <TemplatesView
+            approvalRecords={backendRecords.filter(
+              (record): record is BackendRecord<CrossIndustryTemplatePackageApproval> =>
+                record.kind === 'cross_industry_template_package_approval',
+            )}
             assetRegistry={assetRegistry}
             config={config}
+            deliveryRecords={backendRecords.filter(
+              (record): record is BackendRecord<CrossIndustryTemplatePackageDelivery> =>
+                record.kind === 'cross_industry_template_package_delivery',
+            )}
             onActivateTemplate={activateTemplateRecord}
             onPromoteAsset={promoteTemplateAsset}
             onRefreshAssets={refreshAssetRegistry}
+            onSavePackageApproval={saveTemplatePackageApproval}
+            onSavePackageDelivery={saveTemplatePackageDelivery}
             onUpdateTemplate={updateTemplateRecord}
             reports={reportCatalog}
             templateRecords={templateRecords}
@@ -10900,10 +11032,33 @@ function BackendPersistenceView({
     (record): record is BackendRecord<WorkflowInstanceExportRetention> =>
       record.kind === 'workflow_instance_export_retention',
   )
-  const latestWorkflowInstanceRetention = workflowInstanceRetentionRecords[0]
   const [workflowRetentionReviewer, setWorkflowRetentionReviewer] = useState('Governance Reviewer')
   const [workflowRetentionClass, setWorkflowRetentionClass] =
     useState<TraceabilityExportRetentionClass>('standard_7_year')
+  const [retainedPackageSearch, setRetainedPackageSearch] = useState('')
+  const [retainedPackageStatusFilter, setRetainedPackageStatusFilter] = useState<StatusLevel | 'all'>('all')
+  const filteredWorkflowInstanceRetentionRecords = workflowInstanceRetentionRecords.filter((record) => {
+    const searchable = [
+      record.label,
+      record.summary,
+      record.payload.workflowLabel,
+      record.payload.reviewer,
+      record.payload.packageId,
+    ].join(' ').toLowerCase()
+    const matchesSearch = searchable.includes(retainedPackageSearch.trim().toLowerCase())
+    const matchesStatus = retainedPackageStatusFilter === 'all' || record.status === retainedPackageStatusFilter
+    return matchesSearch && matchesStatus
+  })
+  const retentionLifecycleSummary = workflowInstanceRetentionRecords.reduce(
+    (summary, record) => {
+      summary.total += 1
+      summary[record.status] += 1
+      summary.records += record.payload.coverage.records
+      summary.missingParents += record.payload.coverage.missingParentReferences
+      return summary
+    },
+    { total: 0, pass: 0, warning: 0, blocking: 0, records: 0, missingParents: 0 },
+  )
   const workflowDefinitionEntries = Object.entries(workflowDefinitions)
   const initialWorkflowEditorKey = workflowDefinitionEntries[0]?.[0] ?? ''
   const [workflowEditorKey, setWorkflowEditorKey] = useState(initialWorkflowEditorKey)
@@ -13597,95 +13752,70 @@ function BackendPersistenceView({
             )}
           </article>
         </div>
+        <WorkflowLineageRetentionPanel
+          instance={selectedWorkflowInstance}
+          instanceCount={governanceWorkflowLineage.instances.length}
+          missingParentReferenceCount={governanceWorkflowLineage.orphanedParentIds.length}
+          onExport={exportSelectedWorkflowInstance}
+          onRetain={retainSelectedWorkflowInstanceExport}
+          retentionClass={workflowRetentionClass}
+          retentionRecords={workflowInstanceRetentionRecords}
+          reviewer={workflowRetentionReviewer}
+          setRetentionClass={setWorkflowRetentionClass}
+          setReviewer={setWorkflowRetentionReviewer}
+        />
         <div className="workflow-lineage-panel">
           <div className="workflow-lineage-header">
             <div>
-              <strong>Workflow Instance Lineage</strong>
-              <span>
-                {governanceWorkflowLineage.instances.length} workflow instance(s), {governanceWorkflowLineage.orphanedParentIds.length} missing parent reference(s).
-              </span>
+              <strong>Retained Package Catalog</strong>
+              <span>Search retained workflow exports and review lifecycle coverage before approval or handoff.</span>
             </div>
-            <button
-              className="secondary-action compact"
-              disabled={!selectedWorkflowInstance}
-              onClick={exportSelectedWorkflowInstance}
-              type="button"
-            >
-              Export instance
-            </button>
-            <button
-              className="primary-action compact"
-              disabled={!selectedWorkflowInstance}
-              onClick={retainSelectedWorkflowInstanceExport}
-              type="button"
-            >
-              Retain export
-            </button>
+            <div className="toolbar-actions">
+              <input
+                aria-label="Search retained packages"
+                placeholder="Search reviewer, workflow, package"
+                value={retainedPackageSearch}
+                onChange={(event) => setRetainedPackageSearch(event.target.value)}
+              />
+              <select
+                aria-label="Filter retained package status"
+                value={retainedPackageStatusFilter}
+                onChange={(event) => setRetainedPackageStatusFilter(event.target.value as StatusLevel | 'all')}
+              >
+                <option value="all">All statuses</option>
+                <option value="pass">Pass</option>
+                <option value="warning">Warning</option>
+                <option value="blocking">Blocking</option>
+              </select>
+            </div>
           </div>
-          {selectedWorkflowInstance ? (
-            <>
-              <div className="metadata-grid compact">
-                <Metadata label="Selected instance" value={selectedWorkflowInstance.workflowLabel} />
-                <Metadata label="Owner" value={selectedWorkflowInstance.owner} />
-                <Metadata label="Records" value={String(selectedWorkflowInstance.nodes.length)} />
-                <Metadata
-                  label="Missing parents"
-                  value={
-                    selectedWorkflowInstance.missingParentRecordIds.length > 0
-                      ? selectedWorkflowInstance.missingParentRecordIds.join(', ')
-                      : 'None'
-                  }
-                />
-                <Metadata
-                  label="Retained exports"
-                  value={String(workflowInstanceRetentionRecords.length)}
-                />
-                <Metadata
-                  label="Latest retention"
-                  value={
-                    latestWorkflowInstanceRetention
-                      ? new Date(latestWorkflowInstanceRetention.payload.retainedAt).toLocaleString()
-                      : 'Not retained'
-                  }
-                />
-              </div>
-              <div className="form-grid compact-form">
-                <label>
-                  <span>Retention reviewer</span>
-                  <input
-                    value={workflowRetentionReviewer}
-                    onChange={(event) => setWorkflowRetentionReviewer(event.target.value)}
-                  />
-                </label>
-                <label>
-                  <span>Retention class</span>
-                  <select
-                    value={workflowRetentionClass}
-                    onChange={(event) =>
-                      setWorkflowRetentionClass(event.target.value as TraceabilityExportRetentionClass)
-                    }
-                  >
-                    <option value="standard_7_year">Standard 7 year</option>
-                    <option value="project_lifetime">Project lifetime</option>
-                    <option value="legal_hold">Legal hold</option>
-                  </select>
-                </label>
-              </div>
-              <div className="workflow-lineage-path">
-                {selectedWorkflowInstance.nodes.map((node) => (
-                  <div className="workflow-lineage-node" key={node.item.record.id}>
-                    <span>{node.item.stageLabel}</span>
-                    <strong>{node.item.record.label}</strong>
-                    <small>
-                      {node.parentRecordId ? `Parent ${node.parentRecordId}` : 'Root record'} / {node.childRecordIds.length} child link(s)
-                    </small>
-                    {node.missingParent ? <em>Missing parent record</em> : null}
+          <div className="metadata-grid compact">
+            <Metadata label="Retained packages" value={String(retentionLifecycleSummary.total)} />
+            <Metadata label="Pass" value={String(retentionLifecycleSummary.pass)} />
+            <Metadata label="Warning" value={String(retentionLifecycleSummary.warning)} />
+            <Metadata label="Blocking" value={String(retentionLifecycleSummary.blocking)} />
+            <Metadata label="Covered records" value={String(retentionLifecycleSummary.records)} />
+            <Metadata label="Missing parents" value={String(retentionLifecycleSummary.missingParents)} />
+          </div>
+          {filteredWorkflowInstanceRetentionRecords.length > 0 ? (
+            <div className="backend-record-list">
+              {filteredWorkflowInstanceRetentionRecords.slice(0, 8).map((record) => (
+                <div className="backend-record-row" key={record.id}>
+                  <div>
+                    <strong>{record.payload.workflowLabel}</strong>
+                    <span>
+                      {record.payload.reviewer} / {record.payload.coverage.records} retained record(s) / {record.payload.retention.evidence}
+                    </span>
                   </div>
-                ))}
-              </div>
-            </>
+                  <div className="queue-record-side">
+                    <StatusChip status={record.status} label={titleize(record.status)} />
+                    <span>{new Date(record.payload.retainedAt).toLocaleString()}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : (
-            <div className="empty-state compact">Workflow lineage appears after records with workflow metadata or governance kinds are stored.</div>
+            <div className="empty-state compact">No retained workflow export packages match the current filters.</div>
           )}
         </div>
         <div className="workflow-definition-editor-panel">
@@ -24219,20 +24349,38 @@ function MappingStudio({
 }
 
 function TemplatesView({
+  approvalRecords,
   assetRegistry,
   config,
+  deliveryRecords,
   onActivateTemplate,
   onPromoteAsset,
   onRefreshAssets,
+  onSavePackageApproval,
+  onSavePackageDelivery,
   onUpdateTemplate,
   reports,
   templateRecords,
 }: {
+  approvalRecords: BackendRecord<CrossIndustryTemplatePackageApproval>[]
   assetRegistry: AssetRegistry | null
   config: AppConfig
+  deliveryRecords: BackendRecord<CrossIndustryTemplatePackageDelivery>[]
   onActivateTemplate: (templateRecord: BackendRecord<ControlledTemplatePayload>) => void
   onPromoteAsset: (asset: LocalAsset) => void
   onRefreshAssets: () => void
+  onSavePackageApproval: (request: {
+    packagePayload: CrossIndustryTemplatePackage
+    rationale: string
+    reviewer: string
+    status: CrossIndustryTemplatePackageApprovalStatus
+  }) => void
+  onSavePackageDelivery: (request: {
+    approvalRecord?: BackendRecord<CrossIndustryTemplatePackageApproval>
+    channel: CrossIndustryTemplatePackageDelivery['channel']
+    packagePayload: CrossIndustryTemplatePackage
+    recipients: string[]
+  }) => void
   onUpdateTemplate: (
     templateRecord: BackendRecord<ControlledTemplatePayload>,
     updates: Partial<ControlledTemplatePayload>,
@@ -24277,6 +24425,19 @@ function TemplatesView({
   const selectedTemplate =
     latestTemplateRecords.find((record) => record.id === selectedTemplateId) ??
     latestTemplateRecords[0]
+  const latestPackageApproval = approvalRecords[0]
+  const latestPackageDelivery = deliveryRecords[0]
+  const [packageReviewer, setPackageReviewer] = useState('Template Governance Reviewer')
+  const [packageApprovalStatus, setPackageApprovalStatus] =
+    useState<CrossIndustryTemplatePackageApprovalStatus>('approved')
+  const [packageApprovalRationale, setPackageApprovalRationale] = useState(
+    'Reviewed package coverage and approved for implementation handoff.',
+  )
+  const [packageDeliveryRecipients, setPackageDeliveryRecipients] = useState(
+    'Implementation Owner, Governance Reviewer',
+  )
+  const [packageDeliveryChannel, setPackageDeliveryChannel] =
+    useState<CrossIndustryTemplatePackageDelivery['channel']>('implementation_handoff')
   const crossIndustryPackage = useMemo(
     () =>
       createCrossIndustryTemplatePackage({
@@ -24289,6 +24450,24 @@ function TemplatesView({
 
   function downloadCrossIndustryPackage() {
     downloadJson('tracs-cross-industry-template-package.json', crossIndustryPackage)
+  }
+
+  function savePackageApproval() {
+    onSavePackageApproval({
+      packagePayload: crossIndustryPackage,
+      rationale: packageApprovalRationale,
+      reviewer: packageReviewer,
+      status: packageApprovalStatus,
+    })
+  }
+
+  function savePackageDelivery() {
+    onSavePackageDelivery({
+      approvalRecord: latestPackageApproval,
+      channel: packageDeliveryChannel,
+      packagePayload: crossIndustryPackage,
+      recipients: listFromText(packageDeliveryRecipients),
+    })
   }
 
   return (
@@ -24331,6 +24510,69 @@ function TemplatesView({
           <button className="primary-action" onClick={downloadCrossIndustryPackage} type="button">
             <Download size={15} />
             Download Package
+          </button>
+        </div>
+        <div className="metadata-grid compact">
+          <Metadata label="Approvals" value={String(approvalRecords.length)} />
+          <Metadata
+            label="Latest approval"
+            value={latestPackageApproval ? titleize(latestPackageApproval.payload.status) : 'Not reviewed'}
+          />
+          <Metadata label="Deliveries" value={String(deliveryRecords.length)} />
+          <Metadata
+            label="Latest delivery"
+            value={latestPackageDelivery ? titleize(latestPackageDelivery.payload.channel) : 'Not delivered'}
+          />
+        </div>
+        <div className="form-grid compact-form">
+          <label>
+            <span>Approval reviewer</span>
+            <input value={packageReviewer} onChange={(event) => setPackageReviewer(event.target.value)} />
+          </label>
+          <label>
+            <span>Approval status</span>
+            <select
+              value={packageApprovalStatus}
+              onChange={(event) => setPackageApprovalStatus(event.target.value as CrossIndustryTemplatePackageApprovalStatus)}
+            >
+              <option value="draft">Draft</option>
+              <option value="approved">Approved</option>
+              <option value="approved_with_conditions">Approved with conditions</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </label>
+          <label className="wide-field">
+            <span>Approval rationale</span>
+            <input
+              value={packageApprovalRationale}
+              onChange={(event) => setPackageApprovalRationale(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>Delivery channel</span>
+            <select
+              value={packageDeliveryChannel}
+              onChange={(event) => setPackageDeliveryChannel(event.target.value as CrossIndustryTemplatePackageDelivery['channel'])}
+            >
+              <option value="implementation_handoff">Implementation handoff</option>
+              <option value="governance_review">Governance review</option>
+              <option value="download">Download</option>
+            </select>
+          </label>
+          <label>
+            <span>Delivery recipients</span>
+            <input
+              value={packageDeliveryRecipients}
+              onChange={(event) => setPackageDeliveryRecipients(event.target.value)}
+            />
+          </label>
+        </div>
+        <div className="template-package-actions">
+          <button className="secondary-action" onClick={savePackageApproval} type="button">
+            Save Approval
+          </button>
+          <button className="secondary-action" onClick={savePackageDelivery} type="button">
+            Save Delivery
           </button>
         </div>
       </section>

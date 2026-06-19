@@ -179,6 +179,8 @@ export type SavedVersionKind =
   | 'extraction_job'
   | 'extraction_run'
   | 'credential_validation'
+  | 'cross_industry_template_package_approval'
+  | 'cross_industry_template_package_delivery'
   | 'notification_delivery'
   | 'notification_delivery_retry'
   | 'notification_retry_queue_export_package'
@@ -264,6 +266,8 @@ export type BackendRecordKind =
   | 'extraction_job'
   | 'extraction_run'
   | 'credential_validation'
+  | 'cross_industry_template_package_approval'
+  | 'cross_industry_template_package_delivery'
   | 'notification_delivery'
   | 'notification_delivery_retry'
   | 'notification_retry_queue_export_package'
@@ -1049,6 +1053,42 @@ export type CrossIndustryTemplatePackage = {
     reportCatalogItems: number
     activeControlledTemplates: number
   }
+  evidence: string
+}
+
+export type CrossIndustryTemplatePackageApprovalStatus =
+  | 'draft'
+  | 'approved'
+  | 'approved_with_conditions'
+  | 'rejected'
+
+export type CrossIndustryTemplatePackageApproval = {
+  approvalId: string
+  packageId: string
+  reviewedAt: string
+  reviewer: string
+  status: CrossIndustryTemplatePackageApprovalStatus
+  rationale: string
+  package: CrossIndustryTemplatePackage
+  auditHistory: Array<{
+    action: 'reviewed_cross_industry_template_package'
+    actor: string
+    timestamp: string
+    status: CrossIndustryTemplatePackageApprovalStatus
+    summary: string
+  }>
+  evidence: string
+}
+
+export type CrossIndustryTemplatePackageDelivery = {
+  deliveryId: string
+  packageId: string
+  approvalRecordId?: string
+  deliveredAt: string
+  channel: 'download' | 'governance_review' | 'implementation_handoff'
+  recipients: string[]
+  status: 'prepared' | 'delivered' | 'blocked'
+  package: CrossIndustryTemplatePackage
   evidence: string
 }
 
