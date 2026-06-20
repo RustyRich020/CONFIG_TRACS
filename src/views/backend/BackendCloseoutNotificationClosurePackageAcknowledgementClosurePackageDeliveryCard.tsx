@@ -12,33 +12,37 @@ const BackendFinalEvidenceCloseoutPanel = lazy(() =>
 
 type RuntimeValue = ReturnType<typeof JSON.parse>
 
-type CloseoutNotificationClosurePackageAcknowledgementClosurePackageDeliveryPropKey =
+type CloseoutNotificationClosurePackageAcknowledgementClosurePackageControlsKey =
   | 'buildCloseoutNotificationClosurePackageAcknowledgementClosurePackage'
+  | 'closeoutNotificationClosurePackageAckClosurePackageNotes'
+  | 'closeoutNotificationClosurePackageAckClosurePackageReviewers'
+  | 'closeoutNotificationClosurePackageAcknowledgementClosurePackageDeliveryRecords'
+  | 'closeoutNotificationClosurePackageAcknowledgementClosurePackageMetrics'
+  | 'closeoutNotificationClosurePackageAcknowledgementClosurePackageRequiredActions'
+  | 'closeoutNotificationClosurePackageAcknowledgementClosurePackageStatus'
+  | 'closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageRecords'
+  | 'latestCloseoutNotificationClosurePackageAcknowledgementClosurePackage'
+  | 'latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageDelivery'
+  | 'onDeliverClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackage'
+  | 'onSaveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackage'
+  | 'setCloseoutNotificationClosurePackageAckClosurePackageNotes'
+  | 'setCloseoutNotificationClosurePackageAckClosurePackageReviewers'
+
+type CloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementKey =
   | 'closeoutNotificationClosurePackageAckClosurePackageAckActions'
   | 'closeoutNotificationClosurePackageAckClosurePackageAckNotes'
   | 'closeoutNotificationClosurePackageAckClosurePackageAckReviewer'
   | 'closeoutNotificationClosurePackageAckClosurePackageAckReviewerRole'
   | 'closeoutNotificationClosurePackageAckClosurePackageAckStatus'
   | 'closeoutNotificationClosurePackageAckClosurePackageFinalEvidenceReady'
-  | 'closeoutNotificationClosurePackageAckClosurePackageNotes'
-  | 'closeoutNotificationClosurePackageAckClosurePackageReviewers'
   | 'closeoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgedDeliveryIds'
   | 'closeoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementActionList'
   | 'closeoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementMetrics'
   | 'closeoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementRequest'
-  | 'closeoutNotificationClosurePackageAcknowledgementClosurePackageDeliveryRecords'
-  | 'closeoutNotificationClosurePackageAcknowledgementClosurePackageMetrics'
-  | 'closeoutNotificationClosurePackageAcknowledgementClosurePackageRequiredActions'
-  | 'closeoutNotificationClosurePackageAcknowledgementClosurePackageStatus'
   | 'closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementRecords'
-  | 'closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageRecords'
   | 'closureSlaDeliveryAcknowledgementLabel'
   | 'closureSlaDeliveryAcknowledgementStatusLevel'
-  | 'latestCloseoutNotificationClosurePackageAcknowledgementClosurePackage'
   | 'latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgement'
-  | 'latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageDelivery'
-  | 'onDeliverClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackage'
-  | 'onSaveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackage'
   | 'onSaveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgement'
   | 'setCloseoutNotificationClosurePackageAckClosurePackageAckActions'
   | 'setCloseoutNotificationClosurePackageAckClosurePackageAckNotes'
@@ -46,45 +50,49 @@ type CloseoutNotificationClosurePackageAcknowledgementClosurePackageDeliveryProp
   | 'setCloseoutNotificationClosurePackageAckClosurePackageAckReviewerRole'
   | 'setCloseoutNotificationClosurePackageAckClosurePackageAckStatus'
   | 'setCloseoutNotificationClosurePackageAckClosurePackageFinalEvidenceReady'
-  | 'setCloseoutNotificationClosurePackageAckClosurePackageNotes'
-  | 'setCloseoutNotificationClosurePackageAckClosurePackageReviewers'
 
 type BackendCloseoutNotificationClosurePackageAcknowledgementClosurePackageDeliveryCardProps = {
-  closeoutExports: Record<CloseoutNotificationClosurePackageAcknowledgementClosurePackageDeliveryPropKey, RuntimeValue>
+  packageControls: Record<CloseoutNotificationClosurePackageAcknowledgementClosurePackageControlsKey, RuntimeValue>
+  acknowledgement: Record<CloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementKey, RuntimeValue>
   finalEvidence: Record<string, RuntimeValue>
 }
 
 export function BackendCloseoutNotificationClosurePackageAcknowledgementClosurePackageDeliveryCard({
-  closeoutExports,
+  packageControls,
+  acknowledgement,
   finalEvidence,
 }: BackendCloseoutNotificationClosurePackageAcknowledgementClosurePackageDeliveryCardProps) {
   const {
     buildCloseoutNotificationClosurePackageAcknowledgementClosurePackage,
+    closeoutNotificationClosurePackageAckClosurePackageNotes,
+    closeoutNotificationClosurePackageAckClosurePackageReviewers,
+    closeoutNotificationClosurePackageAcknowledgementClosurePackageDeliveryRecords,
+    closeoutNotificationClosurePackageAcknowledgementClosurePackageMetrics,
+    closeoutNotificationClosurePackageAcknowledgementClosurePackageRequiredActions,
+    closeoutNotificationClosurePackageAcknowledgementClosurePackageStatus,
+    closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageRecords,
+    latestCloseoutNotificationClosurePackageAcknowledgementClosurePackage,
+    latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageDelivery,
+    onDeliverClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackage,
+    onSaveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackage,
+    setCloseoutNotificationClosurePackageAckClosurePackageNotes,
+    setCloseoutNotificationClosurePackageAckClosurePackageReviewers,
+  } = packageControls
+  const {
     closeoutNotificationClosurePackageAckClosurePackageAckActions,
     closeoutNotificationClosurePackageAckClosurePackageAckNotes,
     closeoutNotificationClosurePackageAckClosurePackageAckReviewer,
     closeoutNotificationClosurePackageAckClosurePackageAckReviewerRole,
     closeoutNotificationClosurePackageAckClosurePackageAckStatus,
     closeoutNotificationClosurePackageAckClosurePackageFinalEvidenceReady,
-    closeoutNotificationClosurePackageAckClosurePackageNotes,
-    closeoutNotificationClosurePackageAckClosurePackageReviewers,
     closeoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgedDeliveryIds,
     closeoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementActionList,
     closeoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementMetrics,
     closeoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementRequest,
-    closeoutNotificationClosurePackageAcknowledgementClosurePackageDeliveryRecords,
-    closeoutNotificationClosurePackageAcknowledgementClosurePackageMetrics,
-    closeoutNotificationClosurePackageAcknowledgementClosurePackageRequiredActions,
-    closeoutNotificationClosurePackageAcknowledgementClosurePackageStatus,
     closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementRecords,
-    closurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageRecords,
     closureSlaDeliveryAcknowledgementLabel,
     closureSlaDeliveryAcknowledgementStatusLevel,
-    latestCloseoutNotificationClosurePackageAcknowledgementClosurePackage,
     latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgement,
-    latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageDelivery,
-    onDeliverClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackage,
-    onSaveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackage,
     onSaveClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgement,
     setCloseoutNotificationClosurePackageAckClosurePackageAckActions,
     setCloseoutNotificationClosurePackageAckClosurePackageAckNotes,
@@ -92,9 +100,7 @@ export function BackendCloseoutNotificationClosurePackageAcknowledgementClosureP
     setCloseoutNotificationClosurePackageAckClosurePackageAckReviewerRole,
     setCloseoutNotificationClosurePackageAckClosurePackageAckStatus,
     setCloseoutNotificationClosurePackageAckClosurePackageFinalEvidenceReady,
-    setCloseoutNotificationClosurePackageAckClosurePackageNotes,
-    setCloseoutNotificationClosurePackageAckClosurePackageReviewers,
-  } = closeoutExports
+  } = acknowledgement
 
   return (
                     <div className="retry-aging-list">
