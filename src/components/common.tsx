@@ -67,3 +67,45 @@ export function HistoryRow({
     </div>
   )
 }
+
+export function DashboardHeading({
+  label,
+  status,
+  title,
+}: {
+  label: string
+  status: StatusLevel
+  title: string
+}) {
+  return (
+    <div className="dashboard-heading">
+      <h4>{title}</h4>
+      <StatusChip status={status} label={label} />
+    </div>
+  )
+}
+
+export function ConnectorRunRow({
+  children,
+  label,
+  status,
+  subtitle,
+  title,
+}: {
+  children?: ReactNode
+  label: string
+  status: StatusLevel
+  subtitle: string
+  title: ReactNode
+}) {
+  return (
+    <div className="connector-run-row">
+      <div>
+        <strong>{title}</strong>
+        <span>{subtitle}</span>
+        {children ? <small>{children}</small> : null}
+      </div>
+      <StatusChip status={status} label={label} />
+    </div>
+  )
+}

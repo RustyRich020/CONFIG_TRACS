@@ -1,5 +1,5 @@
 import { Bell, ClipboardCheck, Download } from 'lucide-react'
-import { Metadata, StatusChip } from '../../components/common'
+import { ConnectorRunRow, DashboardHeading, Metadata } from '../../components/common'
 import { BackendCloseoutNotificationClosurePackageAcknowledgementCard } from './BackendCloseoutNotificationClosurePackageAcknowledgementCard'
 import { BackendCloseoutNotificationClosurePackageAcknowledgementCloseoutCard } from './BackendCloseoutNotificationClosurePackageAcknowledgementCloseoutCard'
 import { BackendCloseoutNotificationClosurePackageAcknowledgementClosurePackageDeliveryCard } from './BackendCloseoutNotificationClosurePackageAcknowledgementClosurePackageDeliveryCard'
@@ -215,13 +215,11 @@ export function BackendCloseoutNotificationClosurePackageDeliveryCard({
 
   return (
                   <div className="retry-aging-list">
-                    <div className="dashboard-heading">
-                      <h4>Closeout acknowledgement closure package delivery</h4>
-                      <StatusChip
-                        status={closeoutNotificationClosurePackageStatus}
-                        label={closeoutNotificationClosurePackageStatus}
-                      />
-                    </div>
+                    <DashboardHeading
+                      status={closeoutNotificationClosurePackageStatus}
+                      label={closeoutNotificationClosurePackageStatus}
+                      title="Closeout acknowledgement closure package delivery"
+                    />
                     <div className="trace-review-grid">
                       <label className="trace-review-rationale">
                         <span>Closure package reviewers</span>
@@ -314,19 +312,16 @@ export function BackendCloseoutNotificationClosurePackageDeliveryCard({
                       />
                     </div>
                     {latestCloseoutNotificationClosurePackage ? (
-                      <div className="connector-run-row">
-                        <div>
-                          <strong>{latestCloseoutNotificationClosurePackage.payload.closureReviewers.join(', ')}</strong>
-                          <span>
-                            v{latestCloseoutNotificationClosurePackage.version} / {new Date(latestCloseoutNotificationClosurePackage.createdAt).toLocaleString()} / {latestCloseoutNotificationClosurePackage.payload.metrics.notificationClosures} notification closure record(s)
-                          </span>
-                          <small>{latestCloseoutNotificationClosurePackage.payload.evidence}</small>
-                        </div>
-                        <StatusChip
-                          status={latestCloseoutNotificationClosurePackage.status}
-                          label={latestCloseoutNotificationClosurePackage.status}
-                        />
-                      </div>
+                      <ConnectorRunRow
+                        status={latestCloseoutNotificationClosurePackage.status}
+                        label={latestCloseoutNotificationClosurePackage.status}
+                        title={latestCloseoutNotificationClosurePackage.payload.closureReviewers.join(', ')}
+                        subtitle={`v${latestCloseoutNotificationClosurePackage.version} / ${new Date(
+                          latestCloseoutNotificationClosurePackage.createdAt,
+                        ).toLocaleString()} / ${latestCloseoutNotificationClosurePackage.payload.metrics.notificationClosures} notification closure record(s)`}
+                      >
+                        {latestCloseoutNotificationClosurePackage.payload.evidence}
+                      </ConnectorRunRow>
                     ) : (
                       <div className="empty-state compact">No closeout acknowledgement closure package has been retained yet.</div>
                     )}

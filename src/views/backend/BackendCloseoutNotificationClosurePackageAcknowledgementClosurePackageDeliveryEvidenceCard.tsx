@@ -1,4 +1,4 @@
-import { StatusChip } from '../../components/common'
+import { ConnectorRunRow } from '../../components/common'
 
 type RuntimeValue = ReturnType<typeof JSON.parse>
 
@@ -21,16 +21,15 @@ export function BackendCloseoutNotificationClosurePackageAcknowledgementClosureP
                           {closeoutNotificationClosurePackageAcknowledgementClosurePackageDeliveryRecords
                             .slice(0, 3)
                             .map((record: RuntimeValue) => (
-                              <div className="connector-run-row" key={record.id}>
-                                <div>
-                                  <strong>{record.payload.request.subject}</strong>
-                                  <span>
-                                    v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
-                                  </span>
-                                  <small>{record.payload.result.evidence}</small>
-                                </div>
-                                <StatusChip status={record.status} label={record.status} />
-                              </div>
+                              <ConnectorRunRow
+                                key={record.id}
+                                status={record.status}
+                                label={record.status}
+                                title={record.payload.request.subject}
+                                subtitle={`v${record.version} / ${new Date(record.createdAt).toLocaleString()} / ${record.payload.request.recipients.join(', ')}`}
+                              >
+                                {record.payload.result.evidence}
+                              </ConnectorRunRow>
                             ))}
                         </div>
                       ) : null}
