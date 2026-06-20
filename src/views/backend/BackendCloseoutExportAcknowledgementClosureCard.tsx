@@ -1,5 +1,5 @@
 import { ClipboardCheck } from 'lucide-react'
-import { Metadata, StatusChip } from '../../components/common'
+import { ConnectorRunRow, DashboardHeading, Metadata } from '../../components/common'
 import type { ClosureSlaResponseFollowUpClosureStatus } from '../../types'
 
 type RuntimeValue = ReturnType<typeof JSON.parse>
@@ -58,13 +58,11 @@ export function BackendCloseoutExportAcknowledgementClosureCard({
 
   return (
                   <div className="retry-aging-list">
-                    <div className="dashboard-heading">
-                      <h4>Closeout export acknowledgement closure</h4>
-                      <StatusChip
-                        status={closureSlaFollowUpClosureStatusLevel(closeoutExportAckClosureStatus)}
-                        label={closureSlaFollowUpClosureLabel(closeoutExportAckClosureStatus)}
-                      />
-                    </div>
+                    <DashboardHeading
+                      status={closureSlaFollowUpClosureStatusLevel(closeoutExportAckClosureStatus)}
+                      label={closureSlaFollowUpClosureLabel(closeoutExportAckClosureStatus)}
+                      title="Closeout export acknowledgement closure"
+                    />
                     <div className="trace-review-grid">
                       <label>
                         <span>Closure reviewer</span>
@@ -152,19 +150,14 @@ export function BackendCloseoutExportAcknowledgementClosureCard({
                       />
                     </div>
                     {latestCloseoutExportAcknowledgementClosure ? (
-                      <div className="connector-run-row">
-                        <div>
-                          <strong>{latestCloseoutExportAcknowledgementClosure.payload.reviewer}</strong>
-                          <span>
-                            v{latestCloseoutExportAcknowledgementClosure.version} / {closureSlaFollowUpClosureLabel(latestCloseoutExportAcknowledgementClosure.payload.status)} / {new Date(latestCloseoutExportAcknowledgementClosure.createdAt).toLocaleString()}
-                          </span>
-                          <small>{latestCloseoutExportAcknowledgementClosure.payload.evidence}</small>
-                        </div>
-                        <StatusChip
-                          status={latestCloseoutExportAcknowledgementClosure.status}
-                          label={closureSlaFollowUpClosureLabel(latestCloseoutExportAcknowledgementClosure.payload.status)}
-                        />
-                      </div>
+                      <ConnectorRunRow
+                        status={latestCloseoutExportAcknowledgementClosure.status}
+                        label={closureSlaFollowUpClosureLabel(latestCloseoutExportAcknowledgementClosure.payload.status)}
+                        title={latestCloseoutExportAcknowledgementClosure.payload.reviewer}
+                        subtitle={`v${latestCloseoutExportAcknowledgementClosure.version} / ${closureSlaFollowUpClosureLabel(latestCloseoutExportAcknowledgementClosure.payload.status)} / ${new Date(latestCloseoutExportAcknowledgementClosure.createdAt).toLocaleString()}`}
+                      >
+                        {latestCloseoutExportAcknowledgementClosure.payload.evidence}
+                      </ConnectorRunRow>
                     ) : (
                       <div className="empty-state compact">No closeout export package acknowledgement closure has been retained yet.</div>
                     )}

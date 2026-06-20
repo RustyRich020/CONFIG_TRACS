@@ -204,6 +204,7 @@ This prototype now includes the first practical build phases for TRACS:
 - Extracts the outer closeout acknowledgement closure package delivery wrapper after isolating its nested closeout delivery child.
 - Replaces generated closeout delivery wrapper prop maps with smaller typed groups for package controls, acknowledgements, closeout state, nested delivery, and final-evidence handoff.
 - Adds shared Backend heading and connector-run-row primitives and migrates the closeout delivery wrappers plus delivery evidence cards onto them.
+- Migrates the remaining extracted closeout acknowledgement, closure, notification, and closeout-package cards onto shared Backend heading and connector-run-row primitives.
 - Adds same-workflow retained package comparison rows with version, reviewer, retention, coverage, and missing-parent detail.
 - Exports Closure SLA follow-up closure packages with retained actions, superseded routes, and notification evidence.
 - Delivers Closure SLA follow-up closure packages to governance reviewers with retained delivery evidence.
@@ -361,5 +362,5 @@ npm run build
 
 Use the template package and workflow lineage paths while consolidating governance workflows into reusable product infrastructure:
 
-1. Continue migrating remaining extracted Backend cards to shared `DashboardHeading`, `ConnectorRunRow`, `PanelHeader`, `Metadata`, `StatusChip`, `HistoryRow`, and title-formatting primitives.
+1. Continue migrating larger Backend governance panels, especially retry queue and final-evidence sections, to shared `DashboardHeading`, `ConnectorRunRow`, `PanelHeader`, `Metadata`, `StatusChip`, `HistoryRow`, and title-formatting primitives.
 2. Reduce the Backend workspace prop contract by deriving record-kind subsets inside focused components instead of passing long filtered lists from `App.tsx`.

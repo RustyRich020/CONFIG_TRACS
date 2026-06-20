@@ -1,5 +1,5 @@
 import { ClipboardCheck } from 'lucide-react'
-import { Metadata, StatusChip } from '../../components/common'
+import { ConnectorRunRow, DashboardHeading, Metadata } from '../../components/common'
 import type { ClosureSlaResponseFollowUpClosureStatus } from '../../types'
 
 type RuntimeValue = ReturnType<typeof JSON.parse>
@@ -58,10 +58,11 @@ export function BackendCloseoutNotificationClosureRecordsCard({
 
   return (
                   <div className="retry-aging-list">
-                    <div className="dashboard-heading">
-                      <h4>Notification closure records</h4>
-                      <StatusChip status={closeoutNotificationClosureStatusLevel} label={closeoutNotificationClosureStatusLevel} />
-                    </div>
+                    <DashboardHeading
+                      status={closeoutNotificationClosureStatusLevel}
+                      label={closeoutNotificationClosureStatusLevel}
+                      title="Notification closure records"
+                    />
                     <div className="trace-review-grid">
                       <label>
                         <span>Closure reviewer</span>
@@ -170,19 +171,14 @@ export function BackendCloseoutNotificationClosureRecordsCard({
                       />
                     </div>
                     {latestCloseoutNotificationClosure ? (
-                      <div className="connector-run-row">
-                        <div>
-                          <strong>{latestCloseoutNotificationClosure.payload.reviewer}</strong>
-                          <span>
-                            v{latestCloseoutNotificationClosure.version} / {closureSlaFollowUpClosureLabel(latestCloseoutNotificationClosure.payload.status)} / {new Date(latestCloseoutNotificationClosure.createdAt).toLocaleString()}
-                          </span>
-                          <small>{latestCloseoutNotificationClosure.payload.evidence}</small>
-                        </div>
-                        <StatusChip
-                          status={latestCloseoutNotificationClosure.status}
-                          label={closureSlaFollowUpClosureLabel(latestCloseoutNotificationClosure.payload.status)}
-                        />
-                      </div>
+                      <ConnectorRunRow
+                        status={latestCloseoutNotificationClosure.status}
+                        label={closureSlaFollowUpClosureLabel(latestCloseoutNotificationClosure.payload.status)}
+                        title={latestCloseoutNotificationClosure.payload.reviewer}
+                        subtitle={`v${latestCloseoutNotificationClosure.version} / ${closureSlaFollowUpClosureLabel(latestCloseoutNotificationClosure.payload.status)} / ${new Date(latestCloseoutNotificationClosure.createdAt).toLocaleString()}`}
+                      >
+                        {latestCloseoutNotificationClosure.payload.evidence}
+                      </ConnectorRunRow>
                     ) : (
                       <div className="empty-state compact">No closeout package notification closure has been retained yet.</div>
                     )}

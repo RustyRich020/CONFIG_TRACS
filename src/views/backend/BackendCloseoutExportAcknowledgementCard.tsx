@@ -1,5 +1,5 @@
 import { ClipboardCheck } from 'lucide-react'
-import { Metadata, StatusChip } from '../../components/common'
+import { ConnectorRunRow, DashboardHeading, Metadata } from '../../components/common'
 import type {
 ClosurePackageAcknowledgementCloseoutExportPackageAcknowledgement,
 ClosureSlaDeliveryAcknowledgementStatus,
@@ -66,13 +66,11 @@ export function BackendCloseoutExportAcknowledgementCard({
 
   return (
                   <div className="retry-aging-list">
-                    <div className="dashboard-heading">
-                      <h4>Closeout export package acknowledgement</h4>
-                      <StatusChip
-                        status={closureSlaDeliveryAcknowledgementStatusLevel(closeoutExportAckStatus)}
-                        label={closureSlaDeliveryAcknowledgementLabel(closeoutExportAckStatus)}
-                      />
-                    </div>
+                    <DashboardHeading
+                      status={closureSlaDeliveryAcknowledgementStatusLevel(closeoutExportAckStatus)}
+                      label={closureSlaDeliveryAcknowledgementLabel(closeoutExportAckStatus)}
+                      title="Closeout export package acknowledgement"
+                    />
                     <div className="trace-review-grid">
                       <label>
                         <span>Reviewer</span>
@@ -175,19 +173,14 @@ export function BackendCloseoutExportAcknowledgementCard({
                       />
                     </div>
                     {latestCloseoutExportAcknowledgement ? (
-                      <div className="connector-run-row">
-                        <div>
-                          <strong>{latestCloseoutExportAcknowledgement.payload.reviewer}</strong>
-                          <span>
-                            v{latestCloseoutExportAcknowledgement.version} / {closureSlaDeliveryAcknowledgementLabel(latestCloseoutExportAcknowledgement.payload.status)} / {new Date(latestCloseoutExportAcknowledgement.createdAt).toLocaleString()}
-                          </span>
-                          <small>{latestCloseoutExportAcknowledgement.payload.evidence}</small>
-                        </div>
-                        <StatusChip
-                          status={latestCloseoutExportAcknowledgement.status}
-                          label={closureSlaDeliveryAcknowledgementLabel(latestCloseoutExportAcknowledgement.payload.status)}
-                        />
-                      </div>
+                      <ConnectorRunRow
+                        status={latestCloseoutExportAcknowledgement.status}
+                        label={closureSlaDeliveryAcknowledgementLabel(latestCloseoutExportAcknowledgement.payload.status)}
+                        title={latestCloseoutExportAcknowledgement.payload.reviewer}
+                        subtitle={`v${latestCloseoutExportAcknowledgement.version} / ${closureSlaDeliveryAcknowledgementLabel(latestCloseoutExportAcknowledgement.payload.status)} / ${new Date(latestCloseoutExportAcknowledgement.createdAt).toLocaleString()}`}
+                      >
+                        {latestCloseoutExportAcknowledgement.payload.evidence}
+                      </ConnectorRunRow>
                     ) : (
                       <div className="empty-state compact">No closeout export package acknowledgement has been retained yet.</div>
                     )}
