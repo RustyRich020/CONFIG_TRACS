@@ -1,5 +1,5 @@
 import { Bell, ClipboardCheck, Download } from 'lucide-react'
-import { Metadata, StatusChip } from '../../components/common'
+import { ConnectorRunRow, DashboardHeading, Metadata, StatusChip } from '../../components/common'
 import type {
 ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement,
 ClosurePackageAcknowledgementCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgement,
@@ -588,17 +588,15 @@ export function BackendFinalEvidenceCloseoutPanel({
 
   return (
                       <div className="retry-aging-list">
-                        <div className="dashboard-heading">
-                          <h4>Closeout acknowledgement closeout final evidence</h4>
-                          <StatusChip
-                            status={closureSlaFollowUpClosureStatusLevel(
-                              closeoutNotificationClosurePackageAckClosurePackageFinalEvidenceStatus,
-                            )}
-                            label={closureSlaFollowUpClosureLabel(
-                              closeoutNotificationClosurePackageAckClosurePackageFinalEvidenceStatus,
-                            )}
-                          />
-                        </div>
+                        <DashboardHeading
+                          title="Closeout acknowledgement closeout final evidence"
+                          status={closureSlaFollowUpClosureStatusLevel(
+                            closeoutNotificationClosurePackageAckClosurePackageFinalEvidenceStatus,
+                          )}
+                          label={closureSlaFollowUpClosureLabel(
+                            closeoutNotificationClosurePackageAckClosurePackageFinalEvidenceStatus,
+                          )}
+                        />
                         <div className="trace-review-grid">
                           <label>
                             <span>Final evidence reviewer</span>
@@ -766,34 +764,25 @@ export function BackendFinalEvidenceCloseoutPanel({
                           />
                         </div>
                         {latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence ? (
-                          <div className="connector-run-row">
-                            <div>
-                              <strong>
-                                {
-                                  latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence
-                                    .payload.reviewer
-                                }
-                              </strong>
-                              <span>
-                                v{latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence.version} / {closureSlaFollowUpClosureLabel(latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence.payload.status)} / {new Date(latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence.createdAt).toLocaleString()}
-                              </span>
-                              <small>
-                                {
-                                  latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence
-                                    .payload.evidence
-                                }
-                              </small>
-                            </div>
-                            <StatusChip
-                              status={
-                                latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence.status
-                              }
-                              label={closureSlaFollowUpClosureLabel(
-                                latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence
-                                  .payload.status,
-                              )}
-                            />
-                          </div>
+                          <ConnectorRunRow
+                            title={
+                              latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence
+                                .payload.reviewer
+                            }
+                            subtitle={`v${latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence.version} / ${closureSlaFollowUpClosureLabel(latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence.payload.status)} / ${new Date(latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence.createdAt).toLocaleString()}`}
+                            status={
+                              latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence.status
+                            }
+                            label={closureSlaFollowUpClosureLabel(
+                              latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence
+                                .payload.status,
+                            )}
+                          >
+                            {
+                              latestCloseoutNotificationClosurePackageAcknowledgementClosurePackageAcknowledgementFinalEvidence
+                                .payload.evidence
+                            }
+                          </ConnectorRunRow>
                         ) : (
                           <div className="empty-state compact">No closeout acknowledgement closeout final evidence has been retained yet.</div>
                         )}
@@ -803,16 +792,15 @@ export function BackendFinalEvidenceCloseoutPanel({
                             {closeoutNotificationClosurePackageAcknowledgementClosurePackageFinalEvidenceDeliveryRecords
                               .slice(0, 3)
                               .map((record: RuntimeValue) => (
-                                <div className="connector-run-row" key={record.id}>
-                                  <div>
-                                    <strong>{record.payload.request.subject}</strong>
-                                    <span>
-                                      v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
-                                    </span>
-                                    <small>{record.payload.result.evidence}</small>
-                                  </div>
-                                  <StatusChip status={record.status} label={record.status} />
-                                </div>
+                                <ConnectorRunRow
+                                  key={record.id}
+                                  title={record.payload.request.subject}
+                                  subtitle={`v${record.version} / ${new Date(record.createdAt).toLocaleString()} / ${record.payload.request.recipients.join(', ')}`}
+                                  status={record.status}
+                                  label={record.status}
+                                >
+                                  {record.payload.result.evidence}
+                                </ConnectorRunRow>
                               ))}
                           </div>
                         ) : null}
@@ -943,32 +931,23 @@ export function BackendFinalEvidenceCloseoutPanel({
                             />
                           </div>
                           {latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement ? (
-                            <div className="connector-run-row">
-                              <div>
-                                <strong>
-                                  {
-                                    latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement
-                                      .payload.reviewer
-                                  }
-                                </strong>
-                                <span>
-                                  v{latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement.version} / {closureSlaDeliveryAcknowledgementLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement.payload.status)} / {new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement.createdAt).toLocaleString()}
-                                </span>
-                                <small>
-                                  {
-                                    latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement
-                                      .payload.evidence
-                                  }
-                                </small>
-                              </div>
-                              <StatusChip
-                                status={latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement.status}
-                                label={closureSlaDeliveryAcknowledgementLabel(
-                                  latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement
-                                    .payload.status,
-                                )}
-                              />
-                            </div>
+                            <ConnectorRunRow
+                              title={
+                                latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement
+                                  .payload.reviewer
+                              }
+                              subtitle={`v${latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement.version} / ${closureSlaDeliveryAcknowledgementLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement.payload.status)} / ${new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement.createdAt).toLocaleString()}`}
+                              status={latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement.status}
+                              label={closureSlaDeliveryAcknowledgementLabel(
+                                latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement
+                                  .payload.status,
+                              )}
+                            >
+                              {
+                                latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgement
+                                  .payload.evidence
+                              }
+                            </ConnectorRunRow>
                           ) : (
                             <div className="empty-state compact">
                               No closeout acknowledgement final evidence acknowledgement has been retained yet.
@@ -976,13 +955,11 @@ export function BackendFinalEvidenceCloseoutPanel({
                           )}
                         </div>
                         <div className="retry-aging-list">
-                          <div className="dashboard-heading">
-                            <h4>Closeout acknowledgement final acknowledgement closeout evidence</h4>
-                            <StatusChip
-                              status={closeoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureStatus}
-                              label={closeoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureStatus}
-                            />
-                          </div>
+                          <DashboardHeading
+                            title="Closeout acknowledgement final acknowledgement closeout evidence"
+                            status={closeoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureStatus}
+                            label={closeoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureStatus}
+                          />
                           <div className="trace-review-grid">
                             <label>
                               Closeout reviewer
@@ -1128,32 +1105,23 @@ export function BackendFinalEvidenceCloseoutPanel({
                             />
                           </div>
                           {latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosure ? (
-                            <div className="connector-run-row">
-                              <div>
-                                <strong>
-                                  {
-                                    latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosure
-                                      .payload.reviewer
-                                  }
-                                </strong>
-                                <span>
-                                  v{latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosure.version} / {closureSlaFollowUpClosureLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosure.payload.status)} / {new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosure.createdAt).toLocaleString()}
-                                </span>
-                                <small>
-                                  {
-                                    latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosure
-                                      .payload.evidence
-                                  }
-                                </small>
-                              </div>
-                              <StatusChip
-                                status={latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosure.status}
-                                label={closureSlaFollowUpClosureLabel(
-                                  latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosure
-                                    .payload.status,
-                                )}
-                              />
-                            </div>
+                            <ConnectorRunRow
+                              title={
+                                latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosure
+                                  .payload.reviewer
+                              }
+                              subtitle={`v${latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosure.version} / ${closureSlaFollowUpClosureLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosure.payload.status)} / ${new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosure.createdAt).toLocaleString()}`}
+                              status={latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosure.status}
+                              label={closureSlaFollowUpClosureLabel(
+                                latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosure
+                                  .payload.status,
+                              )}
+                            >
+                              {
+                                latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosure
+                                  .payload.evidence
+                              }
+                            </ConnectorRunRow>
                           ) : (
                             <div className="empty-state compact">
                               No closeout acknowledgement final acknowledgement closeout evidence has been retained yet.
@@ -1166,16 +1134,15 @@ export function BackendFinalEvidenceCloseoutPanel({
                               {closeoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryRecords
                                 .slice(0, 3)
                                 .map((record: RuntimeValue) => (
-                                  <div className="connector-run-row" key={record.id}>
-                                    <div>
-                                      <strong>{record.payload.request.subject}</strong>
-                                      <span>
-                                        v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
-                                      </span>
-                                      <small>{record.payload.result.evidence}</small>
-                                    </div>
-                                    <StatusChip status={record.status} label={record.status} />
-                                  </div>
+                                  <ConnectorRunRow
+                                    key={record.id}
+                                    title={record.payload.request.subject}
+                                    subtitle={`v${record.version} / ${new Date(record.createdAt).toLocaleString()} / ${record.payload.request.recipients.join(', ')}`}
+                                    status={record.status}
+                                    label={record.status}
+                                  >
+                                    {record.payload.result.evidence}
+                                  </ConnectorRunRow>
                                 ))}
                             </div>
                           ) : null}
@@ -1318,34 +1285,25 @@ export function BackendFinalEvidenceCloseoutPanel({
                               />
                             </div>
                             {latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgement ? (
-                              <div className="connector-run-row">
-                                <div>
-                                  <strong>
-                                    {
-                                      latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgement
-                                        .payload.reviewer
-                                    }
-                                  </strong>
-                                  <span>
-                                    v{latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgement.version} / {closureSlaDeliveryAcknowledgementLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgement.payload.status)} / {new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgement.createdAt).toLocaleString()}
-                                  </span>
-                                  <small>
-                                    {
-                                      latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgement
-                                        .payload.evidence
-                                    }
-                                  </small>
-                                </div>
-                                <StatusChip
-                                  status={
-                                    latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgement.status
-                                  }
-                                  label={closureSlaDeliveryAcknowledgementLabel(
-                                    latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgement
-                                      .payload.status,
-                                  )}
-                                />
-                              </div>
+                              <ConnectorRunRow
+                                title={
+                                  latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgement
+                                    .payload.reviewer
+                                }
+                                subtitle={`v${latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgement.version} / ${closureSlaDeliveryAcknowledgementLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgement.payload.status)} / ${new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgement.createdAt).toLocaleString()}`}
+                                status={
+                                  latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgement.status
+                                }
+                                label={closureSlaDeliveryAcknowledgementLabel(
+                                  latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgement
+                                    .payload.status,
+                                )}
+                              >
+                                {
+                                  latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgement
+                                    .payload.evidence
+                                }
+                              </ConnectorRunRow>
                             ) : (
                               <div className="empty-state compact">
                                 No final acknowledgement closeout delivery acknowledgement has been retained yet.
@@ -1353,17 +1311,15 @@ export function BackendFinalEvidenceCloseoutPanel({
                             )}
                           </div>
                           <div className="retry-aging-list">
-                            <div className="dashboard-heading">
-                              <h4>Final acknowledgement closeout acknowledgement closure evidence</h4>
-                              <StatusChip
-                                status={
-                                  closeoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureStatus
-                                }
-                                label={
-                                  closeoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureStatus
-                                }
-                              />
-                            </div>
+                            <DashboardHeading
+                              title="Final acknowledgement closeout acknowledgement closure evidence"
+                              status={
+                                closeoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureStatus
+                              }
+                              label={
+                                closeoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureStatus
+                              }
+                            />
                             <div className="trace-review-grid">
                               <label>
                                 Closure reviewer
@@ -1513,34 +1469,25 @@ export function BackendFinalEvidenceCloseoutPanel({
                               />
                             </div>
                             {latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosure ? (
-                              <div className="connector-run-row">
-                                <div>
-                                  <strong>
-                                    {
-                                      latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosure
-                                        .payload.reviewer
-                                    }
-                                  </strong>
-                                  <span>
-                                    v{latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosure.version} / {closureSlaFollowUpClosureLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosure.payload.status)} / {new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosure.createdAt).toLocaleString()}
-                                  </span>
-                                  <small>
-                                    {
-                                      latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosure
-                                        .payload.evidence
-                                    }
-                                  </small>
-                                </div>
-                                <StatusChip
-                                  status={
-                                    latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosure.status
-                                  }
-                                  label={closureSlaFollowUpClosureLabel(
-                                    latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosure
-                                      .payload.status,
-                                  )}
-                                />
-                              </div>
+                              <ConnectorRunRow
+                                title={
+                                  latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosure
+                                    .payload.reviewer
+                                }
+                                subtitle={`v${latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosure.version} / ${closureSlaFollowUpClosureLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosure.payload.status)} / ${new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosure.createdAt).toLocaleString()}`}
+                                status={
+                                  latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosure.status
+                                }
+                                label={closureSlaFollowUpClosureLabel(
+                                  latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosure
+                                    .payload.status,
+                                )}
+                              >
+                                {
+                                  latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosure
+                                    .payload.evidence
+                                }
+                              </ConnectorRunRow>
                             ) : (
                               <div className="empty-state compact">
                                 No final acknowledgement closeout acknowledgement closure evidence has been retained yet.
@@ -1553,16 +1500,15 @@ export function BackendFinalEvidenceCloseoutPanel({
                                 {closeoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryRecords
                                   .slice(0, 3)
                                   .map((record: RuntimeValue) => (
-                                    <div className="connector-run-row" key={record.id}>
-                                      <div>
-                                        <strong>{record.payload.request.subject}</strong>
-                                        <span>
-                                          v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
-                                        </span>
-                                        <small>{record.payload.result.evidence}</small>
-                                      </div>
-                                      <StatusChip status={record.status} label={record.status} />
-                                    </div>
+                                    <ConnectorRunRow
+                                      key={record.id}
+                                      title={record.payload.request.subject}
+                                      subtitle={`v${record.version} / ${new Date(record.createdAt).toLocaleString()} / ${record.payload.request.recipients.join(', ')}`}
+                                      status={record.status}
+                                      label={record.status}
+                                    >
+                                      {record.payload.result.evidence}
+                                    </ConnectorRunRow>
                                   ))}
                               </div>
                             ) : null}
@@ -1713,34 +1659,25 @@ export function BackendFinalEvidenceCloseoutPanel({
                                 />
                               </div>
                               {latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgement ? (
-                                <div className="connector-run-row">
-                                  <div>
-                                    <strong>
-                                      {
-                                        latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgement
-                                          .payload.reviewer
-                                      }
-                                    </strong>
-                                    <span>
-                                      v{latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgement.version} / {closureSlaDeliveryAcknowledgementLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgement.payload.status)} / {new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgement.createdAt).toLocaleString()}
-                                    </span>
-                                    <small>
-                                      {
-                                        latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgement
-                                          .payload.evidence
-                                      }
-                                    </small>
-                                  </div>
-                                  <StatusChip
-                                    status={
-                                      latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgement.status
-                                    }
-                                    label={closureSlaDeliveryAcknowledgementLabel(
-                                      latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgement
-                                        .payload.status,
-                                    )}
-                                  />
-                                </div>
+                                <ConnectorRunRow
+                                  title={
+                                    latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgement
+                                      .payload.reviewer
+                                  }
+                                  subtitle={`v${latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgement.version} / ${closureSlaDeliveryAcknowledgementLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgement.payload.status)} / ${new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgement.createdAt).toLocaleString()}`}
+                                  status={
+                                    latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgement.status
+                                  }
+                                  label={closureSlaDeliveryAcknowledgementLabel(
+                                    latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgement
+                                      .payload.status,
+                                  )}
+                                >
+                                  {
+                                    latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgement
+                                      .payload.evidence
+                                  }
+                                </ConnectorRunRow>
                               ) : (
                                 <div className="empty-state compact">
                                   No acknowledgement closure delivery acknowledgement has been retained yet.
@@ -1936,34 +1873,25 @@ export function BackendFinalEvidenceCloseoutPanel({
                                 />
                               </div>
                               {latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidence ? (
-                                <div className="connector-run-row">
-                                  <div>
-                                    <strong>
-                                      {
-                                        latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidence
-                                          .payload.reviewer
-                                      }
-                                    </strong>
-                                    <span>
-                                      v{latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidence.version} / {closureSlaFollowUpClosureLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidence.payload.status)} / {new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidence.createdAt).toLocaleString()}
-                                    </span>
-                                    <small>
-                                      {
-                                        latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidence
-                                          .payload.evidence
-                                      }
-                                    </small>
-                                  </div>
-                                  <StatusChip
-                                    status={
-                                      latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidence.status
-                                    }
-                                    label={closureSlaFollowUpClosureLabel(
-                                      latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidence
-                                        .payload.status,
-                                    )}
-                                  />
-                                </div>
+                                <ConnectorRunRow
+                                  title={
+                                    latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidence
+                                      .payload.reviewer
+                                  }
+                                  subtitle={`v${latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidence.version} / ${closureSlaFollowUpClosureLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidence.payload.status)} / ${new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidence.createdAt).toLocaleString()}`}
+                                  status={
+                                    latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidence.status
+                                  }
+                                  label={closureSlaFollowUpClosureLabel(
+                                    latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidence
+                                      .payload.status,
+                                  )}
+                                >
+                                  {
+                                    latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidence
+                                      .payload.evidence
+                                  }
+                                </ConnectorRunRow>
                               ) : (
                                 <div className="empty-state compact">
                                   No final acknowledgement closure final evidence has been retained yet.
@@ -1976,16 +1904,15 @@ export function BackendFinalEvidenceCloseoutPanel({
                                   {closeoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryRecords
                                     .slice(0, 3)
                                     .map((record: RuntimeValue) => (
-                                      <div className="connector-run-row" key={record.id}>
-                                        <div>
-                                          <strong>{record.payload.request.subject}</strong>
-                                          <span>
-                                            v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
-                                          </span>
-                                          <small>{record.payload.result.evidence}</small>
-                                        </div>
-                                        <StatusChip status={record.status} label={record.status} />
-                                      </div>
+                                      <ConnectorRunRow
+                                        key={record.id}
+                                        title={record.payload.request.subject}
+                                        subtitle={`v${record.version} / ${new Date(record.createdAt).toLocaleString()} / ${record.payload.request.recipients.join(', ')}`}
+                                        status={record.status}
+                                        label={record.status}
+                                      >
+                                        {record.payload.result.evidence}
+                                      </ConnectorRunRow>
                                     ))}
                                 </div>
                               ) : null}
@@ -2136,34 +2063,25 @@ export function BackendFinalEvidenceCloseoutPanel({
                                   />
                                 </div>
                                 {latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgement ? (
-                                  <div className="connector-run-row">
-                                    <div>
-                                      <strong>
-                                        {
-                                          latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgement
-                                            .payload.reviewer
-                                        }
-                                      </strong>
-                                      <span>
-                                        v{latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgement.version} / {closureSlaDeliveryAcknowledgementLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgement.payload.status)} / {new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgement.createdAt).toLocaleString()}
-                                      </span>
-                                      <small>
-                                        {
-                                          latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgement
-                                            .payload.evidence
-                                        }
-                                      </small>
-                                    </div>
-                                    <StatusChip
-                                      status={
-                                        latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgement.status
-                                      }
-                                      label={closureSlaDeliveryAcknowledgementLabel(
-                                        latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgement
-                                          .payload.status,
-                                      )}
-                                    />
-                                  </div>
+                                  <ConnectorRunRow
+                                    title={
+                                      latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgement
+                                        .payload.reviewer
+                                    }
+                                    subtitle={`v${latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgement.version} / ${closureSlaDeliveryAcknowledgementLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgement.payload.status)} / ${new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgement.createdAt).toLocaleString()}`}
+                                    status={
+                                      latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgement.status
+                                    }
+                                    label={closureSlaDeliveryAcknowledgementLabel(
+                                      latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgement
+                                        .payload.status,
+                                    )}
+                                  >
+                                    {
+                                      latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgement
+                                        .payload.evidence
+                                    }
+                                  </ConnectorRunRow>
                                 ) : (
                                   <div className="empty-state compact">
                                     No final acknowledgement closure final evidence delivery acknowledgement has been retained yet.
@@ -2335,34 +2253,25 @@ export function BackendFinalEvidenceCloseoutPanel({
                                   />
                                 </div>
                                 {latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidence ? (
-                                  <div className="connector-run-row">
-                                    <div>
-                                      <strong>
-                                        {
-                                          latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidence
-                                            .payload.reviewer
-                                        }
-                                      </strong>
-                                      <span>
-                                        v{latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidence.version} / {closureSlaFollowUpClosureLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidence.payload.status)} / {new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidence.createdAt).toLocaleString()}
-                                      </span>
-                                      <small>
-                                        {
-                                          latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidence
-                                            .payload.evidence
-                                        }
-                                      </small>
-                                    </div>
-                                    <StatusChip
-                                      status={
-                                        latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidence.status
-                                      }
-                                      label={closureSlaFollowUpClosureLabel(
-                                        latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidence
-                                          .payload.status,
-                                      )}
-                                    />
-                                  </div>
+                                  <ConnectorRunRow
+                                    title={
+                                      latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidence
+                                        .payload.reviewer
+                                    }
+                                    subtitle={`v${latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidence.version} / ${closureSlaFollowUpClosureLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidence.payload.status)} / ${new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidence.createdAt).toLocaleString()}`}
+                                    status={
+                                      latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidence.status
+                                    }
+                                    label={closureSlaFollowUpClosureLabel(
+                                      latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidence
+                                        .payload.status,
+                                    )}
+                                  >
+                                    {
+                                      latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidence
+                                        .payload.evidence
+                                    }
+                                  </ConnectorRunRow>
                                 ) : (
                                   <div className="empty-state compact">
                                     No final acknowledgement closure final closeout evidence has been retained yet.
@@ -2375,16 +2284,15 @@ export function BackendFinalEvidenceCloseoutPanel({
                                     {closeoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryRecords
                                       .slice(0, 3)
                                       .map((record: RuntimeValue) => (
-                                        <div className="connector-run-row" key={record.id}>
-                                          <div>
-                                            <strong>{record.payload.request.subject}</strong>
-                                            <span>
-                                              v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
-                                            </span>
-                                            <small>{record.payload.result.evidence}</small>
-                                          </div>
-                                          <StatusChip status={record.status} label={record.status} />
-                                        </div>
+                                        <ConnectorRunRow
+                                          key={record.id}
+                                          title={record.payload.request.subject}
+                                          subtitle={`v${record.version} / ${new Date(record.createdAt).toLocaleString()} / ${record.payload.request.recipients.join(', ')}`}
+                                          status={record.status}
+                                          label={record.status}
+                                        >
+                                          {record.payload.result.evidence}
+                                        </ConnectorRunRow>
                                       ))}
                                   </div>
                                 ) : null}
@@ -2535,34 +2443,25 @@ export function BackendFinalEvidenceCloseoutPanel({
                                     />
                                   </div>
                                   {latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement ? (
-                                    <div className="connector-run-row">
-                                      <div>
-                                        <strong>
-                                          {
-                                            latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement
-                                              .payload.reviewer
-                                          }
-                                        </strong>
-                                        <span>
-                                          v{latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement.version} / {closureSlaDeliveryAcknowledgementLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement.payload.status)} / {new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement.createdAt).toLocaleString()}
-                                        </span>
-                                        <small>
-                                          {
-                                            latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement
-                                              .payload.evidence
-                                          }
-                                        </small>
-                                      </div>
-                                      <StatusChip
-                                        status={
-                                          latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement.status
-                                        }
-                                        label={closureSlaDeliveryAcknowledgementLabel(
-                                          latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement
-                                            .payload.status,
-                                        )}
-                                      />
-                                    </div>
+                                    <ConnectorRunRow
+                                      title={
+                                        latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement
+                                          .payload.reviewer
+                                      }
+                                      subtitle={`v${latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement.version} / ${closureSlaDeliveryAcknowledgementLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement.payload.status)} / ${new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement.createdAt).toLocaleString()}`}
+                                      status={
+                                        latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement.status
+                                      }
+                                      label={closureSlaDeliveryAcknowledgementLabel(
+                                        latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement
+                                          .payload.status,
+                                      )}
+                                    >
+                                      {
+                                        latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement
+                                          .payload.evidence
+                                      }
+                                    </ConnectorRunRow>
                                   ) : (
                                     <div className="empty-state compact">
                                       No final acknowledgement closure final closeout delivery acknowledgement has been retained yet.
@@ -2734,34 +2633,25 @@ export function BackendFinalEvidenceCloseoutPanel({
                                     />
                                   </div>
                                   {latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosure ? (
-                                    <div className="connector-run-row">
-                                      <div>
-                                        <strong>
-                                          {
-                                            latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosure
-                                              .payload.reviewer
-                                          }
-                                        </strong>
-                                        <span>
-                                          v{latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosure.version} / {closureSlaFollowUpClosureLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosure.payload.status)} / {new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosure.createdAt).toLocaleString()}
-                                        </span>
-                                        <small>
-                                          {
-                                            latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosure
-                                              .payload.evidence
-                                          }
-                                        </small>
-                                      </div>
-                                      <StatusChip
-                                        status={
-                                          latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosure.status
-                                        }
-                                        label={closureSlaFollowUpClosureLabel(
-                                          latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosure
-                                            .payload.status,
-                                        )}
-                                      />
-                                    </div>
+                                    <ConnectorRunRow
+                                      title={
+                                        latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosure
+                                          .payload.reviewer
+                                      }
+                                      subtitle={`v${latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosure.version} / ${closureSlaFollowUpClosureLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosure.payload.status)} / ${new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosure.createdAt).toLocaleString()}`}
+                                      status={
+                                        latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosure.status
+                                      }
+                                      label={closureSlaFollowUpClosureLabel(
+                                        latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosure
+                                          .payload.status,
+                                      )}
+                                    >
+                                      {
+                                        latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosure
+                                          .payload.evidence
+                                      }
+                                    </ConnectorRunRow>
                                   ) : (
                                     <div className="empty-state compact">
                                       No final acknowledgement closure final closeout acknowledgement closure evidence has been retained yet.
@@ -2774,16 +2664,15 @@ export function BackendFinalEvidenceCloseoutPanel({
                                       {closeoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryRecords
                                         .slice(0, 3)
                                         .map((record: RuntimeValue) => (
-                                          <div className="connector-run-row" key={record.id}>
-                                            <div>
-                                              <strong>{record.payload.request.subject}</strong>
-                                              <span>
-                                                v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
-                                              </span>
-                                              <small>{record.payload.result.evidence}</small>
-                                            </div>
-                                            <StatusChip status={record.status} label={record.status} />
-                                          </div>
+                                          <ConnectorRunRow
+                                            key={record.id}
+                                            title={record.payload.request.subject}
+                                            subtitle={`v${record.version} / ${new Date(record.createdAt).toLocaleString()} / ${record.payload.request.recipients.join(', ')}`}
+                                            status={record.status}
+                                            label={record.status}
+                                          >
+                                            {record.payload.result.evidence}
+                                          </ConnectorRunRow>
                                         ))}
                                     </div>
                                   ) : null}
@@ -2940,34 +2829,25 @@ export function BackendFinalEvidenceCloseoutPanel({
                                       />
                                     </div>
                                     {latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgement ? (
-                                      <div className="connector-run-row">
-                                        <div>
-                                          <strong>
-                                            {
-                                              latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgement
-                                                .payload.reviewer
-                                            }
-                                          </strong>
-                                          <span>
-                                            v{latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgement.version} / {closureSlaDeliveryAcknowledgementLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgement.payload.status)} / {new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgement.createdAt).toLocaleString()}
-                                          </span>
-                                          <small>
-                                            {
-                                              latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgement
-                                                .payload.evidence
-                                            }
-                                          </small>
-                                        </div>
-                                        <StatusChip
-                                          status={
-                                            latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgement.status
-                                          }
-                                          label={closureSlaDeliveryAcknowledgementLabel(
-                                            latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgement
-                                              .payload.status,
-                                          )}
-                                        />
-                                      </div>
+                                      <ConnectorRunRow
+                                        title={
+                                          latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgement
+                                            .payload.reviewer
+                                        }
+                                        subtitle={`v${latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgement.version} / ${closureSlaDeliveryAcknowledgementLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgement.payload.status)} / ${new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgement.createdAt).toLocaleString()}`}
+                                        status={
+                                          latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgement.status
+                                        }
+                                        label={closureSlaDeliveryAcknowledgementLabel(
+                                          latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgement
+                                            .payload.status,
+                                        )}
+                                      >
+                                        {
+                                          latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgement
+                                            .payload.evidence
+                                        }
+                                      </ConnectorRunRow>
                                     ) : (
                                       <div className="empty-state compact">
                                         No final closeout acknowledgement closure delivery acknowledgement has been retained yet.
@@ -3139,34 +3019,25 @@ export function BackendFinalEvidenceCloseoutPanel({
                                       />
                                     </div>
                                     {latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidence ? (
-                                      <div className="connector-run-row">
-                                        <div>
-                                          <strong>
-                                            {
-                                              latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidence
-                                                .payload.reviewer
-                                            }
-                                          </strong>
-                                          <span>
-                                            v{latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidence.version} / {closureSlaFollowUpClosureLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidence.payload.status)} / {new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidence.createdAt).toLocaleString()}
-                                          </span>
-                                          <small>
-                                            {
-                                              latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidence
-                                                .payload.evidence
-                                            }
-                                          </small>
-                                        </div>
-                                        <StatusChip
-                                          status={
-                                            latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidence.status
-                                          }
-                                          label={closureSlaFollowUpClosureLabel(
-                                            latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidence
-                                              .payload.status,
-                                          )}
-                                        />
-                                      </div>
+                                      <ConnectorRunRow
+                                        title={
+                                          latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidence
+                                            .payload.reviewer
+                                        }
+                                        subtitle={`v${latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidence.version} / ${closureSlaFollowUpClosureLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidence.payload.status)} / ${new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidence.createdAt).toLocaleString()}`}
+                                        status={
+                                          latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidence.status
+                                        }
+                                        label={closureSlaFollowUpClosureLabel(
+                                          latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidence
+                                            .payload.status,
+                                        )}
+                                      >
+                                        {
+                                          latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidence
+                                            .payload.evidence
+                                        }
+                                      </ConnectorRunRow>
                                     ) : (
                                       <div className="empty-state compact">
                                         No final closeout acknowledgement closure closeout evidence has been retained yet.
@@ -3179,16 +3050,15 @@ export function BackendFinalEvidenceCloseoutPanel({
                                         {closeoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryRecords
                                           .slice(0, 3)
                                           .map((record: RuntimeValue) => (
-                                            <div className="connector-run-row" key={record.id}>
-                                              <div>
-                                                <strong>{record.payload.request.subject}</strong>
-                                                <span>
-                                                  v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
-                                                </span>
-                                                <small>{record.payload.result.evidence}</small>
-                                              </div>
-                                              <StatusChip status={record.status} label={record.status} />
-                                            </div>
+                                            <ConnectorRunRow
+                                              key={record.id}
+                                              title={record.payload.request.subject}
+                                              subtitle={`v${record.version} / ${new Date(record.createdAt).toLocaleString()} / ${record.payload.request.recipients.join(', ')}`}
+                                              status={record.status}
+                                              label={record.status}
+                                            >
+                                              {record.payload.result.evidence}
+                                            </ConnectorRunRow>
                                           ))}
                                       </div>
                                     ) : null}
@@ -3345,34 +3215,25 @@ export function BackendFinalEvidenceCloseoutPanel({
                                         />
                                       </div>
                                       {latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement ? (
-                                        <div className="connector-run-row">
-                                          <div>
-                                            <strong>
-                                              {
-                                                latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement
-                                                  .payload.reviewer
-                                              }
-                                            </strong>
-                                            <span>
-                                              v{latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement.version} / {closureSlaDeliveryAcknowledgementLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement.payload.status)} / {new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement.createdAt).toLocaleString()}
-                                            </span>
-                                            <small>
-                                              {
-                                                latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement
-                                                  .payload.evidence
-                                              }
-                                            </small>
-                                          </div>
-                                          <StatusChip
-                                            status={
-                                              latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement.status
-                                            }
-                                            label={closureSlaDeliveryAcknowledgementLabel(
-                                              latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement
-                                                .payload.status,
-                                            )}
-                                          />
-                                        </div>
+                                        <ConnectorRunRow
+                                          title={
+                                            latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement
+                                              .payload.reviewer
+                                          }
+                                          subtitle={`v${latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement.version} / ${closureSlaDeliveryAcknowledgementLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement.payload.status)} / ${new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement.createdAt).toLocaleString()}`}
+                                          status={
+                                            latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement.status
+                                          }
+                                          label={closureSlaDeliveryAcknowledgementLabel(
+                                            latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement
+                                              .payload.status,
+                                          )}
+                                        >
+                                          {
+                                            latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgement
+                                              .payload.evidence
+                                          }
+                                        </ConnectorRunRow>
                                       ) : (
                                         <div className="empty-state compact">
                                           No final closeout acknowledgement closure closeout delivery acknowledgement has been retained yet.
@@ -3515,34 +3376,25 @@ export function BackendFinalEvidenceCloseoutPanel({
                                         }
                                       />
                                       {latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementFinalEvidence ? (
-                                        <div className="connector-run-row">
-                                          <div>
-                                            <strong>
-                                              {
-                                                latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementFinalEvidence
-                                                  .payload.reviewer
-                                              }
-                                            </strong>
-                                            <span>
-                                              v{latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementFinalEvidence.version} / {closureSlaFollowUpClosureLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementFinalEvidence.payload.status)} / {new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementFinalEvidence.createdAt).toLocaleString()}
-                                            </span>
-                                            <small>
-                                              {
-                                                latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementFinalEvidence
-                                                  .payload.evidence
-                                              }
-                                            </small>
-                                          </div>
-                                          <StatusChip
-                                            status={
-                                              latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementFinalEvidence.status
-                                            }
-                                            label={closureSlaFollowUpClosureLabel(
-                                              latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementFinalEvidence
-                                                .payload.status,
-                                            )}
-                                          />
-                                        </div>
+                                        <ConnectorRunRow
+                                          title={
+                                            latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementFinalEvidence
+                                              .payload.reviewer
+                                          }
+                                          subtitle={`v${latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementFinalEvidence.version} / ${closureSlaFollowUpClosureLabel(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementFinalEvidence.payload.status)} / ${new Date(latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementFinalEvidence.createdAt).toLocaleString()}`}
+                                          status={
+                                            latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementFinalEvidence.status
+                                          }
+                                          label={closureSlaFollowUpClosureLabel(
+                                            latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementFinalEvidence
+                                              .payload.status,
+                                          )}
+                                        >
+                                          {
+                                            latestCloseoutNotificationClosurePackageAcknowledgementFinalEvidenceAcknowledgementClosureDeliveryAcknowledgementClosureDeliveryAcknowledgementFinalEvidenceDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementClosureDeliveryAcknowledgementCloseoutEvidenceDeliveryAcknowledgementFinalEvidence
+                                              .payload.evidence
+                                          }
+                                        </ConnectorRunRow>
                                       ) : (
                                         <div className="empty-state compact">
                                           No final closeout acknowledgement closure final evidence has been retained yet.
