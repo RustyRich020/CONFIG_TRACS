@@ -20,7 +20,7 @@ import { ClosureSlaFollowUpClosurePanel } from '../../components/ClosureSlaFollo
 import { ClosureSlaFollowUpRoutingPanel } from '../../components/ClosureSlaFollowUpRoutingPanel'
 import { ClosureSlaGovernanceResponsePanel } from '../../components/ClosureSlaGovernanceResponsePanel'
 import { ClosureSlaHistoryListsPanel } from '../../components/ClosureSlaHistoryListsPanel'
-import { ConnectorGlyph,Metadata,PanelHeader,StatusChip } from '../../components/common'
+import { ConnectorGlyph,ConnectorRunRow,DashboardHeading,Metadata,PanelHeader,StatusChip } from '../../components/common'
 import {
 PostgresCutoverAcknowledgementHistoryPanel,
 PostgresCutoverClosurePackageHistoryPanel,
@@ -5137,16 +5137,14 @@ export function BackendPersistenceView({
             {latestNotificationApproval ? (
               <div className="connector-run-history">
                 <h4>Latest approval</h4>
-                <div className="connector-run-row">
-                  <div>
-                    <strong>{latestNotificationApproval.payload.reviewer}</strong>
-                    <span>
-                      {latestNotificationApproval.payload.approvedChannels.map(titleize).join(', ')} / v{latestNotificationApproval.version}
-                    </span>
-                    <small>{latestNotificationApproval.payload.rationale}</small>
-                  </div>
-                  <StatusChip status={latestNotificationApproval.status} label={latestNotificationApproval.status} />
-                </div>
+                <ConnectorRunRow
+                  title={latestNotificationApproval.payload.reviewer}
+                  subtitle={`${latestNotificationApproval.payload.approvedChannels.map(titleize).join(', ')} / v${latestNotificationApproval.version}`}
+                  status={latestNotificationApproval.status}
+                  label={latestNotificationApproval.status}
+                >
+                  {latestNotificationApproval.payload.rationale}
+                </ConnectorRunRow>
               </div>
             ) : (
               <div className="empty-state compact">No tenant live-channel approval has been saved yet.</div>
@@ -5234,16 +5232,14 @@ export function BackendPersistenceView({
             {latestNotificationRenewal ? (
               <div className="connector-run-history">
                 <h4>Latest renewal route</h4>
-                <div className="connector-run-row">
-                  <div>
-                    <strong>{latestNotificationRenewal.payload.routedReviewers.join(', ')}</strong>
-                    <span>
-                      v{latestNotificationRenewal.version} / {new Date(latestNotificationRenewal.createdAt).toLocaleString()}
-                    </span>
-                    <small>{latestNotificationRenewal.payload.evidence}</small>
-                  </div>
-                  <StatusChip status={latestNotificationRenewal.status} label={latestNotificationRenewal.status} />
-                </div>
+                <ConnectorRunRow
+                  title={latestNotificationRenewal.payload.routedReviewers.join(', ')}
+                  subtitle={`v${latestNotificationRenewal.version} / ${new Date(latestNotificationRenewal.createdAt).toLocaleString()}`}
+                  status={latestNotificationRenewal.status}
+                  label={latestNotificationRenewal.status}
+                >
+                  {latestNotificationRenewal.payload.evidence}
+                </ConnectorRunRow>
               </div>
             ) : (
               <div className="empty-state compact">No notification approval renewal route has been saved yet.</div>
@@ -5331,16 +5327,14 @@ export function BackendPersistenceView({
             {latestNotificationRenewalClosure ? (
               <div className="connector-run-history">
                 <h4>Latest renewal closure</h4>
-                <div className="connector-run-row">
-                  <div>
-                    <strong>{latestNotificationRenewalClosure.payload.reviewer}</strong>
-                    <span>
-                      v{latestNotificationRenewalClosure.version} / {new Date(latestNotificationRenewalClosure.createdAt).toLocaleString()}
-                    </span>
-                    <small>{latestNotificationRenewalClosure.payload.evidence}</small>
-                  </div>
-                  <StatusChip status={latestNotificationRenewalClosure.status} label={latestNotificationRenewalClosure.status} />
-                </div>
+                <ConnectorRunRow
+                  title={latestNotificationRenewalClosure.payload.reviewer}
+                  subtitle={`v${latestNotificationRenewalClosure.version} / ${new Date(latestNotificationRenewalClosure.createdAt).toLocaleString()}`}
+                  status={latestNotificationRenewalClosure.status}
+                  label={latestNotificationRenewalClosure.status}
+                >
+                  {latestNotificationRenewalClosure.payload.evidence}
+                </ConnectorRunRow>
               </div>
             ) : (
             <div className="empty-state compact">No renewal closure has been retained yet.</div>
@@ -5427,19 +5421,14 @@ export function BackendPersistenceView({
           {latestNotificationClosureExportPackage ? (
             <div className="connector-run-history">
               <h4>Latest closure export package</h4>
-              <div className="connector-run-row">
-                <div>
-                  <strong>{latestNotificationClosureExportPackage.payload.messagingOwners.join(', ')}</strong>
-                  <span>
-                    v{latestNotificationClosureExportPackage.version} / {new Date(latestNotificationClosureExportPackage.createdAt).toLocaleString()}
-                  </span>
-                  <small>{latestNotificationClosureExportPackage.payload.evidence}</small>
-                </div>
-                <StatusChip
-                  status={latestNotificationClosureExportPackage.status}
-                  label={latestNotificationClosureExportPackage.status}
-                />
-              </div>
+              <ConnectorRunRow
+                title={latestNotificationClosureExportPackage.payload.messagingOwners.join(', ')}
+                subtitle={`v${latestNotificationClosureExportPackage.version} / ${new Date(latestNotificationClosureExportPackage.createdAt).toLocaleString()}`}
+                status={latestNotificationClosureExportPackage.status}
+                label={latestNotificationClosureExportPackage.status}
+              >
+                {latestNotificationClosureExportPackage.payload.evidence}
+              </ConnectorRunRow>
             </div>
           ) : (
             <div className="empty-state compact">No notification closure export package has been retained yet.</div>
@@ -5448,16 +5437,15 @@ export function BackendPersistenceView({
             <div className="connector-run-history">
               <h4>Closure package delivery evidence</h4>
               {notificationClosurePackageDeliveryRecords.slice(0, 3).map((record) => (
-                <div className="connector-run-row" key={record.id}>
-                  <div>
-                    <strong>{record.payload.request.subject}</strong>
-                    <span>
-                      v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
-                    </span>
-                    <small>{record.payload.result.evidence}</small>
-                  </div>
-                  <StatusChip status={record.status} label={record.status} />
-                </div>
+                <ConnectorRunRow
+                  key={record.id}
+                  title={record.payload.request.subject}
+                  subtitle={`v${record.version} / ${new Date(record.createdAt).toLocaleString()} / ${record.payload.request.recipients.join(', ')}`}
+                  status={record.status}
+                  label={record.status}
+                >
+                  {record.payload.result.evidence}
+                </ConnectorRunRow>
               ))}
             </div>
           ) : null}
@@ -5759,28 +5747,22 @@ export function BackendPersistenceView({
             <div className="connector-run-history">
               <h4>Gate evidence</h4>
               {postgresCutoverGateReview.gates.map((gate) => (
-                <div className="connector-run-row" key={gate.id}>
-                  <div>
-                    <strong>{gate.label}</strong>
-                    <small>{gate.evidence}</small>
-                  </div>
-                  <StatusChip status={gate.status} label={gate.status} />
-                </div>
+                <ConnectorRunRow key={gate.id} title={gate.label} subtitle="" status={gate.status} label={gate.status}>
+                  {gate.evidence}
+                </ConnectorRunRow>
               ))}
             </div>
             {latestPostgresCutoverApproval ? (
               <div className="connector-run-history">
                 <h4>Latest cutover approval</h4>
-                <div className="connector-run-row">
-                  <div>
-                    <strong>{latestPostgresCutoverApproval.payload.reviewer}</strong>
-                    <span>
-                      v{latestPostgresCutoverApproval.version} / {new Date(latestPostgresCutoverApproval.createdAt).toLocaleString()}
-                    </span>
-                    <small>{latestPostgresCutoverApproval.payload.evidence}</small>
-                  </div>
-                  <StatusChip status={latestPostgresCutoverApproval.status} label={latestPostgresCutoverApproval.status} />
-                </div>
+                <ConnectorRunRow
+                  title={latestPostgresCutoverApproval.payload.reviewer}
+                  subtitle={`v${latestPostgresCutoverApproval.version} / ${new Date(latestPostgresCutoverApproval.createdAt).toLocaleString()}`}
+                  status={latestPostgresCutoverApproval.status}
+                  label={latestPostgresCutoverApproval.status}
+                >
+                  {latestPostgresCutoverApproval.payload.evidence}
+                </ConnectorRunRow>
               </div>
             ) : null}
           </div>
@@ -5845,16 +5827,14 @@ export function BackendPersistenceView({
             {latestPostgresCutoverPackage ? (
               <div className="connector-run-history">
                 <h4>Latest package</h4>
-                <div className="connector-run-row">
-                  <div>
-                    <strong>{latestPostgresCutoverPackage.label}</strong>
-                    <span>
-                      v{latestPostgresCutoverPackage.version} / {new Date(latestPostgresCutoverPackage.createdAt).toLocaleString()}
-                    </span>
-                    <small>{latestPostgresCutoverPackage.payload.evidence}</small>
-                  </div>
-                  <StatusChip status={latestPostgresCutoverPackage.status} label={latestPostgresCutoverPackage.status} />
-                </div>
+                <ConnectorRunRow
+                  title={latestPostgresCutoverPackage.label}
+                  subtitle={`v${latestPostgresCutoverPackage.version} / ${new Date(latestPostgresCutoverPackage.createdAt).toLocaleString()}`}
+                  status={latestPostgresCutoverPackage.status}
+                  label={latestPostgresCutoverPackage.status}
+                >
+                  {latestPostgresCutoverPackage.payload.evidence}
+                </ConnectorRunRow>
               </div>
             ) : (
               <div className="empty-state compact">No infrastructure checklist package has been generated yet.</div>
@@ -6000,19 +5980,14 @@ export function BackendPersistenceView({
             {latestPostgresCutoverAcknowledgement ? (
               <div className="connector-run-history">
                 <h4>Latest acknowledgement</h4>
-                <div className="connector-run-row">
-                  <div>
-                    <strong>{latestPostgresCutoverAcknowledgement.payload.reviewer}</strong>
-                    <span>
-                      v{latestPostgresCutoverAcknowledgement.version} / {new Date(latestPostgresCutoverAcknowledgement.createdAt).toLocaleString()}
-                    </span>
-                    <small>{latestPostgresCutoverAcknowledgement.payload.evidence}</small>
-                  </div>
-                  <StatusChip
-                    status={latestPostgresCutoverAcknowledgement.status}
-                    label={postgresCutoverAcknowledgementLabel(latestPostgresCutoverAcknowledgement.payload.status)}
-                  />
-                </div>
+                <ConnectorRunRow
+                  title={latestPostgresCutoverAcknowledgement.payload.reviewer}
+                  subtitle={`v${latestPostgresCutoverAcknowledgement.version} / ${new Date(latestPostgresCutoverAcknowledgement.createdAt).toLocaleString()}`}
+                  status={latestPostgresCutoverAcknowledgement.status}
+                  label={postgresCutoverAcknowledgementLabel(latestPostgresCutoverAcknowledgement.payload.status)}
+                >
+                  {latestPostgresCutoverAcknowledgement.payload.evidence}
+                </ConnectorRunRow>
               </div>
             ) : (
               <div className="empty-state compact">No infrastructure acknowledgement has been retained yet.</div>
@@ -6021,16 +5996,15 @@ export function BackendPersistenceView({
               <div className="connector-run-history">
                 <h4>Acknowledgement delivery evidence</h4>
                 {postgresAcknowledgementDeliveryRecords.slice(0, 3).map((record) => (
-                  <div className="connector-run-row" key={record.id}>
-                    <div>
-                      <strong>{record.payload.request.subject}</strong>
-                      <span>
-                        v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
-                      </span>
-                      <small>{record.payload.result.evidence}</small>
-                    </div>
-                    <StatusChip status={record.status} label={record.status} />
-                  </div>
+                  <ConnectorRunRow
+                    key={record.id}
+                    title={record.payload.request.subject}
+                    subtitle={`v${record.version} / ${new Date(record.createdAt).toLocaleString()} / ${record.payload.request.recipients.join(', ')}`}
+                    status={record.status}
+                    label={record.status}
+                  >
+                    {record.payload.result.evidence}
+                  </ConnectorRunRow>
                 ))}
               </div>
             ) : null}
@@ -6144,19 +6118,14 @@ export function BackendPersistenceView({
             {latestPostgresCutoverOwnerReminder ? (
               <div className="connector-run-history">
                 <h4>Latest owner reminder</h4>
-                <div className="connector-run-row">
-                  <div>
-                    <strong>{latestPostgresCutoverOwnerReminder.payload.owners.join(', ')}</strong>
-                    <span>
-                      v{latestPostgresCutoverOwnerReminder.version} / due {latestPostgresCutoverOwnerReminder.payload.dueAt || 'not scheduled'}
-                    </span>
-                    <small>{latestPostgresCutoverOwnerReminder.payload.evidence}</small>
-                  </div>
-                  <StatusChip
-                    status={latestPostgresCutoverOwnerReminder.status}
-                    label={postgresCutoverOwnerReminderLabel(latestPostgresCutoverOwnerReminder.payload.status)}
-                  />
-                </div>
+                <ConnectorRunRow
+                  title={latestPostgresCutoverOwnerReminder.payload.owners.join(', ')}
+                  subtitle={`v${latestPostgresCutoverOwnerReminder.version} / due ${latestPostgresCutoverOwnerReminder.payload.dueAt || 'not scheduled'}`}
+                  status={latestPostgresCutoverOwnerReminder.status}
+                  label={postgresCutoverOwnerReminderLabel(latestPostgresCutoverOwnerReminder.payload.status)}
+                >
+                  {latestPostgresCutoverOwnerReminder.payload.evidence}
+                </ConnectorRunRow>
                 {latestPostgresCutoverOwnerReminder.payload.requiredActions.length > 0 ? (
                   <div className="storage-column-list">
                     {latestPostgresCutoverOwnerReminder.payload.requiredActions.map((action) => (
@@ -6172,16 +6141,15 @@ export function BackendPersistenceView({
               <div className="connector-run-history">
                 <h4>Owner reminder delivery evidence</h4>
                 {postgresCutoverOwnerReminderDeliveryRecords.slice(0, 3).map((record) => (
-                  <div className="connector-run-row" key={record.id}>
-                    <div>
-                      <strong>{record.payload.request.subject}</strong>
-                      <span>
-                        v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
-                      </span>
-                      <small>{record.payload.result.evidence}</small>
-                    </div>
-                    <StatusChip status={record.status} label={record.status} />
-                  </div>
+                  <ConnectorRunRow
+                    key={record.id}
+                    title={record.payload.request.subject}
+                    subtitle={`v${record.version} / ${new Date(record.createdAt).toLocaleString()} / ${record.payload.request.recipients.join(', ')}`}
+                    status={record.status}
+                    label={record.status}
+                  >
+                    {record.payload.result.evidence}
+                  </ConnectorRunRow>
                 ))}
               </div>
             ) : null}
@@ -6277,19 +6245,14 @@ export function BackendPersistenceView({
             {latestPostgresCutoverReminderClosure ? (
               <div className="connector-run-history">
                 <h4>Latest reminder closure</h4>
-                <div className="connector-run-row">
-                  <div>
-                    <strong>{latestPostgresCutoverReminderClosure.payload.reviewer}</strong>
-                    <span>
-                      v{latestPostgresCutoverReminderClosure.version} / {new Date(latestPostgresCutoverReminderClosure.createdAt).toLocaleString()}
-                    </span>
-                    <small>{latestPostgresCutoverReminderClosure.payload.evidence}</small>
-                  </div>
-                  <StatusChip
-                    status={latestPostgresCutoverReminderClosure.status}
-                    label={postgresCutoverReminderClosureLabel(latestPostgresCutoverReminderClosure.payload.status)}
-                  />
-                </div>
+                <ConnectorRunRow
+                  title={latestPostgresCutoverReminderClosure.payload.reviewer}
+                  subtitle={`v${latestPostgresCutoverReminderClosure.version} / ${new Date(latestPostgresCutoverReminderClosure.createdAt).toLocaleString()}`}
+                  status={latestPostgresCutoverReminderClosure.status}
+                  label={postgresCutoverReminderClosureLabel(latestPostgresCutoverReminderClosure.payload.status)}
+                >
+                  {latestPostgresCutoverReminderClosure.payload.evidence}
+                </ConnectorRunRow>
                 {latestPostgresCutoverReminderClosure.payload.supersededEvidence.length > 0 ? (
                   <div className="storage-column-list">
                     {latestPostgresCutoverReminderClosure.payload.supersededEvidence.map((entry) => (
@@ -6395,16 +6358,14 @@ export function BackendPersistenceView({
             {latestPostgresCutoverClosurePackage ? (
               <div className="connector-run-history">
                 <h4>Latest final handoff package</h4>
-                <div className="connector-run-row">
-                  <div>
-                    <strong>{latestPostgresCutoverClosurePackage.payload.finalHandoffReviewers.join(', ')}</strong>
-                    <span>
-                      v{latestPostgresCutoverClosurePackage.version} / {new Date(latestPostgresCutoverClosurePackage.createdAt).toLocaleString()}
-                    </span>
-                    <small>{latestPostgresCutoverClosurePackage.payload.evidence}</small>
-                  </div>
-                  <StatusChip status={latestPostgresCutoverClosurePackage.status} label={latestPostgresCutoverClosurePackage.status} />
-                </div>
+                <ConnectorRunRow
+                  title={latestPostgresCutoverClosurePackage.payload.finalHandoffReviewers.join(', ')}
+                  subtitle={`v${latestPostgresCutoverClosurePackage.version} / ${new Date(latestPostgresCutoverClosurePackage.createdAt).toLocaleString()}`}
+                  status={latestPostgresCutoverClosurePackage.status}
+                  label={latestPostgresCutoverClosurePackage.status}
+                >
+                  {latestPostgresCutoverClosurePackage.payload.evidence}
+                </ConnectorRunRow>
                 {latestPostgresCutoverClosurePackage.payload.requiredActions.length > 0 ? (
                   <div className="storage-column-list">
                     {latestPostgresCutoverClosurePackage.payload.requiredActions.slice(0, 6).map((action) => (
@@ -6437,13 +6398,11 @@ export function BackendPersistenceView({
         ) : null}
         <div className="notification-approval-grid renewal-routing-grid">
           <div className="notification-approval-form">
-            <div className="dashboard-heading">
-              <h4>Final Handoff Delivery Acknowledgement</h4>
-              <StatusChip
-                status={postgresCutoverFinalHandoffAcknowledgementStatusLevel(postgresFinalHandoffStatus)}
-                label={postgresCutoverFinalHandoffAcknowledgementLabel(postgresFinalHandoffStatus)}
-              />
-            </div>
+            <DashboardHeading
+              title="Final Handoff Delivery Acknowledgement"
+              status={postgresCutoverFinalHandoffAcknowledgementStatusLevel(postgresFinalHandoffStatus)}
+              label={postgresCutoverFinalHandoffAcknowledgementLabel(postgresFinalHandoffStatus)}
+            />
             <div className="trace-review-grid">
               <label>
                 <span>Reviewer</span>
@@ -6542,19 +6501,14 @@ export function BackendPersistenceView({
             {latestPostgresCutoverFinalHandoffAcknowledgement ? (
               <div className="connector-run-history">
                 <h4>Latest final handoff acknowledgement</h4>
-                <div className="connector-run-row">
-                  <div>
-                    <strong>{latestPostgresCutoverFinalHandoffAcknowledgement.payload.reviewer}</strong>
-                    <span>
-                      v{latestPostgresCutoverFinalHandoffAcknowledgement.version} / {postgresCutoverFinalHandoffAcknowledgementLabel(latestPostgresCutoverFinalHandoffAcknowledgement.payload.status)} / {new Date(latestPostgresCutoverFinalHandoffAcknowledgement.createdAt).toLocaleString()}
-                    </span>
-                    <small>{latestPostgresCutoverFinalHandoffAcknowledgement.payload.evidence}</small>
-                  </div>
-                  <StatusChip
-                    status={latestPostgresCutoverFinalHandoffAcknowledgement.status}
-                    label={postgresCutoverFinalHandoffAcknowledgementLabel(latestPostgresCutoverFinalHandoffAcknowledgement.payload.status)}
-                  />
-                </div>
+                <ConnectorRunRow
+                  title={latestPostgresCutoverFinalHandoffAcknowledgement.payload.reviewer}
+                  subtitle={`v${latestPostgresCutoverFinalHandoffAcknowledgement.version} / ${postgresCutoverFinalHandoffAcknowledgementLabel(latestPostgresCutoverFinalHandoffAcknowledgement.payload.status)} / ${new Date(latestPostgresCutoverFinalHandoffAcknowledgement.createdAt).toLocaleString()}`}
+                  status={latestPostgresCutoverFinalHandoffAcknowledgement.status}
+                  label={postgresCutoverFinalHandoffAcknowledgementLabel(latestPostgresCutoverFinalHandoffAcknowledgement.payload.status)}
+                >
+                  {latestPostgresCutoverFinalHandoffAcknowledgement.payload.evidence}
+                </ConnectorRunRow>
                 {latestPostgresCutoverFinalHandoffAcknowledgement.payload.requestedActions.length > 0 ? (
                   <div className="storage-column-list">
                     {latestPostgresCutoverFinalHandoffAcknowledgement.payload.requestedActions.slice(0, 5).map((action) => (
@@ -6569,10 +6523,11 @@ export function BackendPersistenceView({
           </div>
         </div>
         <div className="connector-run-history retry-aging-dashboard">
-          <div className="dashboard-heading">
-            <h4>Final Handoff Acknowledgement Closure Package</h4>
-            <StatusChip status={postgresFinalHandoffClosureStatus} label={postgresFinalHandoffClosureStatus} />
-          </div>
+          <DashboardHeading
+            title="Final Handoff Acknowledgement Closure Package"
+            status={postgresFinalHandoffClosureStatus}
+            label={postgresFinalHandoffClosureStatus}
+          />
           <div className="trace-review-grid">
             <label className="trace-review-rationale">
               <span>Closure reviewers</span>
@@ -6642,19 +6597,14 @@ export function BackendPersistenceView({
           {latestPostgresCutoverFinalHandoffClosurePackage ? (
             <div className="retry-aging-list">
               <h4>Latest final handoff closure package</h4>
-              <div className="connector-run-row">
-                <div>
-                  <strong>{latestPostgresCutoverFinalHandoffClosurePackage.payload.closureReviewers.join(', ')}</strong>
-                  <span>
-                    v{latestPostgresCutoverFinalHandoffClosurePackage.version} / {new Date(latestPostgresCutoverFinalHandoffClosurePackage.createdAt).toLocaleString()} / {latestPostgresCutoverFinalHandoffClosurePackage.payload.acknowledgementRecords.length} acknowledgement record(s)
-                  </span>
-                  <small>{latestPostgresCutoverFinalHandoffClosurePackage.payload.evidence}</small>
-                </div>
-                <StatusChip
-                  status={latestPostgresCutoverFinalHandoffClosurePackage.status}
-                  label={latestPostgresCutoverFinalHandoffClosurePackage.status}
-                />
-              </div>
+              <ConnectorRunRow
+                title={latestPostgresCutoverFinalHandoffClosurePackage.payload.closureReviewers.join(', ')}
+                subtitle={`v${latestPostgresCutoverFinalHandoffClosurePackage.version} / ${new Date(latestPostgresCutoverFinalHandoffClosurePackage.createdAt).toLocaleString()} / ${latestPostgresCutoverFinalHandoffClosurePackage.payload.acknowledgementRecords.length} acknowledgement record(s)`}
+                status={latestPostgresCutoverFinalHandoffClosurePackage.status}
+                label={latestPostgresCutoverFinalHandoffClosurePackage.status}
+              >
+                {latestPostgresCutoverFinalHandoffClosurePackage.payload.evidence}
+              </ConnectorRunRow>
               {latestPostgresCutoverFinalHandoffClosurePackage.payload.requiredActions.length > 0 ? (
                 <ul className="compact-list">
                   {latestPostgresCutoverFinalHandoffClosurePackage.payload.requiredActions.slice(0, 5).map((action) => (
@@ -6670,29 +6620,26 @@ export function BackendPersistenceView({
             <div className="retry-aging-list">
               <h4>Final handoff closure package delivery evidence</h4>
               {postgresFinalHandoffClosurePackageDeliveryRecords.slice(0, 3).map((record) => (
-                <div className="connector-run-row" key={record.id}>
-                  <div>
-                    <strong>{record.payload.request.subject}</strong>
-                    <span>
-                      v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
-                    </span>
-                    <small>{record.payload.result.evidence}</small>
-                  </div>
-                  <StatusChip status={record.status} label={record.status} />
-                </div>
+                <ConnectorRunRow
+                  key={record.id}
+                  title={record.payload.request.subject}
+                  subtitle={`v${record.version} / ${new Date(record.createdAt).toLocaleString()} / ${record.payload.request.recipients.join(', ')}`}
+                  status={record.status}
+                  label={record.status}
+                >
+                  {record.payload.result.evidence}
+                </ConnectorRunRow>
               ))}
             </div>
           ) : null}
           <div className="retry-aging-list">
-            <div className="dashboard-heading">
-              <h4>Final handoff closure package acknowledgement</h4>
-              <StatusChip
-                status={postgresCutoverFinalHandoffAcknowledgementStatusLevel(
-                  postgresFinalHandoffClosurePackageAckStatus,
-                )}
-                label={postgresCutoverFinalHandoffAcknowledgementLabel(postgresFinalHandoffClosurePackageAckStatus)}
-              />
-            </div>
+            <DashboardHeading
+              title="Final handoff closure package acknowledgement"
+              status={postgresCutoverFinalHandoffAcknowledgementStatusLevel(
+                postgresFinalHandoffClosurePackageAckStatus,
+              )}
+              label={postgresCutoverFinalHandoffAcknowledgementLabel(postgresFinalHandoffClosurePackageAckStatus)}
+            />
             <div className="trace-review-grid">
               <label>
                 <span>Reviewer</span>
@@ -6799,33 +6746,26 @@ export function BackendPersistenceView({
               />
             </div>
             {latestPostgresCutoverFinalHandoffClosurePackageAcknowledgement ? (
-              <div className="connector-run-row">
-                <div>
-                  <strong>{latestPostgresCutoverFinalHandoffClosurePackageAcknowledgement.payload.reviewer}</strong>
-                  <span>
-                    v{latestPostgresCutoverFinalHandoffClosurePackageAcknowledgement.version} / {postgresCutoverFinalHandoffAcknowledgementLabel(latestPostgresCutoverFinalHandoffClosurePackageAcknowledgement.payload.status)} / {new Date(latestPostgresCutoverFinalHandoffClosurePackageAcknowledgement.createdAt).toLocaleString()}
-                  </span>
-                  <small>{latestPostgresCutoverFinalHandoffClosurePackageAcknowledgement.payload.evidence}</small>
-                </div>
-                <StatusChip
-                  status={latestPostgresCutoverFinalHandoffClosurePackageAcknowledgement.status}
-                  label={postgresCutoverFinalHandoffAcknowledgementLabel(
-                    latestPostgresCutoverFinalHandoffClosurePackageAcknowledgement.payload.status,
-                  )}
-                />
-              </div>
+              <ConnectorRunRow
+                title={latestPostgresCutoverFinalHandoffClosurePackageAcknowledgement.payload.reviewer}
+                subtitle={`v${latestPostgresCutoverFinalHandoffClosurePackageAcknowledgement.version} / ${postgresCutoverFinalHandoffAcknowledgementLabel(latestPostgresCutoverFinalHandoffClosurePackageAcknowledgement.payload.status)} / ${new Date(latestPostgresCutoverFinalHandoffClosurePackageAcknowledgement.createdAt).toLocaleString()}`}
+                status={latestPostgresCutoverFinalHandoffClosurePackageAcknowledgement.status}
+                label={postgresCutoverFinalHandoffAcknowledgementLabel(
+                  latestPostgresCutoverFinalHandoffClosurePackageAcknowledgement.payload.status,
+                )}
+              >
+                {latestPostgresCutoverFinalHandoffClosurePackageAcknowledgement.payload.evidence}
+              </ConnectorRunRow>
             ) : (
               <div className="empty-state compact">No final handoff closure package acknowledgement has been retained yet.</div>
             )}
           </div>
           <div className="retry-aging-list">
-            <div className="dashboard-heading">
-              <h4>Final handoff closure acknowledgement closeout</h4>
-              <StatusChip
-                status={postgresCutoverReminderClosureStatusLevel(postgresFinalHandoffClosurePackageAckClosureStatus)}
-                label={postgresCutoverReminderClosureLabel(postgresFinalHandoffClosurePackageAckClosureStatus)}
-              />
-            </div>
+            <DashboardHeading
+              title="Final handoff closure acknowledgement closeout"
+              status={postgresCutoverReminderClosureStatusLevel(postgresFinalHandoffClosurePackageAckClosureStatus)}
+              label={postgresCutoverReminderClosureLabel(postgresFinalHandoffClosurePackageAckClosureStatus)}
+            />
             <div className="trace-review-grid">
               <label>
                 <span>Closure reviewer</span>
@@ -6914,21 +6854,16 @@ export function BackendPersistenceView({
               />
             </div>
             {latestPostgresCutoverFinalHandoffClosurePackageAcknowledgementClosure ? (
-              <div className="connector-run-row">
-                <div>
-                  <strong>{latestPostgresCutoverFinalHandoffClosurePackageAcknowledgementClosure.payload.reviewer}</strong>
-                  <span>
-                    v{latestPostgresCutoverFinalHandoffClosurePackageAcknowledgementClosure.version} / {postgresCutoverReminderClosureLabel(latestPostgresCutoverFinalHandoffClosurePackageAcknowledgementClosure.payload.status)} / {new Date(latestPostgresCutoverFinalHandoffClosurePackageAcknowledgementClosure.createdAt).toLocaleString()}
-                  </span>
-                  <small>{latestPostgresCutoverFinalHandoffClosurePackageAcknowledgementClosure.payload.evidence}</small>
-                </div>
-                <StatusChip
-                  status={latestPostgresCutoverFinalHandoffClosurePackageAcknowledgementClosure.status}
-                  label={postgresCutoverReminderClosureLabel(
-                    latestPostgresCutoverFinalHandoffClosurePackageAcknowledgementClosure.payload.status,
-                  )}
-                />
-              </div>
+              <ConnectorRunRow
+                title={latestPostgresCutoverFinalHandoffClosurePackageAcknowledgementClosure.payload.reviewer}
+                subtitle={`v${latestPostgresCutoverFinalHandoffClosurePackageAcknowledgementClosure.version} / ${postgresCutoverReminderClosureLabel(latestPostgresCutoverFinalHandoffClosurePackageAcknowledgementClosure.payload.status)} / ${new Date(latestPostgresCutoverFinalHandoffClosurePackageAcknowledgementClosure.createdAt).toLocaleString()}`}
+                status={latestPostgresCutoverFinalHandoffClosurePackageAcknowledgementClosure.status}
+                label={postgresCutoverReminderClosureLabel(
+                  latestPostgresCutoverFinalHandoffClosurePackageAcknowledgementClosure.payload.status,
+                )}
+              >
+                {latestPostgresCutoverFinalHandoffClosurePackageAcknowledgementClosure.payload.evidence}
+              </ConnectorRunRow>
             ) : (
               <div className="empty-state compact">No final handoff closure package acknowledgement closeout has been retained yet.</div>
             )}
@@ -7579,4 +7514,3 @@ export function BackendPersistenceView({
     </>
   )
 }
-
