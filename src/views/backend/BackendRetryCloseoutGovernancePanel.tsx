@@ -4,7 +4,7 @@ import { BackendCloseoutExportAcknowledgementCard } from './BackendCloseoutExpor
 import { BackendCloseoutExportAcknowledgementClosureCard } from './BackendCloseoutExportAcknowledgementClosureCard'
 import { BackendCloseoutNotificationClosureRecordsCard } from './BackendCloseoutNotificationClosureRecordsCard'
 import { BackendCloseoutNotificationClosurePackageDeliveryCard } from './BackendCloseoutNotificationClosurePackageDeliveryCard'
-import { Metadata, PanelHeader, StatusChip } from '../../components/common'
+import { ConnectorRunRow, DashboardHeading, Metadata, PanelHeader } from '../../components/common'
 import type {
 NotificationRetryQueueAcknowledgement,
 NotificationRetryQueueAcknowledgementClosurePackageAcknowledgement,
@@ -1161,25 +1161,22 @@ export function BackendRetryCloseoutGovernancePanel({
             {latestRetryableDelivery ? (
               <div className="connector-run-history">
                 <h4>Latest retry candidate</h4>
-                <div className="connector-run-row">
-                  <div>
-                    <strong>{latestRetryableDelivery.payload.request.subject}</strong>
-                    <span>
-                      v{latestRetryableDelivery.version} / {new Date(latestRetryableDelivery.createdAt).toLocaleString()} / {latestRetryableDelivery.payload.request.recipients.join(', ')}
-                    </span>
-                    <small>{latestRetryableDelivery.payload.result.evidence}</small>
-                  </div>
-                  <StatusChip status={latestRetryableDelivery.status} label={latestRetryableDelivery.status} />
-                </div>
+                <ConnectorRunRow
+                  status={latestRetryableDelivery.status}
+                  label={latestRetryableDelivery.status}
+                  title={latestRetryableDelivery.payload.request.subject}
+                  subtitle={`v${latestRetryableDelivery.version} / ${new Date(
+                    latestRetryableDelivery.createdAt,
+                  ).toLocaleString()} / ${latestRetryableDelivery.payload.request.recipients.join(', ')}`}
+                >
+                  {latestRetryableDelivery.payload.result.evidence}
+                </ConnectorRunRow>
               </div>
             ) : (
               <div className="empty-state compact">No delivery records are available for the selected retry source.</div>
             )}
             <div className="connector-run-history retry-aging-dashboard">
-              <div className="dashboard-heading">
-                <h4>Retry Queue Aging</h4>
-                <StatusChip status={retryQueueStatus} label={retryQueueStatus} />
-              </div>
+              <DashboardHeading status={retryQueueStatus} label={retryQueueStatus} title="Retry Queue Aging" />
               <div className="metadata-grid">
                 <Metadata label="Active queue" value={String(retryQueueMetrics.active)} />
                 <Metadata label="Overdue" value={String(retryQueueMetrics.overdue)} />
@@ -1198,18 +1195,22 @@ export function BackendRetryCloseoutGovernancePanel({
               {retryQueueRows.length > 0 ? (
                 <div className="retry-aging-list">
                   {retryQueueRows.slice(0, 4).map((row: RuntimeValue) => (
-                    <div className="connector-run-row" key={row.record.id}>
-                      <div>
-                        <strong>{row.record.payload.subject}</strong>
-                        <span>
-                          {deliverySourceLabel(row.record.payload.source)} / attempt {row.record.payload.attempt} of {row.record.payload.maxRetries} / {row.active ? retryDueLabel(row.dueAt, retryQueueMeasuredAt) : notificationDeliveryRetryLabel(row.record.payload.status)}
-                        </span>
-                        <small>
-                          {notificationDeliveryRetryLabel(row.record.payload.status)} for {retryAgeLabel(row.ageMinutes)}; due {row.dueAt ? new Date(row.dueAt).toLocaleString() : 'not scheduled'}.
-                        </small>
-                      </div>
-                      <StatusChip status={row.status} label={row.active ? row.status : row.record.payload.status} />
-                    </div>
+                    <ConnectorRunRow
+                      key={row.record.id}
+                      status={row.status}
+                      label={row.active ? row.status : row.record.payload.status}
+                      title={row.record.payload.subject}
+                      subtitle={`${deliverySourceLabel(row.record.payload.source)} / attempt ${
+                        row.record.payload.attempt
+                      } of ${row.record.payload.maxRetries} / ${
+                        row.active
+                          ? retryDueLabel(row.dueAt, retryQueueMeasuredAt)
+                          : notificationDeliveryRetryLabel(row.record.payload.status)
+                      }`}
+                    >
+                      {notificationDeliveryRetryLabel(row.record.payload.status)} for {retryAgeLabel(row.ageMinutes)}; due{' '}
+                      {row.dueAt ? new Date(row.dueAt).toLocaleString() : 'not scheduled'}.
+                    </ConnectorRunRow>
                   ))}
                 </div>
               ) : (
@@ -1217,10 +1218,7 @@ export function BackendRetryCloseoutGovernancePanel({
               )}
             </div>
             <div className="connector-run-history retry-aging-dashboard">
-              <div className="dashboard-heading">
-                <h4>Retry Queue Export Package</h4>
-                <StatusChip status={retryQueueStatus} label={retryQueueStatus} />
-              </div>
+              <DashboardHeading status={retryQueueStatus} label={retryQueueStatus} title="Retry Queue Export Package" />
               <div className="trace-review-grid">
                 <label className="trace-review-rationale">
                   <span>Operations reviewers</span>
@@ -1291,16 +1289,17 @@ export function BackendRetryCloseoutGovernancePanel({
               {notificationRetryQueueExportPackageRecords.length > 0 ? (
                 <div className="retry-aging-list">
                   {notificationRetryQueueExportPackageRecords.slice(0, 3).map((record: RuntimeValue) => (
-                    <div className="connector-run-row" key={record.id}>
-                      <div>
-                        <strong>{record.payload.operationsReviewers.join(', ')}</strong>
-                        <span>
-                          v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.rows.length} retry row(s)
-                        </span>
-                        <small>{record.payload.evidence}</small>
-                      </div>
-                      <StatusChip status={record.status} label={record.status} />
-                    </div>
+                    <ConnectorRunRow
+                      key={record.id}
+                      status={record.status}
+                      label={record.status}
+                      title={record.payload.operationsReviewers.join(', ')}
+                      subtitle={`v${record.version} / ${new Date(record.createdAt).toLocaleString()} / ${
+                        record.payload.rows.length
+                      } retry row(s)`}
+                    >
+                      {record.payload.evidence}
+                    </ConnectorRunRow>
                   ))}
                 </div>
               ) : (
@@ -1310,27 +1309,24 @@ export function BackendRetryCloseoutGovernancePanel({
                 <div className="retry-aging-list">
                   <h4>Retry queue package delivery evidence</h4>
                   {retryQueuePackageDeliveryRecords.slice(0, 3).map((record: RuntimeValue) => (
-                    <div className="connector-run-row" key={record.id}>
-                      <div>
-                        <strong>{record.payload.request.subject}</strong>
-                        <span>
-                          v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
-                        </span>
-                        <small>{record.payload.result.evidence}</small>
-                      </div>
-                      <StatusChip status={record.status} label={record.status} />
-                    </div>
+                    <ConnectorRunRow
+                      key={record.id}
+                      status={record.status}
+                      label={record.status}
+                      title={record.payload.request.subject}
+                      subtitle={`v${record.version} / ${new Date(record.createdAt).toLocaleString()} / ${record.payload.request.recipients.join(', ')}`}
+                    >
+                      {record.payload.result.evidence}
+                    </ConnectorRunRow>
                   ))}
                 </div>
               ) : null}
               <div className="connector-run-history retry-aging-dashboard">
-                <div className="dashboard-heading">
-                  <h4>Retry Queue Package Acknowledgement</h4>
-                  <StatusChip
-                    status={notificationRetryQueueAcknowledgementStatusLevel(retryQueueAckStatus)}
-                    label={notificationRetryQueueAcknowledgementLabel(retryQueueAckStatus)}
-                  />
-                </div>
+                <DashboardHeading
+                  status={notificationRetryQueueAcknowledgementStatusLevel(retryQueueAckStatus)}
+                  label={notificationRetryQueueAcknowledgementLabel(retryQueueAckStatus)}
+                  title="Retry Queue Package Acknowledgement"
+                />
                 <div className="trace-review-grid">
                   <label>
                     <span>Reviewer</span>
@@ -1424,19 +1420,16 @@ export function BackendRetryCloseoutGovernancePanel({
                 {latestRetryQueueAcknowledgement ? (
                   <div className="retry-aging-list">
                     <h4>Latest retry queue acknowledgement</h4>
-                    <div className="connector-run-row">
-                      <div>
-                        <strong>{latestRetryQueueAcknowledgement.payload.reviewer}</strong>
-                        <span>
-                          v{latestRetryQueueAcknowledgement.version} / {notificationRetryQueueAcknowledgementLabel(latestRetryQueueAcknowledgement.payload.status)} / {new Date(latestRetryQueueAcknowledgement.createdAt).toLocaleString()}
-                        </span>
-                        <small>{latestRetryQueueAcknowledgement.payload.evidence}</small>
-                      </div>
-                      <StatusChip
-                        status={latestRetryQueueAcknowledgement.status}
-                        label={notificationRetryQueueAcknowledgementLabel(latestRetryQueueAcknowledgement.payload.status)}
-                      />
-                    </div>
+                    <ConnectorRunRow
+                      status={latestRetryQueueAcknowledgement.status}
+                      label={notificationRetryQueueAcknowledgementLabel(latestRetryQueueAcknowledgement.payload.status)}
+                      title={latestRetryQueueAcknowledgement.payload.reviewer}
+                      subtitle={`v${latestRetryQueueAcknowledgement.version} / ${notificationRetryQueueAcknowledgementLabel(
+                        latestRetryQueueAcknowledgement.payload.status,
+                      )} / ${new Date(latestRetryQueueAcknowledgement.createdAt).toLocaleString()}`}
+                    >
+                      {latestRetryQueueAcknowledgement.payload.evidence}
+                    </ConnectorRunRow>
                     {latestRetryQueueAcknowledgement.payload.requestedActions.length > 0 ? (
                       <ul className="compact-list">
                         {latestRetryQueueAcknowledgement.payload.requestedActions.slice(0, 5).map((action: RuntimeValue) => (
@@ -1452,25 +1445,27 @@ export function BackendRetryCloseoutGovernancePanel({
                   <div className="retry-aging-list">
                     <h4>Retry queue acknowledgement history</h4>
                     {notificationRetryQueueAcknowledgementRecords.slice(1, 5).map((record: RuntimeValue) => (
-                      <div className="connector-run-row" key={record.id}>
-                        <div>
-                          <strong>{record.payload.reviewer}</strong>
-                          <span>
-                            v{record.version} / {notificationRetryQueueAcknowledgementLabel(record.payload.status)} / {new Date(record.createdAt).toLocaleString()}
-                          </span>
-                          <small>{record.payload.responseNotes}</small>
-                        </div>
-                        <StatusChip status={record.status} label={notificationRetryQueueAcknowledgementLabel(record.payload.status)} />
-                      </div>
+                      <ConnectorRunRow
+                        key={record.id}
+                        status={record.status}
+                        label={notificationRetryQueueAcknowledgementLabel(record.payload.status)}
+                        title={record.payload.reviewer}
+                        subtitle={`v${record.version} / ${notificationRetryQueueAcknowledgementLabel(
+                          record.payload.status,
+                        )} / ${new Date(record.createdAt).toLocaleString()}`}
+                      >
+                        {record.payload.responseNotes}
+                      </ConnectorRunRow>
                     ))}
                   </div>
                 ) : null}
               </div>
               <div className="connector-run-history retry-aging-dashboard">
-                <div className="dashboard-heading">
-                  <h4>Retry Queue Acknowledgement Closure Package</h4>
-                  <StatusChip status={retryQueueAcknowledgementClosureStatus} label={retryQueueAcknowledgementClosureStatus} />
-                </div>
+                <DashboardHeading
+                  status={retryQueueAcknowledgementClosureStatus}
+                  label={retryQueueAcknowledgementClosureStatus}
+                  title="Retry Queue Acknowledgement Closure Package"
+                />
                 <div className="trace-review-grid">
                   <label className="trace-review-rationale">
                     <span>Closure reviewers</span>
@@ -1540,19 +1535,18 @@ export function BackendRetryCloseoutGovernancePanel({
                 {latestRetryQueueAcknowledgementClosurePackage ? (
                   <div className="retry-aging-list">
                     <h4>Latest retry queue closure package</h4>
-                    <div className="connector-run-row">
-                      <div>
-                        <strong>{latestRetryQueueAcknowledgementClosurePackage.payload.closureReviewers.join(', ')}</strong>
-                        <span>
-                          v{latestRetryQueueAcknowledgementClosurePackage.version} / {new Date(latestRetryQueueAcknowledgementClosurePackage.createdAt).toLocaleString()} / {latestRetryQueueAcknowledgementClosurePackage.payload.acknowledgementRecords.length} acknowledgement record(s)
-                        </span>
-                        <small>{latestRetryQueueAcknowledgementClosurePackage.payload.evidence}</small>
-                      </div>
-                      <StatusChip
-                        status={latestRetryQueueAcknowledgementClosurePackage.status}
-                        label={latestRetryQueueAcknowledgementClosurePackage.status}
-                      />
-                    </div>
+                    <ConnectorRunRow
+                      status={latestRetryQueueAcknowledgementClosurePackage.status}
+                      label={latestRetryQueueAcknowledgementClosurePackage.status}
+                      title={latestRetryQueueAcknowledgementClosurePackage.payload.closureReviewers.join(', ')}
+                      subtitle={`v${latestRetryQueueAcknowledgementClosurePackage.version} / ${new Date(
+                        latestRetryQueueAcknowledgementClosurePackage.createdAt,
+                      ).toLocaleString()} / ${
+                        latestRetryQueueAcknowledgementClosurePackage.payload.acknowledgementRecords.length
+                      } acknowledgement record(s)`}
+                    >
+                      {latestRetryQueueAcknowledgementClosurePackage.payload.evidence}
+                    </ConnectorRunRow>
                     {latestRetryQueueAcknowledgementClosurePackage.payload.requiredActions.length > 0 ? (
                       <ul className="compact-list">
                         {latestRetryQueueAcknowledgementClosurePackage.payload.requiredActions.slice(0, 5).map((action: RuntimeValue) => (
@@ -1568,27 +1562,24 @@ export function BackendRetryCloseoutGovernancePanel({
                   <div className="retry-aging-list">
                     <h4>Retry queue closure package delivery evidence</h4>
                     {retryQueueAcknowledgementClosurePackageDeliveryRecords.slice(0, 3).map((record: RuntimeValue) => (
-                      <div className="connector-run-row" key={record.id}>
-                        <div>
-                          <strong>{record.payload.request.subject}</strong>
-                          <span>
-                            v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
-                          </span>
-                          <small>{record.payload.result.evidence}</small>
-                        </div>
-                        <StatusChip status={record.status} label={record.status} />
-                      </div>
+                      <ConnectorRunRow
+                        key={record.id}
+                        status={record.status}
+                        label={record.status}
+                        title={record.payload.request.subject}
+                        subtitle={`v${record.version} / ${new Date(record.createdAt).toLocaleString()} / ${record.payload.request.recipients.join(', ')}`}
+                      >
+                        {record.payload.result.evidence}
+                      </ConnectorRunRow>
                     ))}
                   </div>
                 ) : null}
                 <div className="retry-aging-list">
-                  <div className="dashboard-heading">
-                    <h4>Retry queue closure package acknowledgement</h4>
-                    <StatusChip
-                      status={notificationRetryQueueAcknowledgementStatusLevel(retryQueueClosurePackageAckStatus)}
-                      label={notificationRetryQueueAcknowledgementLabel(retryQueueClosurePackageAckStatus)}
-                    />
-                  </div>
+                  <DashboardHeading
+                    status={notificationRetryQueueAcknowledgementStatusLevel(retryQueueClosurePackageAckStatus)}
+                    label={notificationRetryQueueAcknowledgementLabel(retryQueueClosurePackageAckStatus)}
+                    title="Retry queue closure package acknowledgement"
+                  />
                   <div className="trace-review-grid">
                     <label>
                       <span>Reviewer</span>
@@ -1695,33 +1686,30 @@ export function BackendRetryCloseoutGovernancePanel({
                     />
                   </div>
                   {latestRetryQueueAcknowledgementClosurePackageAcknowledgement ? (
-                    <div className="connector-run-row">
-                      <div>
-                        <strong>{latestRetryQueueAcknowledgementClosurePackageAcknowledgement.payload.reviewer}</strong>
-                        <span>
-                          v{latestRetryQueueAcknowledgementClosurePackageAcknowledgement.version} / {notificationRetryQueueAcknowledgementLabel(latestRetryQueueAcknowledgementClosurePackageAcknowledgement.payload.status)} / {new Date(latestRetryQueueAcknowledgementClosurePackageAcknowledgement.createdAt).toLocaleString()}
-                        </span>
-                        <small>{latestRetryQueueAcknowledgementClosurePackageAcknowledgement.payload.evidence}</small>
-                      </div>
-                      <StatusChip
-                        status={latestRetryQueueAcknowledgementClosurePackageAcknowledgement.status}
-                        label={notificationRetryQueueAcknowledgementLabel(
-                          latestRetryQueueAcknowledgementClosurePackageAcknowledgement.payload.status,
-                        )}
-                      />
-                    </div>
+                    <ConnectorRunRow
+                      status={latestRetryQueueAcknowledgementClosurePackageAcknowledgement.status}
+                      label={notificationRetryQueueAcknowledgementLabel(
+                        latestRetryQueueAcknowledgementClosurePackageAcknowledgement.payload.status,
+                      )}
+                      title={latestRetryQueueAcknowledgementClosurePackageAcknowledgement.payload.reviewer}
+                      subtitle={`v${latestRetryQueueAcknowledgementClosurePackageAcknowledgement.version} / ${notificationRetryQueueAcknowledgementLabel(
+                        latestRetryQueueAcknowledgementClosurePackageAcknowledgement.payload.status,
+                      )} / ${new Date(
+                        latestRetryQueueAcknowledgementClosurePackageAcknowledgement.createdAt,
+                      ).toLocaleString()}`}
+                    >
+                      {latestRetryQueueAcknowledgementClosurePackageAcknowledgement.payload.evidence}
+                    </ConnectorRunRow>
                   ) : (
                     <div className="empty-state compact">No retry queue acknowledgement closure package acknowledgement has been retained yet.</div>
                   )}
                 </div>
                 <div className="retry-aging-list">
-                  <div className="dashboard-heading">
-                    <h4>Retry queue closure acknowledgement closeout</h4>
-                    <StatusChip
-                      status={postgresCutoverReminderClosureStatusLevel(retryQueueClosurePackageAckClosureStatus)}
-                      label={postgresCutoverReminderClosureLabel(retryQueueClosurePackageAckClosureStatus)}
-                    />
-                  </div>
+                  <DashboardHeading
+                    status={postgresCutoverReminderClosureStatusLevel(retryQueueClosurePackageAckClosureStatus)}
+                    label={postgresCutoverReminderClosureLabel(retryQueueClosurePackageAckClosureStatus)}
+                    title="Retry queue closure acknowledgement closeout"
+                  />
                   <div className="trace-review-grid">
                     <label>
                       <span>Closeout reviewer</span>
@@ -1810,30 +1798,30 @@ export function BackendRetryCloseoutGovernancePanel({
                     />
                   </div>
                   {latestRetryQueueAcknowledgementClosurePackageAcknowledgementClosure ? (
-                    <div className="connector-run-row">
-                      <div>
-                        <strong>{latestRetryQueueAcknowledgementClosurePackageAcknowledgementClosure.payload.reviewer}</strong>
-                        <span>
-                          v{latestRetryQueueAcknowledgementClosurePackageAcknowledgementClosure.version} / {postgresCutoverReminderClosureLabel(latestRetryQueueAcknowledgementClosurePackageAcknowledgementClosure.payload.status)} / {new Date(latestRetryQueueAcknowledgementClosurePackageAcknowledgementClosure.createdAt).toLocaleString()}
-                        </span>
-                        <small>{latestRetryQueueAcknowledgementClosurePackageAcknowledgementClosure.payload.evidence}</small>
-                      </div>
-                      <StatusChip
-                        status={latestRetryQueueAcknowledgementClosurePackageAcknowledgementClosure.status}
-                        label={postgresCutoverReminderClosureLabel(
-                          latestRetryQueueAcknowledgementClosurePackageAcknowledgementClosure.payload.status,
-                        )}
-                      />
-                    </div>
+                    <ConnectorRunRow
+                      status={latestRetryQueueAcknowledgementClosurePackageAcknowledgementClosure.status}
+                      label={postgresCutoverReminderClosureLabel(
+                        latestRetryQueueAcknowledgementClosurePackageAcknowledgementClosure.payload.status,
+                      )}
+                      title={latestRetryQueueAcknowledgementClosurePackageAcknowledgementClosure.payload.reviewer}
+                      subtitle={`v${latestRetryQueueAcknowledgementClosurePackageAcknowledgementClosure.version} / ${postgresCutoverReminderClosureLabel(
+                        latestRetryQueueAcknowledgementClosurePackageAcknowledgementClosure.payload.status,
+                      )} / ${new Date(
+                        latestRetryQueueAcknowledgementClosurePackageAcknowledgementClosure.createdAt,
+                      ).toLocaleString()}`}
+                    >
+                      {latestRetryQueueAcknowledgementClosurePackageAcknowledgementClosure.payload.evidence}
+                    </ConnectorRunRow>
                   ) : (
                     <div className="empty-state compact">No retry queue acknowledgement closure package closeout has been retained yet.</div>
                   )}
                 </div>
                 <div className="retry-aging-list">
-                  <div className="dashboard-heading">
-                    <h4>Closure package acknowledgement closeout export</h4>
-                    <StatusChip status={closeoutExportStatus} label={closeoutExportStatus} />
-                  </div>
+                  <DashboardHeading
+                    status={closeoutExportStatus}
+                    label={closeoutExportStatus}
+                    title="Closure package acknowledgement closeout export"
+                  />
                   <div className="trace-review-grid">
                     <label className="trace-review-rationale">
                       <span>Governance reviewers</span>
@@ -1909,16 +1897,16 @@ export function BackendRetryCloseoutGovernancePanel({
                     />
                   </div>
                   {latestCloseoutExportPackage ? (
-                    <div className="connector-run-row">
-                      <div>
-                        <strong>{latestCloseoutExportPackage.payload.governanceReviewers.join(', ')}</strong>
-                        <span>
-                          v{latestCloseoutExportPackage.version} / {new Date(latestCloseoutExportPackage.createdAt).toLocaleString()} / {latestCloseoutExportPackage.payload.metrics.totalCloseouts} closeout record(s)
-                        </span>
-                        <small>{latestCloseoutExportPackage.payload.evidence}</small>
-                      </div>
-                      <StatusChip status={latestCloseoutExportPackage.status} label={latestCloseoutExportPackage.status} />
-                    </div>
+                    <ConnectorRunRow
+                      status={latestCloseoutExportPackage.status}
+                      label={latestCloseoutExportPackage.status}
+                      title={latestCloseoutExportPackage.payload.governanceReviewers.join(', ')}
+                      subtitle={`v${latestCloseoutExportPackage.version} / ${new Date(
+                        latestCloseoutExportPackage.createdAt,
+                      ).toLocaleString()} / ${latestCloseoutExportPackage.payload.metrics.totalCloseouts} closeout record(s)`}
+                    >
+                      {latestCloseoutExportPackage.payload.evidence}
+                    </ConnectorRunRow>
                   ) : (
                     <div className="empty-state compact">No closure package acknowledgement closeout export package has been retained yet.</div>
                   )}
@@ -1926,16 +1914,15 @@ export function BackendRetryCloseoutGovernancePanel({
                     <div className="retry-aging-list">
                       <h4>Closeout export package delivery evidence</h4>
                       {closeoutExportDeliveryRecords.slice(0, 3).map((record: RuntimeValue) => (
-                        <div className="connector-run-row" key={record.id}>
-                          <div>
-                            <strong>{record.payload.request.subject}</strong>
-                            <span>
-                              v{record.version} / {new Date(record.createdAt).toLocaleString()} / {record.payload.request.recipients.join(', ')}
-                            </span>
-                            <small>{record.payload.result.evidence}</small>
-                          </div>
-                          <StatusChip status={record.status} label={record.status} />
-                        </div>
+                        <ConnectorRunRow
+                          key={record.id}
+                          status={record.status}
+                          label={record.status}
+                          title={record.payload.request.subject}
+                          subtitle={`v${record.version} / ${new Date(record.createdAt).toLocaleString()} / ${record.payload.request.recipients.join(', ')}`}
+                        >
+                          {record.payload.result.evidence}
+                        </ConnectorRunRow>
                       ))}
                     </div>
                   ) : null}
@@ -2400,16 +2387,17 @@ export function BackendRetryCloseoutGovernancePanel({
               <div className="connector-run-history">
                 <h4>Retry control evidence</h4>
                 {retryControlsForSource.slice(0, 3).map((record: RuntimeValue) => (
-                  <div className="connector-run-row" key={record.id}>
-                    <div>
-                      <strong>{notificationDeliveryRetryLabel(record.payload.status)}</strong>
-                      <span>
-                        v{record.version} / attempt {record.payload.attempt} of {record.payload.maxRetries} / {new Date(record.createdAt).toLocaleString()}
-                      </span>
-                      <small>{record.payload.evidence}</small>
-                    </div>
-                    <StatusChip status={record.status} label={record.status} />
-                  </div>
+                  <ConnectorRunRow
+                    key={record.id}
+                    status={record.status}
+                    label={record.status}
+                    title={notificationDeliveryRetryLabel(record.payload.status)}
+                    subtitle={`v${record.version} / attempt ${record.payload.attempt} of ${
+                      record.payload.maxRetries
+                    } / ${new Date(record.createdAt).toLocaleString()}`}
+                  >
+                    {record.payload.evidence}
+                  </ConnectorRunRow>
                 ))}
               </div>
             ) : null}
